@@ -9,8 +9,7 @@ project(
 cuda_args = [
     '--expt-extended-lambda',
     '--expt-relaxed-constexpr',
-    '-gencode', 'arch=compute_80,code=sm_80',
-    '-gencode', 'arch=compute_120,code=sm_120',
+    '-arch=sm_80',
 ]
 
 cmake = import('cmake')

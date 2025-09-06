@@ -71,6 +71,7 @@
             Remove:
               - -Xcompiler=*
               - -G
+              - "-arch=*"
               - "-Xfatbin*"
               - "-gencode*"
               - "--generate-code*"
