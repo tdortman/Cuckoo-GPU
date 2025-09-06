@@ -1,0 +1,14 @@
+BasedOnStyle: Chromium
+IndentWidth: 4
+ColumnLimit: 80
+SortIncludes: CaseInsensitive
+AllowShortEnumsOnASingleLine: False
+AllowShortFunctionsOnASingleLine: None
+AlwaysBreakTemplateDeclarations: Yes
+IndentPPDirectives: BeforeHash
+AlignAfterOpenBracket: BlockIndent
+BinPackParameters: false
+BinPackArguments: false
+PointerAlignment: Left
+StatementMacros:
+  - "_Pragma"

@@ -1,0 +1,5 @@
+[wrap-git]
+url = https://github.com/NVIDIA/cuCollections.git
+revision = 71bcfa43741627beba2fd38b8bf283d8cb9c2a78
+depth = 1
+diff_files = cuco_cstdint.patch

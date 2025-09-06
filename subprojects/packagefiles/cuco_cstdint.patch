@@ -1,0 +1,12 @@
+diff --git a/include/cuco/detail/hash_functions/utils.cuh b/include/cuco/detail/hash_functions/utils.cuh
+index a6bb2a4..e436237 100644
+--- a/include/cuco/detail/hash_functions/utils.cuh
++++ b/include/cuco/detail/hash_functions/utils.cuh
+@@ -16,6 +16,7 @@
+ 
+ #pragma once
+ 
++#include <cuda/std/cstdint>
+ #include <cuda/std/cstddef>
+ 
+ namespace cuco::detail {

@@ -1,0 +1,8 @@
+.envrc
+build
+.direnv
+.cache
+.clangd
+/subprojects/*
+!/subprojects/*.wrap
+!/subprojects/packagefiles
