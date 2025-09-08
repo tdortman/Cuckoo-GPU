@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cuco/hash_functions.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
@@ -5,6 +6,7 @@
 #include <iostream>
 #include <random>
 #include "common.cuh"
+#include "NaiveTable.cuh"
 
 cuda::std::byte* rand_string(size_t size, size_t seed = 0) {
     std::mt19937 mt(seed);
@@ -38,79 +40,19 @@ __global__ void kernel(
 }
 
 int main() {
-    constexpr size_t n = 10;
-    constexpr size_t string_size = 10;
+    auto table = NaiveTable<uint32_t, 16>();
 
-    cuda::std::byte* h_strings[n];
-    size_t sizes[n];
-    uint32_t h_hash_values[n];
+    const uint32_t input[] = {1, 2, 3, 4, 5};
 
-    for (size_t i = 0; i < n; ++i) {
-        sizes[i] = string_size;
-        h_strings[i] = rand_string(sizes[i], i);
+    for (auto key : input) {
+        table.insert(key);
     }
 
-    cuda::std::byte* h_d_strings[n];
-    size_t* d_sizes;
-    uint32_t* d_hash_values;
+    size_t size = sizeof(input) / sizeof(input[0]);
 
-    for (size_t i = 0; i < n; ++i) {
-        cudaMalloc(&h_d_strings[i], string_size);
-        cudaMemcpy(
-            h_d_strings[i], h_strings[i], string_size, cudaMemcpyHostToDevice
-        );
+    auto mask = table.containsMany(input, size);
+
+    for (size_t i = 0; i < size; ++i) {
+        std::cout << input[i] << ": " << mask[i] << std::endl;
     }
-
-    cuda::std::byte** d_d_strings;
-    cudaMalloc(&d_d_strings, n * sizeof(cuda::std::byte*));
-
-    cudaMemcpy(
-        d_d_strings,
-        h_d_strings,
-        n * sizeof(cuda::std::byte*),
-        cudaMemcpyHostToDevice
-    );
-
-    cudaMalloc(&d_sizes, n * sizeof(size_t));
-    cudaMemcpy(d_sizes, sizes, n * sizeof(size_t), cudaMemcpyHostToDevice);
-    cudaMalloc(&d_hash_values, n * sizeof(uint32_t));
-
-    kernel<<<1, n>>>(
-        cuco::default_hash_function<char>(),
-        d_d_strings,
-        d_sizes,
-        d_hash_values,
-        n
-    );
-
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(
-        h_hash_values,
-        d_hash_values,
-        n * sizeof(uint32_t),
-        cudaMemcpyDeviceToHost
-    );
-
-    for (size_t i = 0; i < n; ++i) {
-        std::cout << "String " << i << ": ";
-        for (size_t j = 0; j < sizes[i]; ++j) {
-            std::cout << static_cast<char>(h_strings[i][j]);
-        }
-        std::cout << " -> Hash value: " << h_hash_values[i] << std::endl;
-    }
-
-    for (auto& h_d_string : h_d_strings) {
-        cudaFree(h_d_string);
-    }
-
-    cudaFree(d_d_strings);
-    cudaFree(d_sizes);
-    cudaFree(d_hash_values);
-
-    for (auto& string : h_strings) {
-        cudaFreeHost(string);
-    }
-
-    return 0;
 }

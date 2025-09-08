@@ -1,5 +1,5 @@
 {
     "explorer.autoRevealExclude": {
-        "subprojects/**": true
+        "**/subprojects/**": true
     }
 }
