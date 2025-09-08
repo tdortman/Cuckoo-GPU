@@ -31,7 +31,7 @@ int main() {
         input[i] = dis(gen);
     }
 
-    auto naive_table = NaiveTable<uint32_t, 32, n * 2>();
+    auto naive_table = NaiveTable<uint32_t, 32, n * 2, 1000>();
     auto start = std::chrono::high_resolution_clock::now();
 
     size_t naive_count = 0;
@@ -44,8 +44,8 @@ int main() {
     auto naive_duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    auto buckets_table = BucketsTableCpu<uint32_t, 32, 32, n / 32>();
-    auto buckets_table_gpu = BucketsTableGpu<uint32_t, 32, 32, n / 32>();
+    auto buckets_table = BucketsTableCpu<uint32_t, 32, 32, n / 32, 1000>();
+    auto buckets_table_gpu = BucketsTableGpu<uint32_t, 32, 32, n / 32, 1000>();
 
     start = std::chrono::high_resolution_clock::now();
 
