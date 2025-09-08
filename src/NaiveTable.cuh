@@ -15,8 +15,7 @@ template <
     size_t bitsPerTag,
     size_t maxProbes,
     size_t blockSize,
-    size_t initialNumSlots,
-    float maxLoadFactor>
+    size_t initialNumSlot>
 class NaiveTable;
 
 template <
@@ -24,19 +23,13 @@ template <
     size_t bitsPerTag,
     size_t maxProbes,
     size_t blockSize,
-    size_t initialNumSlots,
-    float maxLoadFactor>
+    size_t initialNumSlots>
 __global__ void containsKernel(
     const T* keys,
     bool* output,
     size_t n,
-    typename NaiveTable<
-        T,
-        bitsPerTag,
-        maxProbes,
-        blockSize,
-        initialNumSlots,
-        maxLoadFactor>::DeviceTableView table_view
+    typename NaiveTable<T, bitsPerTag, maxProbes, blockSize, initialNumSlots>::
+        DeviceTableView table_view
 );
 
 template <
@@ -44,8 +37,7 @@ template <
     size_t bitsPerTag,
     size_t maxProbes = 500,
     size_t blockSize = 256,
-    size_t initialNumSlots = 256,
-    float maxLoadFactor = 0.75f>
+    size_t initialNumSlots = 256>
 class NaiveTable {
     static_assert(bitsPerTag <= 64, "The tag cannot be larger than 64 bits");
     static_assert(
@@ -93,10 +85,10 @@ class NaiveTable {
         return hasher.compute_hash(bytes, size);
     }
 
-    __device__ __host__ bool try_insert(TagType tag, const T& value, size_t i) {
-        if (d_slots[i].tag == EMPTY) {
-            d_slots[i].tag = tag;
-            d_slots[i].value = value;
+    __host__ bool try_insert(TagType tag, const T& value, size_t i) {
+        if (h_slots[i].tag == EMPTY) {
+            h_slots[i].tag = tag;
+            h_slots[i].value = value;
             numOccupied++;
             return true;
         }
@@ -200,7 +192,13 @@ class NaiveTable {
         }
     };
 
+    // Inside NaiveTable class definition
+
     __host__ void insert(const T& key) {
+        CUDA_CALL(cudaMemcpy(
+            h_slots, d_slots, numSlots * sizeof(Slot), cudaMemcpyDeviceToHost
+        ));
+
         while (true) {
             auto tag =
                 static_cast<TagType>(murmur_hash(key, sizeof(T)) & tagMask);
@@ -210,15 +208,23 @@ class NaiveTable {
             T currentValue = key;
             TagType currentTag = tag;
 
+            numEvictions = 0;
+
             do {
                 if (try_insert(currentTag, currentValue, i1) ||
                     try_insert(currentTag, currentValue, i2)) {
-                    break;
+                    CUDA_CALL(cudaMemcpy(
+                        d_slots,
+                        h_slots,
+                        numSlots * sizeof(Slot),
+                        cudaMemcpyHostToDevice
+                    ));
+                    return;
                 }
 
-                Slot evicted = d_slots[i1];
-                d_slots[i1].tag = currentTag;
-                d_slots[i1].value = currentValue;
+                Slot evicted = h_slots[i1];
+                h_slots[i1].tag = currentTag;
+                h_slots[i1].value = currentValue;
 
                 currentTag = evicted.tag;
                 currentValue = evicted.value;
@@ -233,7 +239,6 @@ class NaiveTable {
             rehash();
         }
     };
-
     void insertMany(const T* keys, bool* output, size_t n) {
         size_t numBlocks = (n + blockSize - 1) / blockSize;
     }
@@ -241,19 +246,24 @@ class NaiveTable {
     const bool* containsMany(const T* keys, const size_t n) {
         bool* d_output;
         bool* h_output;
+        T* d_keys;
         CUDA_CALL(cudaMallocHost(&h_output, n * sizeof(bool)));
-
         CUDA_CALL(cudaMalloc(&d_output, n * sizeof(bool)));
-        size_t numBlocks = (n + blockSize - 1) / blockSize;
-        containsKernel<
-            T,
-            bitsPerTag,
-            maxProbes,
-            blockSize,
-            initialNumSlots,
-            maxLoadFactor><<<numBlocks, blockSize>>>(
-            keys, d_output, n, this->get_device_view()
+
+        CUDA_CALL(cudaMalloc(&d_keys, n * sizeof(T)));
+        CUDA_CALL(
+            cudaMemcpy(d_keys, keys, n * sizeof(T), cudaMemcpyHostToDevice)
         );
+
+        CUDA_CALL(cudaMemcpy(
+            d_slots, h_slots, numSlots * sizeof(Slot), cudaMemcpyHostToDevice
+        ));
+
+        size_t numBlocks = (n + blockSize - 1) / blockSize;
+        containsKernel<T, bitsPerTag, maxProbes, blockSize, initialNumSlots>
+            <<<numBlocks, blockSize>>>(
+                d_keys, d_output, n, this->get_device_view()
+            );
 
         CUDA_CALL(cudaDeviceSynchronize());
         CUDA_CALL(cudaMemcpy(
@@ -272,13 +282,12 @@ class NaiveTable {
         Slot* d_slots;
         size_t numSlots;
         TagType tagMask;
-        HashFn hashFns[2];
 
         __device__ bool contains(const T& key) const {
             auto tag =
-                static_cast<TagType>(hashFns[0](key, sizeof(T)) & tagMask);
-            auto i1 = hashFns[0](key, sizeof(T)) & (numSlots - 1);
-            auto i2 = i1 ^ (hashFns[1](key, sizeof(T)) & (numSlots - 1));
+                static_cast<TagType>(murmur_hash(key, sizeof(T)) & tagMask);
+            auto i1 = murmur_hash(key, sizeof(T)) & (numSlots - 1);
+            auto i2 = i1 ^ (xxhash_hash(key, sizeof(T)) & (numSlots - 1));
 
             return (d_slots[i1].tag == tag) || (d_slots[i2].tag == tag);
         };
@@ -286,10 +295,7 @@ class NaiveTable {
 
     __host__ DeviceTableView get_device_view() {
         return DeviceTableView{
-            d_slots,
-            numSlots,
-            static_cast<TagType>(tagMask),
-            {hashFns[0], hashFns[1]}
+            d_slots, numSlots, static_cast<TagType>(tagMask)
         };
     }
 
@@ -308,19 +314,13 @@ template <
     size_t bitsPerTag,
     size_t maxProbes = 500,
     size_t blockSize = 256,
-    size_t initialNumSlots = 256,
-    float maxLoadFactor = 0.75f>
+    size_t initialNumSlots = 256>
 __global__ void containsKernel(
     const T* keys,
     bool* output,
     size_t n,
-    typename NaiveTable<
-        T,
-        bitsPerTag,
-        maxProbes,
-        blockSize,
-        initialNumSlots,
-        maxLoadFactor>::DeviceTableView table_view
+    typename NaiveTable<T, bitsPerTag, maxProbes, blockSize, initialNumSlots>::
+        DeviceTableView table_view
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
