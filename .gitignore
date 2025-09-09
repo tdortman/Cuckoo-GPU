@@ -6,4 +6,5 @@ build
 /subprojects/*
 !/subprojects/*.wrap
 !/subprojects/packagefiles
-report*
+*.*-rep
+*.sqlite

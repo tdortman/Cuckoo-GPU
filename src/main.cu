@@ -73,7 +73,8 @@ int main() {
 
     // std::cout << "NaiveTable:\t\tInserted & Queried " << naive_count << " / "
     //           << n << " elements in " << naive_duration.count() << " ms"
-    //           << "\t(" << count_ones(naive_mask, n) << " found)" << std::endl;
+    //           << "\t(" << count_ones(naive_mask, n) << " found)" <<
+    //           std::endl;
     // std::cout << "BucketsTableCpu:\tInserted & Queried " << buckets_count
     //           << " / " << n << " elements in " << buckets_duration.count()
     //           << " ms" << "\t(" << count_ones(buckets_mask, n) << " found)"
