@@ -420,10 +420,23 @@ class BucketsTableGpu {
 
         __device__ bool insert(const T& key) {
             auto [h1, h2, fp] = BucketsTableGpu::getCandidateBuckets(key);
+
+            if (d_buckets[h1].contains(fp) || d_buckets[h2].contains(fp)) {
+                return true;
+            }
+
             if (tryInsertAtBucket(h1, fp) || tryInsertAtBucket(h2, fp)) {
                 return true;
             }
-            return insertWithEviction(fp, h1);
+
+            if (insertWithEviction(fp, h1)) {
+                // Check if it's actually there after eviction
+                if (d_buckets[h1].contains(fp) || d_buckets[h2].contains(fp)) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
         }
 
         __device__ bool contains(const T& key) const {
@@ -459,7 +472,14 @@ __global__ void insertKernel(
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
-        table_view.insert(keys[idx]);
+        for (int i = 0; i < 3; ++i) {
+            if (table_view.insert(keys[idx])) {
+                return;
+            }
+        }
+        // We kind of have a big problem at this point, since it means our item
+        // has been evicted and reinserted three times. May as well buy a
+        // lottery ticket I suppose.
     }
 }
 
