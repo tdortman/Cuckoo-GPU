@@ -1,6 +1,5 @@
 #pragma once
 
-#include <curand_kernel.h>
 #include <cstdint>
 #include <ctime>
 #include <cuco/hash_functions.cuh>
@@ -24,17 +23,6 @@ struct SpinLock {
         atomicExch(&lock_flag, 0);
     }
 };
-
-__global__ void initRandStatesKernel(
-    curandState* states,
-    unsigned long long seed,
-    size_t numBuckets
-) {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < numBuckets) {
-        curand_init(seed, idx, 0, &states[idx]);
-    }
-}
 
 template <
     typename T,
@@ -110,13 +98,6 @@ class BucketsTableGpu {
     struct __align__(alignof(TagType)) Bucket {
         TagType tags[bucketSize];
 
-        template <typename H>
-        static __host__ __device__ uint32_t hash(const H& key) {
-            auto bytes = reinterpret_cast<const cuda::std::byte*>(&key);
-            cuco::murmurhash3_32<H> hasher;
-            return hasher.compute_hash(bytes, sizeof(H));
-        }
-
         __device__ int findEmptySlot(TagType tag) const {
             uint32_t idx = tag & (bucketSize - 1);
             for (size_t i = 0; i < bucketSize; ++i) {
@@ -125,12 +106,6 @@ class BucketsTableGpu {
                 }
                 idx = (idx + 1) & (bucketSize - 1);
             }
-            // for (size_t i = 0; i < bucketSize; ++i) {
-            //     if (tags[i] == EMPTY) {
-            //         return static_cast<int>(i);
-            //     }
-            // }
-            return -1;
         }
 
         __device__ bool contains(TagType tag) const {
@@ -164,7 +139,6 @@ class BucketsTableGpu {
    private:
     Bucket* d_buckets;
     SpinLock* d_locks{};
-    curandState* d_rand_states{};
 
     size_t* d_numOccupied{};
     size_t h_numOccupied = 0;
@@ -203,17 +177,10 @@ class BucketsTableGpu {
         CUDA_CALL(
             cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>))
         );
-        CUDA_CALL(cudaMalloc(&d_rand_states, numBuckets * sizeof(curandState)));
 
         assert(
             powerOfTwo(numBuckets) && "Number of buckets must be a power of 2"
         );
-
-        size_t numBlocks = (numBuckets + blockSize - 1) / blockSize;
-        initRandStatesKernel<<<numBlocks, blockSize>>>(
-            d_rand_states, time(nullptr), numBuckets
-        );
-        CUDA_CALL(cudaDeviceSynchronize());
 
         clear();
     }
@@ -227,9 +194,6 @@ class BucketsTableGpu {
         }
         if (d_numOccupied) {
             CUDA_CALL(cudaFree(d_numOccupied));
-        }
-        if (d_rand_states) {
-            CUDA_CALL(cudaFree(d_rand_states));
         }
     }
 
@@ -369,7 +333,6 @@ class BucketsTableGpu {
     struct DeviceTableView {
         Bucket* d_buckets;
         SpinLock* d_locks;
-        curandState* d_rand_states;
         size_t* d_numOccupied;
         size_t& numBuckets;
 
@@ -407,9 +370,7 @@ class BucketsTableGpu {
                     return true;
                 }
 
-                curandState* state = &d_rand_states[currentBucket];
-                auto evictSlot =
-                    static_cast<size_t>(curand_uniform(state) * bucketSize);
+                auto evictSlot = (currentFp + evictions) & (bucketSize - 1);
                 TagType evictedFp =
                     d_buckets[currentBucket].getTagAt(evictSlot);
                 d_buckets[currentBucket].insertAt(evictSlot, currentFp);
@@ -446,7 +407,6 @@ class BucketsTableGpu {
         return DeviceTableView{
             d_buckets,
             d_locks,
-            d_rand_states,
             d_numOccupied,
             numBuckets,
         };

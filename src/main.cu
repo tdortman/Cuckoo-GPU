@@ -21,9 +21,9 @@ size_t count_ones(T* data, size_t n) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 4) {
+    if (argc < 3) {
         std::cerr << "Usage: " << argv[0]
-                  << " <table_type> <n_exponent> <true/false>" << std::endl;
+                  << " <table_type> <n_exponent>" << std::endl;
         std::cerr
             << "table_type: 0=NaiveTable, 1=BucketsTableCpu, 2=BucketsTableGpu"
             << std::endl;
