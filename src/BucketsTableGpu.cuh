@@ -46,7 +46,7 @@ __global__ void insertKernel(
         bitsPerTag,
         bucketSize,
         maxEvictions,
-        blockSize>::DeviceTableView table_view
+        blockSize>::DeviceTableView tableView
 );
 
 template <
@@ -64,7 +64,7 @@ __global__ void containsKernel(
         bitsPerTag,
         bucketSize,
         maxEvictions,
-        blockSize>::DeviceTableView table_view
+        blockSize>::DeviceTableView tableView
 );
 
 template <
@@ -151,16 +151,14 @@ class BucketsTableGpu {
     }
 
     static __host__ __device__ TagType fingerprint(const T& key) {
-        uint32_t hash_val = hash(key);
-        auto fp = static_cast<TagType>(hash_val & tagMask);
-        return fp == 0 ? 1 : fp;
+        return static_cast<TagType>(hash(key) & tagMask) + 1;
     }
 
     static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
     getCandidateBuckets(const T& key, size_t numBuckets) {
         TagType fp = fingerprint(key);
         size_t i1 = hash(key) & (numBuckets - 1);
-        size_t i2 = i1 ^ (hash(fp) & (numBuckets - 1));
+        size_t i2 = getAlternateBucket(i1, fp, numBuckets);
         return {i1, i2, fp};
     }
 
@@ -358,7 +356,7 @@ class BucketsTableGpu {
             for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
                 d_locks[currentBucket].lock();
 
-                int slot = d_buckets[currentBucket].findEmptySlot(fp);
+                int slot = d_buckets[currentBucket].findEmptySlot(currentFp);
                 if (slot != -1) {
                     d_buckets[currentBucket].insertAt(slot, currentFp);
                     atomicAdd(
@@ -392,13 +390,7 @@ class BucketsTableGpu {
                 return true;
             }
 
-            if (insertWithEviction(fp, i1)) {
-                if (d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp)) {
-                    return true;
-                }
-                return false;
-            }
-            return false;
+            return insertWithEviction(fp, i1);
         }
 
         __device__ bool contains(const T& key) const {
@@ -432,12 +424,12 @@ __global__ void insertKernel(
         bitsPerTag,
         bucketSize,
         maxEvictions,
-        blockSize>::DeviceTableView table_view
+        blockSize>::DeviceTableView tableView
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         for (int i = 0; i < 3; ++i) {
-            if (table_view.insert(keys[idx])) {
+            if (tableView.insert(keys[idx])) {
                 return;
             }
         }
@@ -462,10 +454,10 @@ __global__ void containsKernel(
         bitsPerTag,
         bucketSize,
         maxEvictions,
-        blockSize>::DeviceTableView table_view
+        blockSize>::DeviceTableView tableView
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
-        output[idx] = table_view.contains(keys[idx]);
+        output[idx] = tableView.contains(keys[idx]);
     }
 }
