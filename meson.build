@@ -3,9 +3,13 @@ project(
     ['cuda', 'cpp'],
     version: '0.1',
     meson_version: '>= 1.3.0',
-    default_options: ['warning_level=3', 'cpp_std=c++20', 'optimization=3', 'buildtype=release'],
+    default_options: [
+        'warning_level=3',
+        'cpp_std=c++20',
+        'optimization=3',
+        'buildtype=release',
+    ],
 )
-
 
 cuda_args = [
     '--expt-extended-lambda',
@@ -36,6 +40,15 @@ includes = ['./include']
 executable(
     'cuckoo-filter-cuda',
     './src/main.cu',
+    dependencies: dependencies,
+    include_directories: includes,
+    cuda_args: cuda_args,
+    install: true,
+)
+
+executable(
+    'cuckoo-filter-cuda-benchmark',
+    './src/benchmark.cu',
     dependencies: dependencies,
     include_directories: includes,
     cuda_args: cuda_args,

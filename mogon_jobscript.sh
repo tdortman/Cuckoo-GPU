@@ -22,4 +22,4 @@ module load system/CUDA
 srun meson setup build
 srun ninja -C build
 
-srun ./build/cuckoo-filter-cuda
+srun ./build/cuckoo-filter-cuda-benchmark benchmark_results.csv
