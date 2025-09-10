@@ -45,7 +45,8 @@ std::vector<double> benchmarkFunction(Func func, int iterations = 5) {
 
         auto duration =
             std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-        times.push_back(duration.count() / 1000.0 / 1000.0);
+        double timeMs = static_cast<double>(duration.count()) / 1000.0 / 1000.0;
+        times.push_back(timeMs);
     }
 
     return times;
