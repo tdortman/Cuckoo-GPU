@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
     }
 
     const int min_exponent = 10;
-    const int max_exponent = 12;
+    const int max_exponent = 30;
 
     std::cout << "Generating test data..." << std::endl;
 
