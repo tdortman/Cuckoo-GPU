@@ -160,89 +160,6 @@ class BucketsTableGpu {
     size_t* d_numOccupied{};
     size_t h_numOccupied = 0;
 
-    struct DeviceTableView {
-        Bucket* d_buckets;
-        SpinLock* d_locks;
-        curandState* d_rand_states;
-        size_t* d_numOccupied;
-
-        __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
-            d_locks[bucketIdx].lock();
-
-            int slot = d_buckets[bucketIdx].findEmptySlot();
-            if (slot != -1) {
-                d_buckets[bucketIdx].insertAt(slot, tag);
-                atomicAdd(
-                    reinterpret_cast<unsigned long long*>(d_numOccupied), 1ULL
-                );
-                d_locks[bucketIdx].unlock();
-                return true;
-            }
-            d_locks[bucketIdx].unlock();
-            return false;
-        }
-
-        __device__ bool insertWithEviction(TagType fp, size_t startBucket) {
-            TagType currentFp = fp;
-            size_t currentBucket = startBucket;
-
-            for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
-                d_locks[currentBucket].lock();
-
-                int slot = d_buckets[currentBucket].findEmptySlot();
-                if (slot != -1) {
-                    d_buckets[currentBucket].insertAt(slot, currentFp);
-                    atomicAdd(
-                        reinterpret_cast<unsigned long long*>(d_numOccupied),
-                        1ULL
-                    );
-                    d_locks[currentBucket].unlock();
-                    return true;
-                }
-
-                curandState* state = &d_rand_states[currentBucket];
-                auto evictSlot =
-                    static_cast<size_t>(curand_uniform(state) * bucketSize);
-                TagType evictedFp =
-                    d_buckets[currentBucket].getTagAt(evictSlot);
-                d_buckets[currentBucket].insertAt(evictSlot, currentFp);
-
-                d_locks[currentBucket].unlock();
-
-                currentFp = evictedFp;
-                currentBucket = BucketsTableGpu::getAlternateBucket(
-                    currentBucket, evictedFp
-                );
-            }
-            return false;
-        }
-
-        __device__ bool insert(const T& key) {
-            auto [i1, i2, fp] = BucketsTableGpu::getCandidateBuckets(key);
-
-            if (d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp)) {
-                return true;
-            }
-
-            if (tryInsertAtBucket(i1, fp) || tryInsertAtBucket(i2, fp)) {
-                return true;
-            }
-
-            return insertWithEviction(fp, i1);
-        }
-
-        __device__ bool contains(const T& key) const {
-            auto [i1, i2, fp] = BucketsTableGpu::getCandidateBuckets(key);
-            return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
-        }
-    };
-
-    DeviceTableView get_device_view() {
-        return DeviceTableView{
-            d_buckets, d_locks, d_rand_states, d_numOccupied
-        };
-    }
-
    public:
     template <typename H>
     static __host__ __device__ uint32_t hash(const H& key) {
@@ -438,6 +355,89 @@ class BucketsTableGpu {
 
     [[nodiscard]] double expectedFalsePositiveRate() const {
         return (2.0 * bucketSize) / (1ULL << bitsPerTag);
+    }
+
+    struct DeviceTableView {
+        Bucket* d_buckets;
+        SpinLock* d_locks;
+        curandState* d_rand_states;
+        size_t* d_numOccupied;
+
+        __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
+            d_locks[bucketIdx].lock();
+
+            int slot = d_buckets[bucketIdx].findEmptySlot();
+            if (slot != -1) {
+                d_buckets[bucketIdx].insertAt(slot, tag);
+                atomicAdd(
+                    reinterpret_cast<unsigned long long*>(d_numOccupied), 1ULL
+                );
+                d_locks[bucketIdx].unlock();
+                return true;
+            }
+            d_locks[bucketIdx].unlock();
+            return false;
+        }
+
+        __device__ bool insertWithEviction(TagType fp, size_t startBucket) {
+            TagType currentFp = fp;
+            size_t currentBucket = startBucket;
+
+            for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
+                d_locks[currentBucket].lock();
+
+                int slot = d_buckets[currentBucket].findEmptySlot();
+                if (slot != -1) {
+                    d_buckets[currentBucket].insertAt(slot, currentFp);
+                    atomicAdd(
+                        reinterpret_cast<unsigned long long*>(d_numOccupied),
+                        1ULL
+                    );
+                    d_locks[currentBucket].unlock();
+                    return true;
+                }
+
+                curandState* state = &d_rand_states[currentBucket];
+                auto evictSlot =
+                    static_cast<size_t>(curand_uniform(state) * bucketSize);
+                TagType evictedFp =
+                    d_buckets[currentBucket].getTagAt(evictSlot);
+                d_buckets[currentBucket].insertAt(evictSlot, currentFp);
+
+                d_locks[currentBucket].unlock();
+
+                currentFp = evictedFp;
+                currentBucket = BucketsTableGpu::getAlternateBucket(
+                    currentBucket, evictedFp
+                );
+            }
+            return false;
+        }
+
+        __device__ bool insert(const T& key) {
+            auto [i1, i2, fp] = BucketsTableGpu::getCandidateBuckets(key);
+
+            if (d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp)) {
+                return true;
+            }
+
+            if (tryInsertAtBucket(i1, fp) || tryInsertAtBucket(i2, fp)) {
+                return true;
+            }
+
+            return insertWithEviction(fp, i1);
+        }
+
+        __device__ bool contains(const T& key) const {
+            auto [i1, i2, fp] = BucketsTableGpu::getCandidateBuckets(key);
+            return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
+        }
+    };
+
+    DeviceTableView get_device_view() {
+        return DeviceTableView{
+            d_buckets, d_locks, d_rand_states, d_numOccupied
+        };
     }
 };
 
