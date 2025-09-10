@@ -21,9 +21,9 @@ size_t count_ones(T* data, size_t n) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <table_type> <n_exponent>"
-                  << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: " << argv[0]
+                  << " <table_type> <n_exponent> <true/false>" << std::endl;
         std::cerr
             << "table_type: 0=NaiveTable, 1=BucketsTableCpu, 2=BucketsTableGpu"
             << std::endl;
@@ -93,6 +93,22 @@ int main(int argc, char** argv) {
         std::cout << "BucketsTableCpu: Inserted " << n << " items, found "
                   << found << " items in " << duration << " ms" << std::endl;
     } else if (table_type == 2) {
-        auto table = BucketsTableCpu<uint32_t, 32, 32, 1000>(n / 16);
+        auto table = BucketsTableGpu<uint32_t, 32, 32, 1000>(n / 16);
+
+        bool* output;
+
+        CUDA_CALL(cudaMallocHost(&output, sizeof(bool) * n));
+
+        auto start = std::chrono::high_resolution_clock::now();
+        size_t count = table.insertMany(input, n);
+        table.containsMany(input, n, output);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration =
+            std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+                .count();
+
+        size_t found = count_ones(output, n);
+        std::cout << "BucketsTableGpu: Inserted " << n << " items, found "
+                  << found << " items in " << duration << " ms" << std::endl;
     }
 }
