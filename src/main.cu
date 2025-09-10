@@ -22,8 +22,8 @@ size_t count_ones(T* data, size_t n) {
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0]
-                  << " <table_type> <n_exponent>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <table_type> <n_exponent>"
+                  << std::endl;
         std::cerr
             << "table_type: 0=HybridTable, 1=BucketsTableCpu, 2=BucketsTableGpu"
             << std::endl;
@@ -73,8 +73,9 @@ int main(int argc, char** argv) {
                 .count();
 
         size_t found = count_ones(mask, n);
-        std::cout << "HybridTable: Inserted " << n << " items, found " << found
-                  << " items in " << duration << " ms" << std::endl;
+        std::cout << "HybridTable: Inserted " << count << " / " << n
+                  << " items, found " << found << " items in " << duration
+                  << " ms" << std::endl;
     } else if (table_type == 1) {
         auto table = BucketsTableCpu<uint32_t, 32, 32, 1000>(n / 16);
 
@@ -90,8 +91,9 @@ int main(int argc, char** argv) {
                 .count();
 
         size_t found = count_ones(mask, n);
-        std::cout << "BucketsTableCpu: Inserted " << n << " items, found "
-                  << found << " items in " << duration << " ms" << std::endl;
+        std::cout << "BucketsTableCpu: Inserted " << count << " / " << n
+                  << " items, found " << found << " items in " << duration
+                  << " ms" << std::endl;
     } else if (table_type == 2) {
         auto table = BucketsTableGpu<uint32_t, 32, 32, 1000>(n / 16);
 
@@ -108,7 +110,8 @@ int main(int argc, char** argv) {
                 .count();
 
         size_t found = count_ones(output, n);
-        std::cout << "BucketsTableGpu: Inserted " << n << " items, found "
-                  << found << " items in " << duration << " ms" << std::endl;
+        std::cout << "BucketsTableGpu: Inserted " << count << " / " << n
+                  << " items, found " << found << " items in " << duration
+                  << " ms" << std::endl;
     }
 }
