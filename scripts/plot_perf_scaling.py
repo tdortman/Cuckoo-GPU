@@ -48,12 +48,19 @@ for i, tableType in enumerate(df["tableType"].unique()):
     )
 
 
-plt.xlabel(r"Input Size ($2^x$)")
-plt.xticks(range(int(df["n"].min()).bit_length() - 1, int(df["n"].max()).bit_length()))
+plt.xlabel("Input Size")
+plt.xticks(
+    range(int(df["n"].min()).bit_length() - 1, int(df["n"].max()).bit_length()),
+    [
+        f"$2^{{{i}}}$"
+        for i in range(
+            int(df["n"].min()).bit_length() - 1, int(df["n"].max()).bit_length()
+        )
+    ],
+)
 
 plt.ylabel("Average Runtime (ms)")
-plt.title("Performance Comparison")
 plt.legend()
 plt.grid(True, alpha=0.3)
-plt.savefig("scaling_plot.png", dpi=300, bbox_inches="tight")
+plt.savefig("runtime_plot.png", dpi=300, bbox_inches="tight")
 plt.close()
