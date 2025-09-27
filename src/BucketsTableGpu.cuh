@@ -10,20 +10,6 @@
 #include <vector>
 #include "common.cuh"
 
-struct SpinLock {
-    int lock_flag = 0;
-
-    __device__ void lock() {
-        while (atomicCAS(&lock_flag, 0, 1) != 0) {
-            // Spin until lock is acquired
-        }
-    }
-
-    __device__ void unlock() {
-        atomicExch(&lock_flag, 0);
-    }
-};
-
 template <
     typename T,
     size_t bitsPerTag,
@@ -96,7 +82,7 @@ class BucketsTableGpu {
     static constexpr size_t tagMask = (1ULL << bitsPerTag) - 1;
 
     struct __align__(alignof(TagType)) Bucket {
-        TagType tags[bucketSize];
+        cuda::std::atomic<TagType> tags[bucketSize];
 
         __forceinline__ __device__ int findSlot(TagType tag, TagType target) {
             uint32_t idx = tag & (bucketSize - 1);
@@ -109,25 +95,18 @@ class BucketsTableGpu {
             return -1;
         }
 
-        __device__ int findEmptySlot(TagType tag) {
-            return findSlot(tag, EMPTY);
-        }
-
         __device__ bool contains(TagType tag) {
             return findSlot(tag, tag) != -1;
         }
 
-        __device__ void insertAt(size_t slot, TagType tag) {
-            tags[slot] = tag;
+        __device__ bool tryInsertAt(size_t slot, TagType tag) {
+            TagType expected = EMPTY;
+            return tags[slot].compare_exchange_strong(expected, tag);
         }
 
-        __device__ bool remove(TagType tag) {
-            int idx = findSlot(tag, tag);
-            if (idx != -1) {
-                tags[idx] = EMPTY;
-                return true;
-            }
-            return false;
+        __device__ bool tryRemoveAt(size_t slot, TagType tag) {
+            TagType expected = tag;
+            return tags[slot].compare_exchange_strong(expected, EMPTY);
         }
 
         __device__ TagType getTagAt(size_t slot) const {
@@ -137,9 +116,7 @@ class BucketsTableGpu {
 
    private:
     Bucket* d_buckets;
-    SpinLock* d_locks{};
-
-    size_t* d_numOccupied{};
+    cuda::std::atomic<size_t>* d_numOccupied{};
     size_t h_numOccupied = 0;
 
    public:
@@ -170,7 +147,6 @@ class BucketsTableGpu {
    public:
     explicit BucketsTableGpu(size_t numBuckets) : numBuckets(numBuckets) {
         CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(cudaMalloc(&d_locks, numBuckets * sizeof(SpinLock)));
         CUDA_CALL(
             cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>))
         );
@@ -185,9 +161,6 @@ class BucketsTableGpu {
     ~BucketsTableGpu() {
         if (d_buckets) {
             CUDA_CALL(cudaFree(d_buckets));
-        }
-        if (d_locks) {
-            CUDA_CALL(cudaFree(d_locks));
         }
         if (d_numOccupied) {
             CUDA_CALL(cudaFree(d_numOccupied));
@@ -304,9 +277,9 @@ class BucketsTableGpu {
         CUDA_CALL(cudaFree(d_keys));
         CUDA_CALL(cudaFree(d_output));
     }
+
     void clear() {
         CUDA_CALL(cudaMemset(d_buckets, 0, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(cudaMemset(d_locks, 0, numBuckets * sizeof(SpinLock)));
         CUDA_CALL(
             cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>))
         );
@@ -329,23 +302,30 @@ class BucketsTableGpu {
 
     struct DeviceTableView {
         Bucket* d_buckets;
-        SpinLock* d_locks;
-        size_t* d_numOccupied;
+        cuda::std::atomic<size_t>* d_numOccupied;
         size_t& numBuckets;
 
-        __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
-            d_locks[bucketIdx].lock();
-
-            int slot = d_buckets[bucketIdx].findEmptySlot(tag);
-            if (slot != -1) {
-                d_buckets[bucketIdx].insertAt(slot, tag);
-                atomicAdd(
-                    reinterpret_cast<unsigned long long*>(d_numOccupied), 1ULL
-                );
-                d_locks[bucketIdx].unlock();
-                return true;
+        __device__ bool tryRemoveAtBucket(size_t bucketIdx, TagType tag) {
+            uint32_t idx = tag & (bucketSize - 1);
+            for (size_t i = 0; i < bucketSize; ++i) {
+                if (d_buckets[bucketIdx].tryRemoveAt(idx, tag)) {
+                    d_numOccupied->fetch_sub(1);
+                    return true;
+                }
+                idx = (idx + 1) & (bucketSize - 1);
             }
-            d_locks[bucketIdx].unlock();
+            return false;
+        }
+
+        __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
+            uint32_t idx = tag & (bucketSize - 1);
+            for (size_t i = 0; i < bucketSize; ++i) {
+                if (d_buckets[bucketIdx].tryInsertAt(idx, tag)) {
+                    d_numOccupied->fetch_add(1);
+                    return true;
+                }
+                idx = (idx + 1) & (bucketSize - 1);
+            }
             return false;
         }
 
@@ -354,25 +334,21 @@ class BucketsTableGpu {
             size_t currentBucket = startBucket;
 
             for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
-                d_locks[currentBucket].lock();
-
-                int slot = d_buckets[currentBucket].findEmptySlot(currentFp);
-                if (slot != -1) {
-                    d_buckets[currentBucket].insertAt(slot, currentFp);
-                    atomicAdd(
-                        reinterpret_cast<unsigned long long*>(d_numOccupied),
-                        1ULL
-                    );
-                    d_locks[currentBucket].unlock();
+                if (tryInsertAtBucket(currentBucket, currentFp)) {
                     return true;
                 }
 
                 auto evictSlot = (currentFp + evictions) & (bucketSize - 1);
-                TagType evictedFp =
-                    d_buckets[currentBucket].getTagAt(evictSlot);
-                d_buckets[currentBucket].insertAt(evictSlot, currentFp);
 
-                d_locks[currentBucket].unlock();
+                TagType evictedFp =
+                    d_buckets[currentBucket].tags[evictSlot].exchange(
+                        currentFp
+                    );
+
+                if (evictedFp == EMPTY) {
+                    d_numOccupied->fetch_add(1);
+                    return true;
+                }
 
                 currentFp = evictedFp;
                 currentBucket = BucketsTableGpu::getAlternateBucket(
@@ -403,7 +379,6 @@ class BucketsTableGpu {
     DeviceTableView get_device_view() {
         return DeviceTableView{
             d_buckets,
-            d_locks,
             d_numOccupied,
             numBuckets,
         };
@@ -428,14 +403,7 @@ __global__ void insertKernel(
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
-        for (int i = 0; i < 3; ++i) {
-            if (tableView.insert(keys[idx])) {
-                return;
-            }
-        }
-        // We kind of have a big problem at this point, since it means our item
-        // has been evicted and reinserted multiple times. May as well buy a
-        // lottery ticket I suppose.
+        tableView.insert(keys[idx]);
     }
 }
 
