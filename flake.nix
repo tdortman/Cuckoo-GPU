@@ -75,6 +75,7 @@
               - "-Xfatbin*"
               - "-gencode*"
               - "--generate-code*"
+              - "--generate-line-info"
               - "--compiler-options*"
               - "--expt-extended-lambda"
               - "--expt-relaxed-constexpr"
