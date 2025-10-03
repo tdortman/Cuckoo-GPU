@@ -345,11 +345,6 @@ class BucketsTableGpu {
                         currentFp
                     );
 
-                if (evictedFp == EMPTY) {
-                    d_numOccupied->fetch_add(1);
-                    return true;
-                }
-
                 currentFp = evictedFp;
                 currentBucket = BucketsTableGpu::getAlternateBucket(
                     currentBucket, evictedFp, numBuckets
