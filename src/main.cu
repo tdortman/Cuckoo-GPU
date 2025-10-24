@@ -8,7 +8,7 @@
 #include <iostream>
 #include <random>
 
-constexpr double TARGET_LOAD_FACTOR = 0.90;
+constexpr double TARGET_LOAD_FACTOR = 0.95;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    size_t n = 1ULL << n_exponent;
+    size_t n = (UINT64_C(1) << n_exponent) * TARGET_LOAD_FACTOR;
 
     uint32_t* input;
     std::mt19937 rng(std::random_device{}());
@@ -34,14 +34,8 @@ int main(int argc, char** argv) {
 
     std::generate(input, input + n, [&]() { return dist(rng); });
 
-    using Config = CuckooConfig<uint32_t, 16, 1000, 256, 128>;
-    const size_t numBuckets = nextPowerOfTwo(
-        static_cast<size_t>(std::ceil(
-            static_cast<double>(n) /
-            (BucketsTableGpu<Config>::bucketSize * TARGET_LOAD_FACTOR)
-        ))
-    );
-    auto table = BucketsTableGpu<Config>(numBuckets);
+    using Config = CuckooConfig<uint32_t, 16, 500, 128, 128>;
+    auto table = BucketsTableGpu<Config>(n, TARGET_LOAD_FACTOR);
 
     bool* output;
 

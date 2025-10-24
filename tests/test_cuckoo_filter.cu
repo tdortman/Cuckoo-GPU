@@ -28,8 +28,8 @@ class CuckooFilterTest : public ::testing::Test {
 };
 
 TEST_F(CuckooFilterTest, BasicInsertAndQuery) {
-    const size_t numBuckets = 1024;
-    BucketsTableGpu<Config> filter(numBuckets);
+    const size_t capacity = 10000;
+    BucketsTableGpu<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
 
@@ -47,8 +47,8 @@ TEST_F(CuckooFilterTest, BasicInsertAndQuery) {
 }
 
 TEST_F(CuckooFilterTest, EmptyFilter) {
-    const size_t numBuckets = 1024;
-    BucketsTableGpu<Config> filter(numBuckets);
+    const size_t capacity = 10000;
+    BucketsTableGpu<Config> filter(capacity);
 
     std::vector<uint32_t> queryKeys = {1, 2, 3, 4, 5};
     std::vector<uint8_t> output(queryKeys.size());
@@ -62,8 +62,8 @@ TEST_F(CuckooFilterTest, EmptyFilter) {
 }
 
 TEST_F(CuckooFilterTest, ClearOperation) {
-    const size_t numBuckets = 1024;
-    BucketsTableGpu<Config> filter(numBuckets);
+    const size_t capacity = 10000;
+    BucketsTableGpu<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5};
 
@@ -88,8 +88,8 @@ TEST_F(CuckooFilterTest, ClearOperation) {
 }
 
 TEST_F(CuckooFilterTest, LoadFactor) {
-    const size_t numBuckets = 1024;
-    BucketsTableGpu<Config> filter(numBuckets);
+    const size_t capacity = 10000;
+    BucketsTableGpu<Config> filter(capacity);
 
     EXPECT_FLOAT_EQ(filter.loadFactor(), 0.0f);
 
@@ -104,8 +104,7 @@ TEST_F(CuckooFilterTest, LoadFactor) {
         << "Load factor should be positive after insertions";
     EXPECT_LE(loadFactor, 1.0f) << "Load factor should not exceed 1.0";
 
-    const auto totalCapacity =
-        static_cast<float>(numBuckets * BucketsTableGpu<Config>::bucketSize);
+    const auto totalCapacity = static_cast<float>(filter.capacity());
 
     EXPECT_FLOAT_EQ(loadFactor, inserted / totalCapacity)
         << "Load factor should be approximately inserted / totalCapacity";
@@ -115,8 +114,7 @@ TEST_F(CuckooFilterTest, LoadFactor) {
 
 TEST_F(CuckooFilterTest, NearCapacityInsertion) {
     const size_t numKeys = 1 << 20;
-    const size_t numBuckets = numKeys / BucketsTableGpu<Config>::bucketSize;
-    BucketsTableGpu<Config> filter(numBuckets);
+    BucketsTableGpu<Config> filter(numKeys);
 
     auto keys = generateRandomKeys<uint32_t>(numKeys);
 
@@ -134,8 +132,8 @@ TEST_F(CuckooFilterTest, NearCapacityInsertion) {
 }
 
 TEST_F(CuckooFilterTest, DuplicateInsertions) {
-    const size_t numBuckets = 1024;
-    BucketsTableGpu<Config> filter(numBuckets);
+    const size_t capacity = 10000;
+    BucketsTableGpu<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 1, 2, 2, 3, 3, 4, 4, 5, 5};
 

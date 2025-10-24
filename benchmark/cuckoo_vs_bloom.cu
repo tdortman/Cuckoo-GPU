@@ -10,8 +10,8 @@
 
 namespace bm = benchmark;
 
-constexpr double TARGET_LOAD_FACTOR = 0.90;
-using Config = CuckooConfig<uint32_t, 16, 1000, 256, 128>;
+constexpr double TARGET_LOAD_FACTOR = 0.95;
+using Config = CuckooConfig<uint32_t, 16, 500, 128, 128>;
 
 template <typename Config>
 constexpr double cuckooBitsPerItem() {
@@ -61,7 +61,7 @@ static void BM_CuckooFilter_Insert(bm::State& state) {
 
     for (auto _ : state) {
         state.PauseTiming();
-        BucketsTableGpu<Config> table(numBuckets);
+        BucketsTableGpu<Config> table(n, TARGET_LOAD_FACTOR);
         state.ResumeTiming();
 
         size_t inserted = table.insertMany(keys.data(), n);
@@ -86,7 +86,7 @@ static void BM_CuckooFilter_Query(bm::State& state) {
         ))
     );
 
-    BucketsTableGpu<Config> table(numBuckets);
+    BucketsTableGpu<Config> table(n, TARGET_LOAD_FACTOR);
 
     auto keys = generateKeys<uint32_t>(n);
     table.insertMany(keys.data(), n);
@@ -181,7 +181,7 @@ static void BM_CuckooFilter_InsertAndQuery(bm::State& state) {
 
     for (auto _ : state) {
         state.PauseTiming();
-        BucketsTableGpu<Config> table(numBuckets);
+        BucketsTableGpu<Config> table(n, TARGET_LOAD_FACTOR);
         state.ResumeTiming();
 
         size_t inserted = table.insertMany(keys.data(), n);

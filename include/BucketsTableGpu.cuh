@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cooperative_groups.h>
+#include <cooperative_groups/reduce.h>
 #include <cmath>
 #include <cstdint>
 #include <ctime>
@@ -10,6 +12,8 @@
 #include <iostream>
 #include <vector>
 #include "helpers.cuh"
+
+namespace cg = cooperative_groups;
 
 template <
     typename T,
@@ -166,7 +170,8 @@ class BucketsTableGpu {
         __forceinline__ __device__ int findSlot(TagType tag, TagType target) {
             uint32_t idx = tag & (bucketSize - 1);
             for (size_t i = 0; i < bucketSize; ++i) {
-                if (tags[idx] == target) {
+                TagType current = tags[idx].load(cuda::memory_order_relaxed);
+                if (current == target) {
                     return static_cast<int>(idx);
                 }
                 idx = (idx + 1) & (bucketSize - 1);
@@ -199,7 +204,7 @@ class BucketsTableGpu {
         }
 
         __device__ TagType getTagAt(size_t slot) const {
-            return tags[slot];
+            return tags[slot].load(cuda::memory_order_relaxed);
         }
     };
 
@@ -234,11 +239,28 @@ class BucketsTableGpu {
         return bucket ^ (hash(fp) & (numBuckets - 1));
     }
 
+    static size_t
+    calculateNumBuckets(size_t capacity, double targetLoadFactor) {
+        double itemsPerBucket = bucketSize * targetLoadFactor;
+
+        auto requiredBuckets = static_cast<size_t>(
+            std::ceil(static_cast<double>(capacity) / itemsPerBucket)
+        );
+
+        return nextPowerOfTwo(requiredBuckets);
+    }
+
    public:
     BucketsTableGpu(const BucketsTableGpu&) = delete;
     BucketsTableGpu& operator=(const BucketsTableGpu&) = delete;
 
-    explicit BucketsTableGpu(size_t numBuckets) : numBuckets(numBuckets) {
+    explicit BucketsTableGpu(size_t capacity, double targetLoadFactor = 0.95)
+        : numBuckets(calculateNumBuckets(capacity, targetLoadFactor)) {
+        assert(
+            targetLoadFactor > 0.0 && targetLoadFactor <= 1.0 &&
+            "Target load factor must be in range (0, 1]"
+        );
+
         CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
         CUDA_CALL(
             cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>))
@@ -386,6 +408,14 @@ class BucketsTableGpu {
         return static_cast<float>(h_numOccupied) / (numBuckets * bucketSize);
     }
 
+    size_t capacity() {
+        return numBuckets * bucketSize;
+    }
+
+    [[nodiscard]] size_t getNumBuckets() const {
+        return numBuckets;
+    }
+
     struct DeviceTableView {
         Bucket* d_buckets;
         cuda::std::atomic<size_t>* d_numOccupied;
@@ -439,19 +469,19 @@ class BucketsTableGpu {
         }
 
         __device__ bool insert(const T& key) {
-            auto [i1, i2, fp] =
-                BucketsTableGpu::getCandidateBuckets(key, numBuckets);
+            auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
 
             if (tryInsertAtBucket(i1, fp) || tryInsertAtBucket(i2, fp)) {
                 return true;
             }
 
-            return insertWithEviction(fp, i1);
+            auto startBucket = (fp & 1) == 0 ? i1 : i2;
+
+            return insertWithEviction(fp, startBucket);
         }
 
         __device__ bool contains(const T& key) const {
-            auto [i1, i2, fp] =
-                BucketsTableGpu::getCandidateBuckets(key, numBuckets);
+            auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
             return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
         }
     };
@@ -471,25 +501,24 @@ __global__ void insertKernel(
     size_t n,
     typename BucketsTableGpu<Config>::DeviceTableView tableView
 ) {
-    __shared__ int blockSuccessCount;
+    auto block = cg::this_thread_block();
+    auto tile = cg::tiled_partition<32>(block);
 
-    if (threadIdx.x == 0) {
-        blockSuccessCount = 0;
+    size_t idx = globalThreadId();
+
+    if (idx >= n) {
+        return;
     }
-    __syncthreads();
 
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < n) {
-        bool success = tableView.insert(keys[idx]);
-        if (success) {
-            atomicAdd(&blockSuccessCount, 1);
-        }
-    }
-    __syncthreads();
+    typename Config::KeyType key = keys[idx];
 
-    if (threadIdx.x == 0 && blockSuccessCount > 0) {
+    int success = tableView.insert(key);
+
+    int tile_sum = cg::reduce(tile, success, cg::plus<int>());
+
+    if (tile.thread_rank() == 0 && tile_sum > 0) {
         tableView.d_numOccupied->fetch_add(
-            blockSuccessCount, cuda::memory_order_relaxed
+            tile_sum, cuda::memory_order_relaxed
         );
     }
 }
@@ -501,7 +530,7 @@ __global__ void containsKernel(
     size_t n,
     typename BucketsTableGpu<Config>::DeviceTableView tableView
 ) {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t idx = globalThreadId();
     if (idx < n) {
         output[idx] = tableView.contains(keys[idx]);
     }

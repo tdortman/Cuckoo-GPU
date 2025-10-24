@@ -7,8 +7,13 @@ constexpr bool powerOfTwo(size_t n) {
     return n != 0 && (n & (n - 1)) == 0;
 }
 
+__host__ __device__ __forceinline__ uint32_t globalThreadId() {
+    return blockIdx.x * blockDim.x + threadIdx.x;
+}
+
 constexpr size_t nextPowerOfTwo(size_t n) {
-    if (powerOfTwo(n)) return n;
+    if (powerOfTwo(n))
+        return n;
 
     n--;
     n |= n >> 1;
