@@ -112,6 +112,7 @@ class CuckooFilter {
     }();
 
     static_assert(bucketSize > 0, "Bucket size must be greater than 0");
+    static_assert(powerOfTwo(bucketSize), "Bucket size must be a power of 2");
 
     using PackedTagType = uint64_t;
 
@@ -166,7 +167,7 @@ class CuckooFilter {
     static constexpr TagType EMPTY = 0;
     static constexpr size_t tagMask = (1ULL << bitsPerTag) - 1;
 
-    struct __align__(128) Bucket {
+    struct Bucket {
         cuda::std::atomic<TagType> tags[bucketSize];
 
         __forceinline__ __device__ int findSlot(TagType tag, TagType target) {
@@ -615,6 +616,7 @@ class CuckooFilter {
             return insertWithEviction(fp, startBucket);
         }
 
+        // FIXME: Somehow this isn't guaranteed to find all existing keys?
         __device__ bool contains(const T& key) const {
             auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
             return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
@@ -653,10 +655,10 @@ __global__ void insertKernel(
 
     int success = view.insert(keys[idx]);
 
-    int tile_sum = cg::reduce(tile, success, cg::plus<int>());
+    int tileSum = cg::reduce(tile, success, cg::plus<int>());
 
-    if (tile.thread_rank() == 0 && tile_sum > 0) {
-        view.d_numOccupied->fetch_add(tile_sum, cuda::memory_order_relaxed);
+    if (tile.thread_rank() == 0 && tileSum > 0) {
+        view.d_numOccupied->fetch_add(tileSum, cuda::memory_order_relaxed);
     }
 }
 
