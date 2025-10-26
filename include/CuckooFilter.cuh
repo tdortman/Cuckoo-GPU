@@ -302,7 +302,7 @@ class CuckooFilter {
             if (currentChunkSize > 0) {
                 size_t numBlocks = SDIV(currentChunkSize, blockSize);
                 insertKernel<Config><<<numBlocks, blockSize, 0, streams[i]>>>(
-                    d_keys + offset, currentChunkSize, get_device_view()
+                    d_keys + offset, currentChunkSize, getDeviceView()
                 );
             }
         }
@@ -355,7 +355,7 @@ class CuckooFilter {
         CUDA_CALL(cudaFree(d_tempStorage));
 
         insertKernelSorted<Config><<<numBlocks, blockSize>>>(
-            d_keys, d_packedTags, n, get_device_view()
+            d_keys, d_packedTags, n, getDeviceView()
         );
 
         CUDA_CALL(cudaDeviceSynchronize());
@@ -393,7 +393,7 @@ class CuckooFilter {
                     d_keys + offset,
                     d_output + offset,
                     currentChunkSize,
-                    get_device_view()
+                    getDeviceView()
                 );
             }
         }
@@ -427,7 +427,7 @@ class CuckooFilter {
                     d_keys + offset,
                     outputPtr,
                     currentChunkSize,
-                    get_device_view()
+                    getDeviceView()
                 );
             }
         }
@@ -619,7 +619,7 @@ class CuckooFilter {
         }
     };
 
-    DeviceView get_device_view() {
+    DeviceView getDeviceView() {
         return DeviceView{
             d_buckets,
             d_numOccupied,
