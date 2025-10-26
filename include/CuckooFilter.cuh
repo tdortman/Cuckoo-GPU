@@ -70,6 +70,14 @@ __global__ void containsKernel(
 );
 
 template <typename Config>
+__global__ void deleteKernel(
+    const typename Config::KeyType* keys,
+    bool* output,
+    size_t n,
+    typename CuckooFilter<Config>::DeviceView view
+);
+
+template <typename Config>
 class CuckooFilter {
    public:
     using T = typename Config::KeyType;
@@ -397,6 +405,49 @@ class CuckooFilter {
         }
     }
 
+    size_t
+    deleteMany(const T* d_keys, const size_t n, bool* d_output = nullptr) {
+        const size_t numStreams =
+            std::clamp(n / blockSize, size_t(1), size_t(12));
+        const size_t chunkSize = SDIV(n, numStreams);
+        cudaStream_t streams[numStreams];
+
+        for (auto& stream : streams) {
+            CUDA_CALL(cudaStreamCreate(&stream));
+        }
+
+        for (size_t i = 0; i < numStreams; ++i) {
+            size_t offset = i * chunkSize;
+            size_t currentChunkSize = std::min(chunkSize, n - offset);
+
+            if (currentChunkSize > 0) {
+                size_t numBlocks = SDIV(currentChunkSize, blockSize);
+                bool* outputPtr = d_output != nullptr ? d_output + offset : nullptr;
+                deleteKernel<Config><<<numBlocks, blockSize, 0, streams[i]>>>(
+                    d_keys + offset,
+                    outputPtr,
+                    currentChunkSize,
+                    get_device_view()
+                );
+            }
+        }
+
+        CUDA_CALL(cudaDeviceSynchronize());
+
+        for (auto& stream : streams) {
+            CUDA_CALL(cudaStreamDestroy(stream));
+        }
+
+        CUDA_CALL(cudaMemcpy(
+            &h_numOccupied,
+            d_numOccupied,
+            sizeof(size_t),
+            cudaMemcpyDeviceToHost
+        ));
+
+        return h_numOccupied;
+    }
+
 #ifdef CUCKOO_FILTER_HAS_THRUST
     size_t insertMany(const thrust::device_vector<T>& d_keys) {
         return insertMany(
@@ -429,6 +480,40 @@ class CuckooFilter {
             thrust::raw_pointer_cast(d_keys.data()),
             d_keys.size(),
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
+        );
+    }
+
+    size_t deleteMany(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<bool>& d_output
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return deleteMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_output.data())
+        );
+    }
+
+    size_t deleteMany(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<uint8_t>& d_output
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return deleteMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
+        );
+    }
+
+    size_t deleteMany(const thrust::device_vector<T>& d_keys) {
+        return deleteMany(
+            thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr
         );
     }
 #endif  // CUCKOO_FILTER_HAS_THRUST
@@ -468,7 +553,6 @@ class CuckooFilter {
             uint32_t idx = tag & (bucketSize - 1);
             for (size_t i = 0; i < bucketSize; ++i) {
                 if (d_buckets[bucketIdx].tryRemoveAt(idx, tag)) {
-                    d_numOccupied->fetch_sub(1, cuda::memory_order_relaxed);
                     return true;
                 }
                 idx = (idx + 1) & (bucketSize - 1);
@@ -527,6 +611,12 @@ class CuckooFilter {
             auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
             return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
         }
+
+        __device__ bool remove(const T& key) {
+            auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
+
+            return tryRemoveAtBucket(i1, fp) || tryRemoveAtBucket(i2, fp);
+        }
     };
 
     DeviceView get_device_view() {
@@ -573,6 +663,35 @@ __global__ void containsKernel(
 
     if (idx < n) {
         output[idx] = view.contains(keys[idx]);
+    }
+}
+
+template <typename Config>
+__global__ void deleteKernel(
+    const typename Config::KeyType* keys,
+    bool* output,
+    size_t n,
+    typename CuckooFilter<Config>::DeviceView view
+) {
+    auto block = cg::this_thread_block();
+    auto tile = cg::tiled_partition<32>(block);
+
+    auto idx = globalThreadId();
+
+    if (idx >= n) {
+        return;
+    }
+
+    int success = view.remove(keys[idx]);
+
+    if (output != nullptr) {
+        output[idx] = success;
+    }
+
+    int tileSum = cg::reduce(tile, success, cg::plus<int>());
+
+    if (tile.thread_rank() == 0 && tileSum > 0) {
+        view.d_numOccupied->fetch_sub(tileSum, cuda::memory_order_relaxed);
     }
 }
 

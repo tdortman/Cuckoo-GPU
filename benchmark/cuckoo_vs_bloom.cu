@@ -117,6 +117,44 @@ static void BM_CuckooFilter_Query(bm::State& state) {
     );
 }
 
+static void BM_CuckooFilter_Delete(bm::State& state) {
+    const size_t n = state.range(0);
+
+    MemoryUsage mem{};
+    mem.snapshotBefore();
+    CuckooFilter<Config> filter(n, TARGET_LOAD_FACTOR);
+
+    auto keys = generateKeys<uint32_t>(n);
+    thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
+    thrust::device_vector<uint8_t> d_output(n);
+
+    mem.snapshotAfter();
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        filter.clear();
+        filter.insertMany(d_keys);
+        state.ResumeTiming();
+
+        size_t remaining = filter.deleteMany(d_keys, d_output);
+        cudaDeviceSynchronize();
+        bm::DoNotOptimize(remaining);
+        bm::DoNotOptimize(d_output.data().get());
+    }
+
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * n));
+    state.counters["memory_bytes"] = bm::Counter(
+        static_cast<double>(mem.used()),
+        bm::Counter::kDefaults,
+        bm::Counter::kIs1024
+    );
+    state.counters["bytes_per_item"] = bm::Counter(
+        static_cast<double>(mem.used()) / static_cast<double>(filter.capacity()),
+        bm::Counter::kDefaults,
+        bm::Counter::kIs1024
+    );
+}
+
 static void BM_BloomFilter_Insert(bm::State& state) {
     const size_t n = state.range(0);
 
@@ -248,6 +286,47 @@ static void BM_CuckooFilter_InsertAndQuery(bm::State& state) {
     );
 }
 
+static void BM_CuckooFilter_InsertQueryDelete(bm::State& state) {
+    const size_t n = state.range(0);
+
+    auto keys = generateKeys<uint32_t>(n);
+    thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
+    thrust::device_vector<uint8_t> d_output(n);
+
+    MemoryUsage mem{};
+    mem.snapshotBefore();
+    CuckooFilter<Config> filter(n, TARGET_LOAD_FACTOR);
+    mem.snapshotAfter();
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        filter.clear();
+        state.ResumeTiming();
+
+        size_t inserted = filter.insertMany(d_keys);
+        filter.containsMany(d_keys, d_output);
+        size_t remaining = filter.deleteMany(d_keys, d_output);
+
+        cudaDeviceSynchronize();
+
+        bm::DoNotOptimize(inserted);
+        bm::DoNotOptimize(remaining);
+        bm::DoNotOptimize(d_output.data().get());
+    }
+
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * n));
+    state.counters["memory_bytes"] = bm::Counter(
+        static_cast<double>(mem.used()),
+        bm::Counter::kDefaults,
+        bm::Counter::kIs1024
+    );
+    state.counters["bytes_per_item"] = bm::Counter(
+        static_cast<double>(mem.used()) / static_cast<double>(filter.capacity()),
+        bm::Counter::kDefaults,
+        bm::Counter::kIs1024
+    );
+}
+
 static void BM_BloomFilter_InsertAndQuery(bm::State& state) {
     const size_t n = state.range(0);
 
@@ -318,11 +397,19 @@ BENCHMARK(BM_BloomFilter_Query)
     ->Range(1 << 16, 1 << 28)
     ->Unit(bm::kMillisecond);
 
+BENCHMARK(BM_CuckooFilter_Delete)
+    ->Range(1 << 16, 1 << 28)
+    ->Unit(bm::kMillisecond);
+
 BENCHMARK(BM_CuckooFilter_InsertAndQuery)
     ->Range(1 << 16, 1 << 28)
     ->Unit(bm::kMillisecond);
 
 BENCHMARK(BM_BloomFilter_InsertAndQuery)
+    ->Range(1 << 16, 1 << 28)
+    ->Unit(bm::kMillisecond);
+
+BENCHMARK(BM_CuckooFilter_InsertQueryDelete)
     ->Range(1 << 16, 1 << 28)
     ->Unit(bm::kMillisecond);
 
