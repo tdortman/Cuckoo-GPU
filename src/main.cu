@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     thrust::device_vector<uint32_t> d_input(input.begin(), input.end());
     thrust::device_vector<uint8_t> d_output(n);
 
-    using Config = CuckooConfig<uint32_t, 16, 500, 128, 128>;
+    using Config = CuckooConfig<uint32_t, 16, 500, 256, 128>;
     auto filter = CuckooFilter<Config>(n, TARGET_LOAD_FACTOR);
 
     auto start = std::chrono::high_resolution_clock::now();

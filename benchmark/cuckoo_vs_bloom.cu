@@ -15,23 +15,6 @@ namespace bm = benchmark;
 constexpr double TARGET_LOAD_FACTOR = 0.95;
 using Config = CuckooConfig<uint32_t, 16, 500, 128, 128>;
 
-template <typename Config>
-constexpr double cuckooBitsPerItem() {
-    using TagType = typename std::conditional<
-        Config::bitsPerTag <= 8,
-        uint8_t,
-        typename std::
-            conditional<Config::bitsPerTag <= 16, uint16_t, uint32_t>::type>::
-        type;
-
-    constexpr size_t bucketSize = CuckooFilter<Config>::bucketSize;
-    constexpr size_t bytesPerBucket = bucketSize * sizeof(TagType);
-    constexpr size_t bitsPerBucket = bytesPerBucket * 8;
-
-    return static_cast<double>(bitsPerBucket) /
-           (bucketSize * TARGET_LOAD_FACTOR);
-}
-
 template <typename T>
 std::vector<T> generateKeys(size_t n, unsigned seed = 42) {
     std::vector<T> keys(n);
@@ -153,8 +136,7 @@ static void BM_CuckooFilter_Delete(bm::State& state) {
 static void BM_BloomFilter_Insert(bm::State& state) {
     const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
 
-    constexpr auto bitsPerTag =
-        static_cast<size_t>(cuckooBitsPerItem<Config>());
+    constexpr auto bitsPerTag = Config::bitsPerTag;
 
     using BloomFilter = cuco::bloom_filter<uint32_t>;
 
@@ -195,8 +177,7 @@ static void BM_BloomFilter_Insert(bm::State& state) {
 static void BM_BloomFilter_Query(bm::State& state) {
     const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
 
-    constexpr auto bitsPerTag =
-        static_cast<size_t>(cuckooBitsPerItem<Config>());
+    constexpr auto bitsPerTag = Config::bitsPerTag;
 
     using BloomFilter = cuco::bloom_filter<uint32_t>;
 
@@ -320,8 +301,7 @@ static void BM_CuckooFilter_InsertQueryDelete(bm::State& state) {
 static void BM_BloomFilter_InsertAndQuery(bm::State& state) {
     const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
 
-    constexpr auto bitsPerTag =
-        static_cast<size_t>(cuckooBitsPerItem<Config>());
+    constexpr auto bitsPerTag = Config::bitsPerTag;
 
     using BloomFilter = cuco::bloom_filter<uint32_t>;
     const size_t numBlocks = cucoNumBlocks<BloomFilter, bitsPerTag>(n);

@@ -17,29 +17,11 @@ cuda_args = [
     '-arch=sm_80',
 ]
 
-cmake = import('cmake')
-
-cuco_opts = cmake.subproject_options()
-cuco_opts.add_cmake_defines(
-    {
-        'BUILD_TESTS': 'OFF',
-        'BUILD_BENCHMARKS': 'OFF',
-        'BUILD_EXAMPLES': 'OFF',
-        'INSTALL_CUCO': 'OFF',
-    },
-)
-
-cuco_sub = cmake.subproject('cuco', options: cuco_opts)
-cuco_dep = cuco_sub.dependency('cuco')
-
-dependencies = [cuco_dep]
-
 includes = ['./include']
 
 executable(
     'cuckoo-filter-cuda',
     './src/main.cu',
-    dependencies: dependencies,
     include_directories: includes,
     cuda_args: cuda_args,
     install: true,
@@ -50,12 +32,27 @@ if get_option('BUILD_BENCHMARKS') == true
     benchmark_main_dep = dependency('benchmark_main', required: true)
     cpu_cuckoo_dep = dependency('cpu-cuckoo', fallback: ['cpu-cuckoo', 'cpu_cuckoo_dep'])
 
-    test_deps = [benchmark_dep, benchmark_main_dep, cuco_dep, cpu_cuckoo_dep]
+    cmake = import('cmake')
+
+    cuco_opts = cmake.subproject_options()
+    cuco_opts.add_cmake_defines(
+        {
+            'BUILD_TESTS': 'OFF',
+            'BUILD_BENCHMARKS': 'OFF',
+            'BUILD_EXAMPLES': 'OFF',
+            'INSTALL_CUCO': 'OFF',
+        },
+    )
+
+    cuco_sub = cmake.subproject('cuco', options: cuco_opts)
+    cuco_dep = cuco_sub.dependency('cuco')
+
+    bench_deps = [benchmark_dep, benchmark_main_dep, cuco_dep, cpu_cuckoo_dep]
 
     executable(
         'benchmark-cuckoo-vs-bloom',
         './benchmark/cuckoo_vs_bloom.cu',
-        dependencies: test_deps,
+        dependencies: bench_deps,
         include_directories: includes,
         cuda_args: cuda_args,
         install: false,
@@ -64,7 +61,7 @@ if get_option('BUILD_BENCHMARKS') == true
     executable(
         'benchmark-cuckoo-cpu-vs-gpu',
         './benchmark/cuckoo_cpu_vs_gpu.cu',
-        dependencies: test_deps,
+        dependencies: bench_deps,
         include_directories: includes,
         cuda_args: cuda_args,
         install: false,
@@ -78,7 +75,7 @@ if get_option('BUILD_TESTS') == true
     test_exe = executable(
         'test-cuckoo-filter',
         './tests/test_cuckoo_filter.cu',
-        dependencies: [gtest_dep, gtest_main_dep, cuco_dep],
+        dependencies: [gtest_dep, gtest_main_dep],
         include_directories: includes,
         cuda_args: cuda_args,
         install: false,

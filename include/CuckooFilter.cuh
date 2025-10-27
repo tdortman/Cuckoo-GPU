@@ -1,25 +1,21 @@
 #pragma once
 
-#include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
 #include <cmath>
 #include <cstdint>
 #include <ctime>
 #include <cub/cub.cuh>
-#include <cuco/hash_functions.cuh>
 #include <cuda/std/atomic>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
 #include <iostream>
 #include <vector>
+#include "hashutil.cuh"
 #include "helpers.cuh"
 
 #if __has_include(<thrust/device_vector.h>)
     #include <thrust/device_vector.h>
     #define CUCKOO_FILTER_HAS_THRUST 1
 #endif
-
-namespace cg = cooperative_groups;
 
 template <
     typename T,
@@ -165,7 +161,7 @@ class CuckooFilter {
     };
 
     static constexpr TagType EMPTY = 0;
-    static constexpr size_t tagMask = (1ULL << bitsPerTag) - 1;
+    static constexpr size_t fpMask = (1ULL << bitsPerTag) - 1;
 
     using PackedAtomicSize = uint32_t;
 
@@ -188,9 +184,9 @@ class CuckooFilter {
 
         __device__ TagType
         extractTag(PackedAtomicSize packed, size_t tagIdx) const {
-            size_t shift = tagIdx * bitsPerTag;
-            PackedAtomicSize mask = (1U << bitsPerTag) - 1;
-            return static_cast<TagType>((packed >> shift) & mask);
+            return static_cast<TagType>(
+                (packed >> (tagIdx * bitsPerTag)) & fpMask
+            );
         }
 
         __device__ PackedAtomicSize replaceTag(
@@ -199,10 +195,8 @@ class CuckooFilter {
             TagType newTag
         ) const {
             size_t shift = tagIdx * bitsPerTag;
-            PackedAtomicSize mask = (1U << bitsPerTag) - 1;
-            PackedAtomicSize cleared = packed & ~(mask << shift);
-            return cleared |
-                   ((static_cast<PackedAtomicSize>(newTag) & mask) << shift);
+            PackedAtomicSize cleared = packed & ~(fpMask << shift);
+            return cleared | (newTag << shift);
         }
 
         __device__ TagType getTagAt(size_t slot) const {
@@ -288,13 +282,8 @@ class CuckooFilter {
 
    public:
     template <typename H>
-    static __host__ __device__ uint32_t hash(const H& key) {
-        return cuco::xxhash_32<H>()(key);
-    }
-
-    template <typename H>
     static __host__ __device__ uint64_t hash64(const H& key) {
-        return cuco::xxhash_64<H>()(key);
+        return xxhash::xxhash64(key);
     }
 
     static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
@@ -303,7 +292,7 @@ class CuckooFilter {
 
         // Upper 32 bits for the fingerprint
         const uint32_t h_fp = h >> 32;
-        const TagType fp = static_cast<TagType>(h_fp & tagMask) + 1;
+        const TagType fp = static_cast<TagType>(h_fp & fpMask) + 1;
 
         // Lower 32 bits for the bucket indices
         const uint32_t h_bucket = h & 0xFFFFFFFF;
@@ -315,7 +304,7 @@ class CuckooFilter {
 
     static __host__ __device__ size_t
     getAlternateBucket(size_t bucket, TagType fp, size_t numBuckets) {
-        return bucket ^ (hash(fp) & (numBuckets - 1));
+        return bucket ^ (hash64(fp) & (numBuckets - 1));
     }
 
     static size_t
@@ -732,21 +721,20 @@ __global__ void insertKernel(
     size_t n,
     typename CuckooFilter<Config>::DeviceView view
 ) {
-    auto block = cg::this_thread_block();
-    auto tile = cg::tiled_partition<32>(block);
+    using BlockReduce = cub::BlockReduce<int, Config::blockSize>;
+    __shared__ typename BlockReduce::TempStorage tempStorage;
 
     auto idx = globalThreadId();
 
-    if (idx >= n) {
-        return;
+    int success = 0;
+    if (idx < n) {
+        success = view.insert(keys[idx]);
     }
 
-    int success = view.insert(keys[idx]);
+    int blockSum = BlockReduce(tempStorage).Sum(success);
 
-    int tileSum = cg::reduce(tile, success, cg::plus<int>());
-
-    if (tile.thread_rank() == 0 && tileSum > 0) {
-        view.d_numOccupied->fetch_add(tileSum, cuda::memory_order_relaxed);
+    if (threadIdx.x == 0 && blockSum > 0) {
+        view.d_numOccupied->fetch_add(blockSum, cuda::memory_order_relaxed);
     }
 }
 
@@ -771,25 +759,24 @@ __global__ void deleteKernel(
     size_t n,
     typename CuckooFilter<Config>::DeviceView view
 ) {
-    auto block = cg::this_thread_block();
-    auto tile = cg::tiled_partition<32>(block);
+    using BlockReduce = cub::BlockReduce<int, Config::blockSize>;
+    __shared__ typename BlockReduce::TempStorage tempStorage;
 
     auto idx = globalThreadId();
 
-    if (idx >= n) {
-        return;
+    int success = 0;
+    if (idx < n) {
+        success = view.remove(keys[idx]);
+
+        if (output != nullptr) {
+            output[idx] = success;
+        }
     }
 
-    int success = view.remove(keys[idx]);
+    int blockSum = BlockReduce(tempStorage).Sum(success);
 
-    if (output != nullptr) {
-        output[idx] = success;
-    }
-
-    int tileSum = cg::reduce(tile, success, cg::plus<int>());
-
-    if (tile.thread_rank() == 0 && tileSum > 0) {
-        view.d_numOccupied->fetch_sub(tileSum, cuda::memory_order_relaxed);
+    if (threadIdx.x == 0 && blockSum > 0) {
+        view.d_numOccupied->fetch_sub(blockSum, cuda::memory_order_relaxed);
     }
 }
 
@@ -824,13 +811,10 @@ __global__ void insertKernelSorted(
     size_t n,
     typename CuckooFilter<Config>::DeviceView view
 ) {
-    auto block = cg::this_thread_block();
-    auto tile = cg::tiled_partition<32>(block);
+    using BlockReduce = cub::BlockReduce<int, Config::blockSize>;
+    __shared__ typename BlockReduce::TempStorage tempStorage;
 
     size_t idx = globalThreadId();
-
-    if (idx >= n)
-        return;
 
     using Filter = CuckooFilter<Config>;
     using TagType = typename Filter::TagType;
@@ -839,25 +823,31 @@ __global__ void insertKernelSorted(
     constexpr size_t bitsPerTag = Config::bitsPerTag;
     constexpr TagType fpMask = (1ULL << bitsPerTag) - 1;
 
-    PackedTagType packedTag = packedTags[idx];
-    size_t primaryBucket = packedTag >> bitsPerTag;
-    auto fp = static_cast<TagType>(packedTag & fpMask);
+    int success = 0;
+    if (idx < n) {
+        PackedTagType packedTag = packedTags[idx];
+        size_t primaryBucket = packedTag >> bitsPerTag;
+        auto fp = static_cast<TagType>(packedTag & fpMask);
 
-    size_t secondaryBucket =
-        Filter::getAlternateBucket(primaryBucket, fp, view.numBuckets);
+        if (view.tryInsertAtBucket(primaryBucket, fp)) {
+            success = 1;
+        } else {
+            size_t secondaryBucket =
+                Filter::getAlternateBucket(primaryBucket, fp, view.numBuckets);
 
-    bool success = false;
-    if (view.tryInsertAtBucket(primaryBucket, fp) ||
-        view.tryInsertAtBucket(secondaryBucket, fp)) {
-        success = true;
-    } else {
-        auto startBucket = (fp & 1) == 0 ? primaryBucket : secondaryBucket;
-        success = view.insertWithEviction(fp, startBucket);
+            if (view.tryInsertAtBucket(secondaryBucket, fp)) {
+                success = 1;
+            } else {
+                auto startBucket =
+                    (fp & 1) == 0 ? primaryBucket : secondaryBucket;
+                success = view.insertWithEviction(fp, startBucket);
+            }
+        }
     }
 
-    int tileSum = cg::reduce(tile, static_cast<int>(success), cg::plus<int>());
+    int blockSum = BlockReduce(tempStorage).Sum(success);
 
-    if (tile.thread_rank() == 0 && tileSum > 0) {
-        view.d_numOccupied->fetch_add(tileSum, cuda::memory_order_relaxed);
+    if (threadIdx.x == 0 && blockSum > 0) {
+        view.d_numOccupied->fetch_add(blockSum, cuda::memory_order_relaxed);
     }
 }

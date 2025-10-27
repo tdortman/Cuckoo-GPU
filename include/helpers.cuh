@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 
 constexpr bool powerOfTwo(size_t n) {
@@ -51,19 +54,18 @@ size_t countOnes(T* data, size_t n) {
     } while (0)
 
 template <typename Kernel>
-constexpr auto maxOccupancyGridSize(int32_t blockSize, Kernel kernel) {
+constexpr auto
+maxOccupancyGridSize(int32_t blockSize, Kernel kernel, size_t dynamicSMemSize) {
     int device = 0;
     cudaGetDevice(&device);
 
-    int num_multiprocessors = -1;
-    cudaDeviceGetAttribute(
-        &num_multiprocessors, cudaDevAttrMultiProcessorCount, device
-    );
+    int numSM = -1;
+    cudaDeviceGetAttribute(&numSM, cudaDevAttrMultiProcessorCount, device);
 
-    int max_active_blocks_per_multiprocessor{};
+    int maxActiveBlocksPerSM{};
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &max_active_blocks_per_multiprocessor, kernel, blockSize, 0
+        &maxActiveBlocksPerSM, kernel, blockSize, dynamicSMemSize
     );
 
-    return max_active_blocks_per_multiprocessor * num_multiprocessors;
+    return maxActiveBlocksPerSM * numSM;
 }
