@@ -34,6 +34,7 @@ def main():
             "Insert" not in base_name
             or "InsertAndQuery" in base_name
             or "InsertQueryDelete" in base_name
+            or "FalsePositiveRate" in base_name
         ):
             continue
 

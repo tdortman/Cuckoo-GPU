@@ -29,6 +29,10 @@ def main():
             continue
 
         base_name, size_str = name.rsplit("/", 1)
+
+        if "FalsePositiveRate" in base_name:
+            continue
+
         try:
             size = int(size_str)
             real_time = benchmark.get("real_time", 0)
