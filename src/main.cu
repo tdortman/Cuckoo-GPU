@@ -48,22 +48,20 @@ int main(int argc, char** argv) {
     );
 
     using Config = CuckooConfig<uint64_t, 16, 500, 256, 128>;
-    auto filter = CuckooFilter<Config>(n, TARGET_LOAD_FACTOR);
+    auto filter = CuckooFilter<Config>(n);
 
     auto start = std::chrono::high_resolution_clock::now();
     size_t count = filter.insertMany(d_input);
     filter.containsMany(d_input, d_output);
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     std::vector<uint8_t> output(n);
     thrust::copy(d_output.begin(), d_output.end(), output.begin());
 
     size_t found = countOnes(reinterpret_cast<bool*>(output.data()), n);
-    std::cout << "Inserted " << count << " / " << n << " items, found " << found
-              << " items in " << duration << " ms"
+    std::cout << "Inserted " << count << " / " << n << " items, found " << found << " items in "
+              << duration << " ms"
               << " (load factor = " << filter.loadFactor() << ")" << std::endl;
 
     size_t fprTestSize = std::min(n, size_t(1000000));
@@ -87,23 +85,18 @@ int main(int argc, char** argv) {
     start = std::chrono::high_resolution_clock::now();
     filter.containsMany(d_neverInserted, d_fprOutput);
     end = std::chrono::high_resolution_clock::now();
-    duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     std::vector<uint8_t> fprOutput(fprTestSize);
     thrust::copy(d_fprOutput.begin(), d_fprOutput.end(), fprOutput.begin());
 
-    size_t falsePositives =
-        countOnes(reinterpret_cast<bool*>(fprOutput.data()), fprTestSize);
+    size_t falsePositives = countOnes(reinterpret_cast<bool*>(fprOutput.data()), fprTestSize);
 
-    double fpr = static_cast<double>(falsePositives) /
-                 static_cast<double>(fprTestSize) * 100.0;
+    double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
     double theoreticalFPR = 1.0 / (1ULL << Config::bitsPerTag);
 
-    std::cout << "False Positive Rate: " << falsePositives << " / "
-              << fprTestSize << " = " << fpr << "% (theoretical "
-              << 100 * theoreticalFPR << "% for " << Config::bitsPerTag
+    std::cout << "False Positive Rate: " << falsePositives << " / " << fprTestSize << " = " << fpr
+              << "% (theoretical " << 100 * theoreticalFPR << "% for " << Config::bitsPerTag
               << "-bit tags)" << std::endl;
 
     size_t deleteCount = n / 2;
@@ -115,27 +108,18 @@ int main(int argc, char** argv) {
     start = std::chrono::high_resolution_clock::now();
     size_t remaining = filter.deleteMany(d_deleteKeys, d_deleteOutput);
     end = std::chrono::high_resolution_clock::now();
-    duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     std::vector<uint8_t> deleteOutput(deleteCount);
-    thrust::copy(
-        d_deleteOutput.begin(), d_deleteOutput.end(), deleteOutput.begin()
-    );
+    thrust::copy(d_deleteOutput.begin(), d_deleteOutput.end(), deleteOutput.begin());
 
-    size_t deleted =
-        countOnes(reinterpret_cast<bool*>(deleteOutput.data()), deleteCount);
-    std::cout << "Deleted " << deleted << " / " << deleteCount << " items in "
-              << duration << " ms"
+    size_t deleted = countOnes(reinterpret_cast<bool*>(deleteOutput.data()), deleteCount);
+    std::cout << "Deleted " << deleted << " / " << deleteCount << " items in " << duration << " ms"
               << " (load factor = " << filter.loadFactor() << ")" << std::endl;
 
     filter.containsMany(d_deleteKeys, d_deleteOutput);
-    thrust::copy(
-        d_deleteOutput.begin(), d_deleteOutput.end(), deleteOutput.begin()
-    );
-    size_t stillFound =
-        countOnes(reinterpret_cast<bool*>(deleteOutput.data()), deleteCount);
+    thrust::copy(d_deleteOutput.begin(), d_deleteOutput.end(), deleteOutput.begin());
+    size_t stillFound = countOnes(reinterpret_cast<bool*>(deleteOutput.data()), deleteCount);
     std::cout << "After deletion, " << stillFound << " / " << deleteCount
               << " deleted items still found (false negatives)" << std::endl;
 }

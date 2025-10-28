@@ -54,8 +54,7 @@ size_t countOnes(T* data, size_t n) {
     } while (0)
 
 template <typename Kernel>
-constexpr auto
-maxOccupancyGridSize(int32_t blockSize, Kernel kernel, size_t dynamicSMemSize) {
+constexpr auto maxOccupancyGridSize(int32_t blockSize, Kernel kernel, size_t dynamicSMemSize) {
     int device = 0;
     cudaGetDevice(&device);
 

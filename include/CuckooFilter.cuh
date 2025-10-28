@@ -82,13 +82,11 @@ class CuckooFilter {
     using TagType = typename std::conditional<
         bitsPerTag <= 8,
         uint8_t,
-        typename std::conditional<bitsPerTag <= 16, uint16_t, uint32_t>::type>::
-        type;
+        typename std::conditional<bitsPerTag <= 16, uint16_t, uint32_t>::type>::type;
 
     static constexpr size_t tagEntryBytes = sizeof(TagType);
 
-    static constexpr size_t maxEntriesByBytes =
-        (Config::maxBucketBytes) / tagEntryBytes;
+    static constexpr size_t maxEntriesByBytes = (Config::maxBucketBytes) / tagEntryBytes;
 
     static constexpr size_t maxEvictions = Config::maxEvictions;
     static constexpr size_t blockSize = Config::blockSize;
@@ -121,13 +119,9 @@ class CuckooFilter {
         static constexpr size_t totalBits = sizeof(PackedTagType) * 8;
         static constexpr size_t bucketIdxBits = totalBits - fpBits;
 
-        static_assert(
-            fpBits < totalBits,
-            "fpBits must leave at least some bits for bucketIdx"
-        );
+        static_assert(fpBits < totalBits, "fpBits must leave at least some bits for bucketIdx");
 
-        static constexpr PackedTagType fpMask =
-            PackedTagType((1ULL << fpBits) - 1ULL);
+        static constexpr PackedTagType fpMask = PackedTagType((1ULL << fpBits) - 1ULL);
 
         static constexpr PackedTagType bucketIdxMask =
             PackedTagType(((1ULL << bucketIdxBits) - 1ULL) << fpBits);
@@ -135,8 +129,7 @@ class CuckooFilter {
         __host__ __device__ PackedTag() : value(0) {
         }
 
-        __host__ __device__ PackedTag(TagType fp, uint64_t bucketIdx)
-            : value(0) {
+        __host__ __device__ PackedTag(TagType fp, uint64_t bucketIdx) : value(0) {
             setFingerprint(fp);
             setBucketIdx(bucketIdx);
         }
@@ -150,8 +143,7 @@ class CuckooFilter {
         }
 
         __host__ __device__ void setFingerprint(TagType fp) {
-            value =
-                (value & ~fpMask) | (static_cast<PackedTagType>(fp) & fpMask);
+            value = (value & ~fpMask) | (static_cast<PackedTagType>(fp) & fpMask);
         }
 
         __host__ __device__ void setBucketIdx(size_t bucketIdx) {
@@ -166,111 +158,70 @@ class CuckooFilter {
     using PackedAtomicSize = uint32_t;
 
     struct Bucket {
-        static_assert(
-            powerOfTwo(bitsPerTag),
-            "bitsPerTag must be a power of 2"
-        );
-        static constexpr size_t tagsPerAtomic =
-            sizeof(PackedAtomicSize) / sizeof(TagType);
+        static_assert(powerOfTwo(bitsPerTag), "bitsPerTag must be a power of 2");
+        static constexpr size_t tagsPerAtomic = sizeof(PackedAtomicSize) / sizeof(TagType);
         static_assert(tagsPerAtomic >= 1, "TagType must fit in AtomicType");
         static_assert(
             bucketSize % tagsPerAtomic == 0,
             "bucketSize must be divisible by tagsPerAtomic"
         );
+        static_assert(powerOfTwo(tagsPerAtomic), "tagsPerAtomic must be a power of 2");
 
         static constexpr size_t atomicCount = bucketSize / tagsPerAtomic;
+        static_assert(powerOfTwo(atomicCount), "atomicCount must be a power of 2");
 
         cuda::std::atomic<PackedAtomicSize> packedTags[atomicCount];
 
-        __device__ TagType
-        extractTag(PackedAtomicSize packed, size_t tagIdx) const {
-            return static_cast<TagType>(
-                (packed >> (tagIdx * bitsPerTag)) & fpMask
-            );
+        __device__ TagType extractTag(PackedAtomicSize packed, size_t tagIdx) const {
+            return static_cast<TagType>((packed >> (tagIdx * bitsPerTag)) & fpMask);
         }
 
-        __device__ PackedAtomicSize replaceTag(
-            PackedAtomicSize packed,
-            size_t tagIdx,
-            TagType newTag
-        ) const {
+        __device__ PackedAtomicSize
+        replaceTag(PackedAtomicSize packed, size_t tagIdx, TagType newTag) const {
             size_t shift = tagIdx * bitsPerTag;
             PackedAtomicSize cleared = packed & ~(fpMask << shift);
             return cleared | (newTag << shift);
         }
 
-        __device__ TagType getTagAt(size_t slot) const {
-            size_t atomicIdx = slot / tagsPerAtomic;
-            size_t tagIdx = slot & (tagsPerAtomic - 1);
-            PackedAtomicSize packed =
-                packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-            return extractTag(packed, tagIdx);
-        }
-
         __forceinline__ __device__ int findSlot(TagType tag, TagType target) {
-            uint32_t idx = tag & (bucketSize - 1);
-            for (size_t i = 0; i < bucketSize; ++i) {
-                TagType current = getTagAt(idx);
-                if (current == target) {
-                    return static_cast<int>(idx);
+            uint32_t startIdx = tag & (bucketSize - 1);
+            size_t startAtomicIdx = startIdx / tagsPerAtomic;
+            size_t startTagIdx = startIdx & (tagsPerAtomic - 1);
+
+            for (size_t i = 0; i < atomicCount; ++i) {
+                size_t atomicIdx = (startAtomicIdx + i) & (atomicCount - 1);
+                auto packed = packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+
+                size_t jStart, jEnd;
+                if (i == 0) {
+                    // First iteration: start at startTagIdx, go to end
+                    jStart = startTagIdx;
+                    jEnd = tagsPerAtomic;
+                } else if (atomicIdx == startAtomicIdx) {
+                    // Wrapped back to the starting atomic word: check from 0 to startTagIdx
+                    jStart = 0;
+                    jEnd = startTagIdx;
+                    if (jEnd == 0) {
+                        continue;
+                    }
+                } else {
+                    // Other atomic words: check all tags
+                    jStart = 0;
+                    jEnd = tagsPerAtomic;
                 }
-                idx = (idx + 1) & (bucketSize - 1);
+
+                for (size_t j = jStart; j < jEnd; ++j) {
+                    if (extractTag(packed, j) == target) {
+                        return static_cast<int>(atomicIdx * tagsPerAtomic + j);
+                    }
+                }
             }
+
             return -1;
         }
 
         __device__ bool contains(TagType tag) {
             return findSlot(tag, tag) != -1;
-        }
-
-        __device__ bool tryInsertAt(size_t slot, TagType tag) {
-            size_t atomicIdx = slot / tagsPerAtomic;
-            size_t tagIdx = slot & (tagsPerAtomic - 1);
-
-            PackedAtomicSize expected =
-                packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-            PackedAtomicSize desired;
-
-            do {
-                TagType currentTag = extractTag(expected, tagIdx);
-                if (currentTag != EMPTY) {
-                    return false;
-                }
-
-                desired = replaceTag(expected, tagIdx, tag);
-            } while (!packedTags[atomicIdx].compare_exchange_weak(
-                expected,
-                desired,
-                cuda::memory_order_relaxed,
-                cuda::memory_order_relaxed
-            ));
-
-            return true;
-        }
-
-        __device__ bool tryRemoveAt(size_t slot, TagType tag) {
-            size_t atomicIdx = slot / tagsPerAtomic;
-            size_t tagIdx = slot & (tagsPerAtomic - 1);
-
-            PackedAtomicSize expected =
-                packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-            PackedAtomicSize desired;
-
-            do {
-                TagType currentTag = extractTag(expected, tagIdx);
-                if (currentTag != tag) {
-                    return false;
-                }
-
-                desired = replaceTag(expected, tagIdx, EMPTY);
-            } while (!packedTags[atomicIdx].compare_exchange_weak(
-                expected,
-                desired,
-                cuda::memory_order_relaxed,
-                cuda::memory_order_relaxed
-            ));
-
-            return true;
         }
     };
 
@@ -307,13 +258,8 @@ class CuckooFilter {
         return bucket ^ (hash64(fp) & (numBuckets - 1));
     }
 
-    static size_t
-    calculateNumBuckets(size_t capacity, double targetLoadFactor) {
-        double itemsPerBucket = bucketSize * targetLoadFactor;
-
-        auto requiredBuckets = static_cast<size_t>(
-            std::ceil(static_cast<double>(capacity) / itemsPerBucket)
-        );
+    static size_t calculateNumBuckets(size_t capacity) {
+        auto requiredBuckets = std::ceil(static_cast<double>(capacity) / bucketSize);
 
         return nextPowerOfTwo(requiredBuckets);
     }
@@ -322,21 +268,11 @@ class CuckooFilter {
     CuckooFilter(const CuckooFilter&) = delete;
     CuckooFilter& operator=(const CuckooFilter&) = delete;
 
-    explicit CuckooFilter(size_t capacity, double targetLoadFactor = 0.95)
-        : numBuckets(calculateNumBuckets(capacity, targetLoadFactor)) {
-        assert(
-            targetLoadFactor > 0.0 && targetLoadFactor <= 1.0 &&
-            "Target load factor must be in range (0, 1]"
-        );
-
+    explicit CuckooFilter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
         CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(
-            cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>))
-        );
+        CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
 
-        assert(
-            powerOfTwo(numBuckets) && "Number of buckets must be a power of 2"
-        );
+        assert(powerOfTwo(numBuckets) && "Number of buckets must be a power of 2");
 
         clear();
     }
@@ -351,8 +287,7 @@ class CuckooFilter {
     }
 
     size_t insertMany(const T* d_keys, const size_t n) {
-        const size_t numStreams =
-            std::clamp(n / blockSize, size_t(1), size_t(12));
+        const size_t numStreams = std::clamp(n / blockSize, size_t(1), size_t(12));
 
         const size_t chunkSize = SDIV(n, numStreams);
         cudaStream_t streams[numStreams];
@@ -379,12 +314,9 @@ class CuckooFilter {
             CUDA_CALL(cudaStreamDestroy(stream));
         }
 
-        CUDA_CALL(cudaMemcpy(
-            &h_numOccupied,
-            d_numOccupied,
-            sizeof(size_t),
-            cudaMemcpyDeviceToHost
-        ));
+        CUDA_CALL(
+            cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
 
         return h_numOccupied;
     }
@@ -396,9 +328,7 @@ class CuckooFilter {
         CUDA_CALL(cudaMalloc(&d_keys, n * sizeof(T)));
         CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
 
-        CUDA_CALL(
-            cudaMemcpy(d_keys, keys, n * sizeof(T), cudaMemcpyHostToDevice)
-        );
+        CUDA_CALL(cudaMemcpy(d_keys, keys, n * sizeof(T), cudaMemcpyHostToDevice));
 
         size_t numBlocks = SDIV(n, blockSize);
 
@@ -420,28 +350,23 @@ class CuckooFilter {
 
         CUDA_CALL(cudaFree(d_tempStorage));
 
-        insertKernelSorted<Config><<<numBlocks, blockSize>>>(
-            d_keys, d_packedTags, n, getDeviceView()
-        );
+        insertKernelSorted<Config>
+            <<<numBlocks, blockSize>>>(d_keys, d_packedTags, n, getDeviceView());
 
         CUDA_CALL(cudaDeviceSynchronize());
 
         CUDA_CALL(cudaFree(d_keys));
         CUDA_CALL(cudaFree(d_packedTags));
 
-        CUDA_CALL(cudaMemcpy(
-            &h_numOccupied,
-            d_numOccupied,
-            sizeof(size_t),
-            cudaMemcpyDeviceToHost
-        ));
+        CUDA_CALL(
+            cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
 
         return h_numOccupied;
     }
 
     void containsMany(const T* d_keys, const size_t n, bool* d_output) {
-        const size_t numStreams =
-            std::clamp(n / blockSize, size_t(1), size_t(12));
+        const size_t numStreams = std::clamp(n / blockSize, size_t(1), size_t(12));
         const size_t chunkSize = SDIV(n, numStreams);
         cudaStream_t streams[numStreams];
 
@@ -456,10 +381,7 @@ class CuckooFilter {
             if (currentChunkSize > 0) {
                 size_t numBlocks = SDIV(currentChunkSize, blockSize);
                 containsKernel<Config><<<numBlocks, blockSize, 0, streams[i]>>>(
-                    d_keys + offset,
-                    d_output + offset,
-                    currentChunkSize,
-                    getDeviceView()
+                    d_keys + offset, d_output + offset, currentChunkSize, getDeviceView()
                 );
             }
         }
@@ -471,10 +393,8 @@ class CuckooFilter {
         }
     }
 
-    size_t
-    deleteMany(const T* d_keys, const size_t n, bool* d_output = nullptr) {
-        const size_t numStreams =
-            std::clamp(n / blockSize, size_t(1), size_t(12));
+    size_t deleteMany(const T* d_keys, const size_t n, bool* d_output = nullptr) {
+        const size_t numStreams = std::clamp(n / blockSize, size_t(1), size_t(12));
         const size_t chunkSize = SDIV(n, numStreams);
         cudaStream_t streams[numStreams];
 
@@ -488,13 +408,9 @@ class CuckooFilter {
 
             if (currentChunkSize > 0) {
                 size_t numBlocks = SDIV(currentChunkSize, blockSize);
-                bool* outputPtr =
-                    d_output != nullptr ? d_output + offset : nullptr;
+                bool* outputPtr = d_output != nullptr ? d_output + offset : nullptr;
                 deleteKernel<Config><<<numBlocks, blockSize, 0, streams[i]>>>(
-                    d_keys + offset,
-                    outputPtr,
-                    currentChunkSize,
-                    getDeviceView()
+                    d_keys + offset, outputPtr, currentChunkSize, getDeviceView()
                 );
             }
         }
@@ -505,27 +421,20 @@ class CuckooFilter {
             CUDA_CALL(cudaStreamDestroy(stream));
         }
 
-        CUDA_CALL(cudaMemcpy(
-            &h_numOccupied,
-            d_numOccupied,
-            sizeof(size_t),
-            cudaMemcpyDeviceToHost
-        ));
+        CUDA_CALL(
+            cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
 
         return h_numOccupied;
     }
 
 #ifdef CUCKOO_FILTER_HAS_THRUST
     size_t insertMany(const thrust::device_vector<T>& d_keys) {
-        return insertMany(
-            thrust::raw_pointer_cast(d_keys.data()), d_keys.size()
-        );
+        return insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size());
     }
 
-    void containsMany(
-        const thrust::device_vector<T>& d_keys,
-        thrust::device_vector<bool>& d_output
-    ) {
+    void
+    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
         if (d_output.size() != d_keys.size()) {
             d_output.resize(d_keys.size());
         }
@@ -536,10 +445,8 @@ class CuckooFilter {
         );
     }
 
-    void containsMany(
-        const thrust::device_vector<T>& d_keys,
-        thrust::device_vector<uint8_t>& d_output
-    ) {
+    void
+    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
         if (d_output.size() != d_keys.size()) {
             d_output.resize(d_keys.size());
         }
@@ -550,10 +457,8 @@ class CuckooFilter {
         );
     }
 
-    size_t deleteMany(
-        const thrust::device_vector<T>& d_keys,
-        thrust::device_vector<bool>& d_output
-    ) {
+    size_t
+    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
         if (d_output.size() != d_keys.size()) {
             d_output.resize(d_keys.size());
         }
@@ -564,10 +469,8 @@ class CuckooFilter {
         );
     }
 
-    size_t deleteMany(
-        const thrust::device_vector<T>& d_keys,
-        thrust::device_vector<uint8_t>& d_output
-    ) {
+    size_t
+    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
         if (d_output.size() != d_keys.size()) {
             d_output.resize(d_keys.size());
         }
@@ -579,27 +482,20 @@ class CuckooFilter {
     }
 
     size_t deleteMany(const thrust::device_vector<T>& d_keys) {
-        return deleteMany(
-            thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr
-        );
+        return deleteMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr);
     }
 #endif  // CUCKOO_FILTER_HAS_THRUST
 
     void clear() {
         CUDA_CALL(cudaMemset(d_buckets, 0, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(
-            cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>))
-        );
+        CUDA_CALL(cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>)));
         h_numOccupied = 0;
     }
 
     float loadFactor() {
-        CUDA_CALL(cudaMemcpy(
-            &h_numOccupied,
-            d_numOccupied,
-            sizeof(size_t),
-            cudaMemcpyDeviceToHost
-        ));
+        CUDA_CALL(
+            cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
         return static_cast<float>(h_numOccupied) / (numBuckets * bucketSize);
     }
 
@@ -621,23 +517,111 @@ class CuckooFilter {
         size_t numBuckets;
 
         __device__ bool tryRemoveAtBucket(size_t bucketIdx, TagType tag) {
-            uint32_t idx = tag & (bucketSize - 1);
-            for (size_t i = 0; i < bucketSize; ++i) {
-                if (d_buckets[bucketIdx].tryRemoveAt(idx, tag)) {
-                    return true;
-                }
-                idx = (idx + 1) & (bucketSize - 1);
+            uint32_t startIdx = tag & (bucketSize - 1);
+            size_t startAtomicIdx = startIdx / Bucket::tagsPerAtomic;
+            size_t startTagIdx = startIdx & (Bucket::tagsPerAtomic - 1);
+
+            Bucket& bucket = d_buckets[bucketIdx];
+
+            for (size_t i = 0; i < Bucket::atomicCount; ++i) {
+                size_t atomicIdx = (startAtomicIdx + i) & (Bucket::atomicCount - 1);
+                auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+
+                bool retryWord;
+                do {
+                    retryWord = false;
+
+                    size_t jStart, jEnd;
+                    if (i == 0) {
+                        // First iteration: start at startTagIdx, go to end
+                        jStart = startTagIdx;
+                        jEnd = Bucket::tagsPerAtomic;
+                    } else if (atomicIdx == startAtomicIdx) {
+                        // Wrapped back to the starting atomic word: check from 0 to startTagIdx
+                        jStart = 0;
+                        jEnd = startTagIdx;
+                        if (jEnd == 0) {
+                            continue;
+                        }
+                    } else {
+                        // Other atomic words: check all tags
+                        jStart = 0;
+                        jEnd = Bucket::tagsPerAtomic;
+                    }
+
+                    for (size_t j = jStart; j < jEnd; ++j) {
+                        TagType currentTag = bucket.extractTag(expected, j);
+
+                        if (currentTag == tag) {
+                            auto desired = bucket.replaceTag(expected, j, EMPTY);
+
+                            if (bucket.packedTags[atomicIdx].compare_exchange_weak(
+                                    expected,
+                                    desired,
+                                    cuda::memory_order_relaxed,
+                                    cuda::memory_order_relaxed
+                                )) {
+                                return true;
+                            } else {
+                                retryWord = true;
+                                break;
+                            }
+                        }
+                    }
+                } while (retryWord);
             }
             return false;
         }
 
         __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
-            uint32_t idx = tag & (bucketSize - 1);
-            for (size_t i = 0; i < bucketSize; ++i) {
-                if (d_buckets[bucketIdx].tryInsertAt(idx, tag)) {
-                    return true;
-                }
-                idx = (idx + 1) & (bucketSize - 1);
+            Bucket& bucket = d_buckets[bucketIdx];
+            uint32_t startIdx = tag & (bucketSize - 1);
+            size_t startAtomicIdx = startIdx / Bucket::tagsPerAtomic;
+            size_t startTagIdx = startIdx & (Bucket::tagsPerAtomic - 1);
+
+            for (size_t i = 0; i < Bucket::atomicCount; ++i) {
+                size_t atomicIdx = (startAtomicIdx + i) & (Bucket::atomicCount - 1);
+                auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+
+                bool retryWord;
+                do {
+                    retryWord = false;
+
+                    size_t jStart, jEnd;
+                    if (i == 0) {
+                        // First iteration: start at startTagIdx, go to end
+                        jStart = startTagIdx;
+                        jEnd = Bucket::tagsPerAtomic;
+                    } else if (atomicIdx == startAtomicIdx) {
+                        // Wrapped back to the starting atomic word: check from 0 to startTagIdx
+                        jStart = 0;
+                        jEnd = startTagIdx;
+                        if (jEnd == 0) {
+                            continue;
+                        }
+                    } else {
+                        // Other atomic words: check all tags
+                        jStart = 0;
+                        jEnd = Bucket::tagsPerAtomic;
+                    }
+                    for (size_t j = jStart; j < jEnd; ++j) {
+                        if (bucket.extractTag(expected, j) == EMPTY) {
+                            auto desired = bucket.replaceTag(expected, j, tag);
+
+                            if (bucket.packedTags[atomicIdx].compare_exchange_weak(
+                                    expected,
+                                    desired,
+                                    cuda::memory_order_relaxed,
+                                    cuda::memory_order_relaxed
+                                )) {
+                                return true;
+                            } else {
+                                retryWord = true;
+                                break;
+                            }
+                        }
+                    }
+                } while (retryWord);
             }
             return false;
         }
@@ -657,9 +641,7 @@ class CuckooFilter {
                 size_t tagIdx = evictSlot & (Bucket::tagsPerAtomic - 1);
 
                 Bucket& bucket = d_buckets[currentBucket];
-                PackedAtomicSize expected = bucket.packedTags[atomicIdx].load(
-                    cuda::memory_order_relaxed
-                );
+                auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
                 PackedAtomicSize desired;
                 TagType evictedFp;
 
@@ -667,16 +649,12 @@ class CuckooFilter {
                     evictedFp = bucket.extractTag(expected, tagIdx);
                     desired = bucket.replaceTag(expected, tagIdx, currentFp);
                 } while (!bucket.packedTags[atomicIdx].compare_exchange_weak(
-                    expected,
-                    desired,
-                    cuda::memory_order_relaxed,
-                    cuda::memory_order_relaxed
+                    expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
                 ));
 
                 currentFp = evictedFp;
-                currentBucket = CuckooFilter::getAlternateBucket(
-                    currentBucket, evictedFp, numBuckets
-                );
+                currentBucket =
+                    CuckooFilter::getAlternateBucket(currentBucket, evictedFp, numBuckets);
             }
             return false;
         }
@@ -800,8 +778,8 @@ __global__ void computePackedTagsKernel(
     typename Config::KeyType key = keys[idx];
     auto [i1, i2, fp] = Filter::getCandidateBuckets(key, numBuckets);
 
-    packedTags[idx] = (static_cast<PackedTagType>(i1) << bitsPerTag) |
-                      static_cast<PackedTagType>(fp);
+    packedTags[idx] =
+        (static_cast<PackedTagType>(i1) << bitsPerTag) | static_cast<PackedTagType>(fp);
 }
 
 template <typename Config>
@@ -832,14 +810,12 @@ __global__ void insertKernelSorted(
         if (view.tryInsertAtBucket(primaryBucket, fp)) {
             success = 1;
         } else {
-            size_t secondaryBucket =
-                Filter::getAlternateBucket(primaryBucket, fp, view.numBuckets);
+            size_t secondaryBucket = Filter::getAlternateBucket(primaryBucket, fp, view.numBuckets);
 
             if (view.tryInsertAtBucket(secondaryBucket, fp)) {
                 success = 1;
             } else {
-                auto startBucket =
-                    (fp & 1) == 0 ? primaryBucket : secondaryBucket;
+                auto startBucket = (fp & 1) == 0 ? primaryBucket : secondaryBucket;
                 success = view.insertWithEviction(fp, startBucket);
             }
         }

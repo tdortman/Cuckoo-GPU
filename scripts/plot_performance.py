@@ -30,7 +30,7 @@ def main():
 
         base_name, size_str = name.rsplit("/", 1)
 
-        if "FalsePositiveRate" in base_name:
+        if "FalsePositiveRate" in base_name or "InsertQueryDelete" in base_name:
             continue
 
         try:
