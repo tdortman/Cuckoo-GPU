@@ -197,17 +197,17 @@ class CuckooFilter {
                     // First iteration: start at startTagIdx, go to end
                     jStart = startTagIdx;
                     jEnd = tagsPerAtomic;
-                } else if (atomicIdx == startAtomicIdx) {
+                } else if (atomicIdx != startAtomicIdx) {
+                    // Other atomic words: check all tags
+                    jStart = 0;
+                    jEnd = tagsPerAtomic;
+                } else {
                     // Wrapped back to the starting atomic word: check from 0 to startTagIdx
                     jStart = 0;
                     jEnd = startTagIdx;
                     if (jEnd == 0) {
                         continue;
                     }
-                } else {
-                    // Other atomic words: check all tags
-                    jStart = 0;
-                    jEnd = tagsPerAtomic;
                 }
 
                 for (size_t j = jStart; j < jEnd; ++j) {
@@ -536,17 +536,17 @@ class CuckooFilter {
                         // First iteration: start at startTagIdx, go to end
                         jStart = startTagIdx;
                         jEnd = Bucket::tagsPerAtomic;
-                    } else if (atomicIdx == startAtomicIdx) {
+                    } else if (atomicIdx != startAtomicIdx) {
+                        // Other atomic words: check all tags
+                        jStart = 0;
+                        jEnd = Bucket::tagsPerAtomic;
+                    } else {
                         // Wrapped back to the starting atomic word: check from 0 to startTagIdx
                         jStart = 0;
                         jEnd = startTagIdx;
                         if (jEnd == 0) {
                             continue;
                         }
-                    } else {
-                        // Other atomic words: check all tags
-                        jStart = 0;
-                        jEnd = Bucket::tagsPerAtomic;
                     }
 
                     for (size_t j = jStart; j < jEnd; ++j) {
@@ -592,18 +592,19 @@ class CuckooFilter {
                         // First iteration: start at startTagIdx, go to end
                         jStart = startTagIdx;
                         jEnd = Bucket::tagsPerAtomic;
-                    } else if (atomicIdx == startAtomicIdx) {
+                    } else if (atomicIdx != startAtomicIdx) {
+                        // Other atomic words: check all tags
+                        jStart = 0;
+                        jEnd = Bucket::tagsPerAtomic;
+                    } else {
                         // Wrapped back to the starting atomic word: check from 0 to startTagIdx
                         jStart = 0;
                         jEnd = startTagIdx;
                         if (jEnd == 0) {
                             continue;
                         }
-                    } else {
-                        // Other atomic words: check all tags
-                        jStart = 0;
-                        jEnd = Bucket::tagsPerAtomic;
                     }
+
                     for (size_t j = jStart; j < jEnd; ++j) {
                         if (bucket.extractTag(expected, j) == EMPTY) {
                             auto desired = bucket.replaceTag(expected, j, tag);
