@@ -52,7 +52,6 @@ def main():
 
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    # Sort benchmarks by average throughput for legend ordering
     def get_avg_throughput(bench_name):
         values = list(throughput_data[bench_name].values())
         return sum(values) / len(values) if values else 0

@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
         }
     );
 
-    using Config = CuckooConfig<uint64_t, 16, 500, 256, 128>;
+    using Config = CuckooConfig<uint64_t, 16, 500, 256, 64>;
     auto filter = CuckooFilter<Config>(n);
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -93,11 +93,11 @@ int main(int argc, char** argv) {
     size_t falsePositives = countOnes(reinterpret_cast<bool*>(fprOutput.data()), fprTestSize);
 
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
-    double theoreticalFPR = 1.0 / (1ULL << Config::bitsPerTag);
+    double theoreticalFPR = static_cast<double>(2 * filter.bucketSize) / (1 << Config::bitsPerTag);
 
     std::cout << "False Positive Rate: " << falsePositives << " / " << fprTestSize << " = " << fpr
               << "% (theoretical " << 100 * theoreticalFPR << "% for " << Config::bitsPerTag
-              << "-bit tags)" << std::endl;
+              << "-bit tags and " << filter.bucketSize << " tags per buckets)" << std::endl;
 
     size_t deleteCount = n / 2;
     thrust::device_vector<uint64_t> d_deleteKeys(
