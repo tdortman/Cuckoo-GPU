@@ -60,7 +60,7 @@ static void BM_CuckooFilter_Insert(bm::State& state) {
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 template <size_t bucketSize>
@@ -92,7 +92,7 @@ static void BM_CuckooFilter_Query(bm::State& state) {
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 template <size_t bucketSize>
@@ -128,7 +128,7 @@ static void BM_CuckooFilter_Delete(bm::State& state) {
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 template <size_t bucketSize>
@@ -166,7 +166,7 @@ static void BM_CuckooFilter_InsertAndQuery(bm::State& state) {
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 template <size_t bucketSize>
@@ -206,7 +206,7 @@ static void BM_CuckooFilter_InsertQueryDelete(bm::State& state) {
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 template <size_t bucketSize>
@@ -261,7 +261,7 @@ static void BM_CuckooFilter_FalsePositiveRate(bm::State& state) {
     state.counters["memory_bytes"] = bm::Counter(
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
-    state.counters["bucket_size"] = bm::Counter(static_cast<double>(bucketSize));
+    state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
 BENCHMARK(BM_CuckooFilter_Insert<4>)

@@ -64,7 +64,7 @@ def main():
     ax.set_xlabel("Input Size", fontsize=12)
     ax.set_ylabel("Runtime (ms)", fontsize=12)
     ax.set_xscale("log", base=2)
-    ax.set_yscale("log")
+    # ax.set_yscale("log")
     ax.legend(fontsize=10, loc="best")
     ax.grid(True, which="both", ls="--", alpha=0.5)
 

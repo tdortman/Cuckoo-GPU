@@ -66,7 +66,7 @@ def main():
         ax.plot(sizes, throughput, "o-", label=bench_name, linewidth=2, markersize=6)
 
     ax.set_xlabel("Input Size", fontsize=12)
-    ax.set_ylabel("Throughput (Million ops/sec)", fontsize=12)
+    ax.set_ylabel("Throughput (MOPS)", fontsize=12)
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
     ax.legend(fontsize=10, loc="best", ncol=2)
