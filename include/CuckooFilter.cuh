@@ -170,52 +170,39 @@ class CuckooFilter {
             return cleared | (static_cast<uint64_t>(newTag) << shift);
         }
 
-        __forceinline__ __device__ int32_t findSlot(TagType tag, TagType target) {
-            uint32_t startIdx = tag & (bucketSize - 1);
-            size_t startAtomicIdx = startIdx / tagsPerAtomic;
-            size_t startTagIdx = startIdx & (tagsPerAtomic - 1);
+        __forceinline__ __device__ int32_t findSlot(TagType tag) {
+            const uint32_t startSlot = tag & (bucketSize - 1);
+            const size_t startAtomicIdx = startSlot / tagsPerAtomic;
+            const size_t startTagIdx = startSlot & (tagsPerAtomic - 1);
 
-            for (size_t i = 0; i < atomicCount; i += 2) {
-                size_t baseIdx = (startAtomicIdx + i) & (atomicCount - 1);
+            // round down to the nearest even number.
+            const size_t startPairIdx = startAtomicIdx & ~1;
 
-                // use vectorised load if properly aligned and size permits
-                uint64_t loaded[2];
-                if (baseIdx % 2 == 0 && baseIdx + 2 <= atomicCount) {
-                    auto vec = __ldg(reinterpret_cast<const ulonglong2*>(&packedTags[baseIdx]));
-                    loaded[0] = vec.x;
-                    loaded[1] = vec.y;
-                } else {
-                    for (size_t k = 0; k < 2; ++k) {
-                        size_t idx = (baseIdx + k) & (atomicCount - 1);
-                        loaded[k] = __ldg(reinterpret_cast<const uint64_t*>(&packedTags[idx]));
-                    }
-                }
+            for (size_t i = 0; i < atomicCount / 2; i++) {
+                const size_t pairIdx = (startPairIdx + i * 2) & (atomicCount - 1);
 
+                const auto vec = __ldg(reinterpret_cast<const ulonglong2*>(&packedTags[pairIdx]));
+                const uint64_t loaded[2] = {vec.x, vec.y};
+
+                _Pragma("unroll")
                 for (size_t k = 0; k < 2; ++k) {
-                    size_t atomicIdx = (baseIdx + k) & (atomicCount - 1);
-                    auto packed = loaded[k];
+                    const size_t currentAtomicIdx = pairIdx + k;
+                    const auto packed = loaded[k];
 
-                    size_t jStart, jEnd;
-                    if (i + k == 0) {
-                        // First iteration: start at startTagIdx, go to end
-                        jStart = startTagIdx;
-                        jEnd = tagsPerAtomic;
-                    } else if (atomicIdx != startAtomicIdx) {
-                        // Other atomic words: check all tags
-                        jStart = 0;
-                        jEnd = tagsPerAtomic;
-                    } else {
-                        // Wrapped back to the starting atomic word: check from 0 to startTagIdx
-                        jStart = 0;
-                        jEnd = startTagIdx;
-                        if (jEnd == 0) {
-                            continue;
+                    size_t jStart = 0;
+                    size_t jEnd = tagsPerAtomic;
+
+                    if (currentAtomicIdx == startAtomicIdx) {
+                        if (i == 0) {
+                            jStart = startTagIdx;
+                        } else {
+                            jEnd = startTagIdx;
                         }
                     }
 
                     for (size_t j = jStart; j < jEnd; ++j) {
-                        if (extractTag(packed, j) == target) {
-                            return static_cast<int32_t>(atomicIdx * tagsPerAtomic + j);
+                        if (extractTag(packed, j) == tag) {
+                            return static_cast<int32_t>(currentAtomicIdx * tagsPerAtomic + j);
                         }
                     }
                 }
@@ -225,7 +212,7 @@ class CuckooFilter {
         }
 
         __device__ bool contains(TagType tag) {
-            return findSlot(tag, tag) != -1;
+            return findSlot(tag) != -1;
         }
     };
 
@@ -523,7 +510,7 @@ class CuckooFilter {
         __device__ bool tryRemoveAtBucket(size_t bucketIdx, TagType tag) {
             Bucket& bucket = d_buckets[bucketIdx];
 
-            int32_t slot = bucket.findSlot(tag, tag);
+            int32_t slot = bucket.findSlot(tag);
             if (slot == -1) {
                 return false;
             }
@@ -553,33 +540,26 @@ class CuckooFilter {
 
         __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
             Bucket& bucket = d_buckets[bucketIdx];
-            uint32_t startIdx = tag & (bucketSize - 1);
-            size_t startAtomicIdx = startIdx / Bucket::tagsPerAtomic;
-            size_t startTagIdx = startIdx & (Bucket::tagsPerAtomic - 1);
+            const uint32_t startIdx = tag & (bucketSize - 1);
+            const size_t startAtomicIdx = startIdx / Bucket::tagsPerAtomic;
+            const size_t startTagIdx = startIdx & (Bucket::tagsPerAtomic - 1);
 
             for (size_t i = 0; i < Bucket::atomicCount; ++i) {
-                size_t atomicIdx = (startAtomicIdx + i) & (Bucket::atomicCount - 1);
+                const size_t atomicIdx = (startAtomicIdx + i) & (Bucket::atomicCount - 1);
                 auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
 
                 bool retryWord;
                 do {
                     retryWord = false;
 
-                    size_t jStart, jEnd;
-                    if (i == 0) {
-                        // First iteration: start at startTagIdx, go to end
-                        jStart = startTagIdx;
-                        jEnd = Bucket::tagsPerAtomic;
-                    } else if (atomicIdx != startAtomicIdx) {
-                        // Other atomic words: check all tags
-                        jStart = 0;
-                        jEnd = Bucket::tagsPerAtomic;
-                    } else {
-                        // Wrapped back to the starting atomic word: check from 0 to startTagIdx
-                        jStart = 0;
-                        jEnd = startTagIdx;
-                        if (jEnd == 0) {
-                            continue;
+                    size_t jStart = 0;
+                    size_t jEnd = Bucket::tagsPerAtomic;
+
+                    if (atomicIdx == startAtomicIdx) {
+                        if (i == 0) {
+                            jStart = startTagIdx;
+                        } else {
+                            jEnd = startTagIdx;
                         }
                     }
 
@@ -697,7 +677,7 @@ class CuckooFilter {
 
             auto startBucket = (fp & 1) == 0 ? i1 : i2;
 
-            return insertWithEvictionBFS(fp, startBucket);
+            return insertWithEviction(fp, startBucket);
         }
 
         // FIXME: Somehow this isn't guaranteed to find all existing keys?
