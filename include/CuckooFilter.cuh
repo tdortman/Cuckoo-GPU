@@ -148,17 +148,17 @@ class CuckooFilter {
 
     struct Bucket {
         static_assert(powerOfTwo(bitsPerTag), "bitsPerTag must be a power of 2");
-        static constexpr size_t tagsPerAtomic = sizeof(uint64_t) / sizeof(TagType);
+        static constexpr size_t tagsPerWord = sizeof(uint64_t) / sizeof(TagType);
         static_assert(
-            bucketSize % tagsPerAtomic == 0,
+            bucketSize % tagsPerWord == 0,
             "bucketSize must be divisible by tagsPerAtomic"
         );
-        static_assert(powerOfTwo(tagsPerAtomic), "tagsPerAtomic must be a power of 2");
+        static_assert(powerOfTwo(tagsPerWord), "tagsPerAtomic must be a power of 2");
 
-        static constexpr size_t atomicCount = bucketSize / tagsPerAtomic;
-        static_assert(powerOfTwo(atomicCount), "atomicCount must be a power of 2");
+        static constexpr size_t wordCount = bucketSize / tagsPerWord;
+        static_assert(powerOfTwo(wordCount), "atomicCount must be a power of 2");
 
-        cuda::std::atomic<uint64_t> packedTags[atomicCount];
+        cuda::std::atomic<uint64_t> packedTags[wordCount];
 
         __host__ __device__ TagType extractTag(uint64_t packed, size_t tagIdx) const {
             return static_cast<TagType>((packed >> (tagIdx * bitsPerTag)) & fpMask);
@@ -173,14 +173,14 @@ class CuckooFilter {
 
         __forceinline__ __device__ int32_t findSlot(TagType tag) {
             const uint32_t startSlot = tag & (bucketSize - 1);
-            const size_t startAtomicIdx = startSlot / tagsPerAtomic;
+            const size_t startAtomicIdx = startSlot / tagsPerWord;
 
-            if constexpr (atomicCount >= 2) {
+            if constexpr (wordCount >= 2) {
                 // round down to the nearest even number
                 const size_t startPairIdx = startAtomicIdx & ~1;
 
-                for (size_t i = 0; i < atomicCount / 2; i++) {
-                    const size_t pairIdx = (startPairIdx + i * 2) & (atomicCount - 1);
+                for (size_t i = 0; i < wordCount / 2; i++) {
+                    const size_t pairIdx = (startPairIdx + i * 2) & (wordCount - 1);
 
                     const auto vec =
                         __ldg(reinterpret_cast<const ulonglong2*>(&packedTags[pairIdx]));
@@ -191,17 +191,17 @@ class CuckooFilter {
                         const size_t currentAtomicIdx = pairIdx + k;
                         const auto packed = loaded[k];
 
-                        for (size_t j = 0; j < tagsPerAtomic; ++j) {
+                        for (size_t j = 0; j < tagsPerWord; ++j) {
                             if (extractTag(packed, j) == tag) {
-                                return static_cast<int32_t>(currentAtomicIdx * tagsPerAtomic + j);
+                                return static_cast<int32_t>(currentAtomicIdx * tagsPerWord + j);
                             }
                         }
                     }
                 }
             } else {
                 // just check the single atomic
-                const auto packed = packedTags[0].load(cuda::memory_order_relaxed);
-                for (size_t j = 0; j < tagsPerAtomic; ++j) {
+                const auto packed = reinterpret_cast<const uint64_t&>(packedTags[0]);
+                for (size_t j = 0; j < tagsPerWord; ++j) {
                     if (extractTag(packed, j) == tag) {
                         return static_cast<int32_t>(j);
                     }
@@ -518,10 +518,10 @@ class CuckooFilter {
         for (size_t bucketIdx = 0; bucketIdx < numBuckets; ++bucketIdx) {
             const Bucket& bucket = h_buckets[bucketIdx];
 
-            for (size_t atomicIdx = 0; atomicIdx < Bucket::atomicCount; ++atomicIdx) {
+            for (size_t atomicIdx = 0; atomicIdx < Bucket::wordCount; ++atomicIdx) {
                 uint64_t packed = reinterpret_cast<const uint64_t&>(bucket.packedTags[atomicIdx]);
 
-                for (size_t tagIdx = 0; tagIdx < Bucket::tagsPerAtomic; ++tagIdx) {
+                for (size_t tagIdx = 0; tagIdx < Bucket::tagsPerWord; ++tagIdx) {
                     auto tag = bucket.extractTag(packed, tagIdx);
 
                     if (tag != EMPTY) {
@@ -547,8 +547,8 @@ class CuckooFilter {
                 return false;
             }
 
-            size_t atomicIdx = slot / Bucket::tagsPerAtomic;
-            size_t tagIdx = slot & (Bucket::tagsPerAtomic - 1);
+            size_t atomicIdx = slot / Bucket::tagsPerWord;
+            size_t tagIdx = slot & (Bucket::tagsPerWord - 1);
 
             auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
 
@@ -573,17 +573,17 @@ class CuckooFilter {
         __device__ bool tryInsertAtBucket(size_t bucketIdx, TagType tag) {
             Bucket& bucket = d_buckets[bucketIdx];
             const uint32_t startIdx = tag & (bucketSize - 1);
-            const size_t startAtomicIdx = startIdx / Bucket::tagsPerAtomic;
+            const size_t startAtomicIdx = startIdx / Bucket::tagsPerWord;
 
-            for (size_t i = 0; i < Bucket::atomicCount; ++i) {
-                const size_t atomicIdx = (startAtomicIdx + i) & (Bucket::atomicCount - 1);
+            for (size_t i = 0; i < Bucket::wordCount; ++i) {
+                const size_t atomicIdx = (startAtomicIdx + i) & (Bucket::wordCount - 1);
                 auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
 
                 bool retryWord;
                 do {
                     retryWord = false;
 
-                    for (size_t j = 0; j < Bucket::tagsPerAtomic; ++j) {
+                    for (size_t j = 0; j < Bucket::tagsPerWord; ++j) {
                         if (bucket.extractTag(expected, j) == EMPTY) {
                             auto desired = bucket.replaceTag(expected, j, tag);
 
@@ -612,8 +612,8 @@ class CuckooFilter {
             for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
                 auto evictSlot = (currentFp + evictions * 7) & (bucketSize - 1);
 
-                size_t atomicIdx = evictSlot / Bucket::tagsPerAtomic;
-                size_t tagIdx = evictSlot & (Bucket::tagsPerAtomic - 1);
+                size_t atomicIdx = evictSlot / Bucket::tagsPerWord;
+                size_t tagIdx = evictSlot & (Bucket::tagsPerWord - 1);
 
                 Bucket& bucket = d_buckets[currentBucket];
                 auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
@@ -644,8 +644,8 @@ class CuckooFilter {
 
             for (size_t i = 0; i < numCandidates; ++i) {
                 size_t slot = (fp + i * 7) & (bucketSize - 1);
-                size_t atomicIdx = slot / Bucket::tagsPerAtomic;
-                size_t tagIdx = slot & (Bucket::tagsPerAtomic - 1);
+                size_t atomicIdx = slot / Bucket::tagsPerWord;
+                size_t tagIdx = slot & (Bucket::tagsPerWord - 1);
 
                 auto packed = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
                 TagType candidateFp = bucket.extractTag(packed, tagIdx);
@@ -657,8 +657,7 @@ class CuckooFilter {
                     continue;
                 }
 
-                size_t altBucket =
-                    CuckooFilter::getAlternateBucket(startBucket, candidateFp, numBuckets);
+                size_t altBucket = getAlternateBucket(startBucket, candidateFp, numBuckets);
                 if (tryInsertAtBucket(altBucket, candidateFp)) {
                     // Successfully inserted the evicted tag at its alternate location
                     // Now atomically swap in our tag at the original location
