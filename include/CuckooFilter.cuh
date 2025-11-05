@@ -376,11 +376,7 @@ class CuckooFilter {
         CUDA_CALL(cudaFree(d_keys));
         CUDA_CALL(cudaFree(d_packedTags));
 
-        CUDA_CALL(
-            cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
-        );
-
-        return h_numOccupied;
+        return occupiedSlots();
     }
 
     void containsMany(const T* d_keys, const size_t n, bool* d_output) {
