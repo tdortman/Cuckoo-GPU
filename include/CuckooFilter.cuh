@@ -335,18 +335,14 @@ class CuckooFilter {
      * @brief This pre-sorts the input keys based on the primary bucket index to allow for coalesced
      * memory access when you later insert them into the filter.
      *
-     * @param keys Pointer to the array of keys to insert
+     * @param d_keys Pointer to device memory array of keys to insert
      * @param n Number of keys to insert
      * @return size_t Updated number of occupied slots in the filter
      */
-    size_t insertManySorted(const T* keys, const size_t n) {
-        T* d_keys;
+    size_t insertManySorted(const T* d_keys, const size_t n) {
         PackedTagType* d_packedTags;
 
-        CUDA_CALL(cudaMalloc(&d_keys, n * sizeof(T)));
         CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
-
-        CUDA_CALL(cudaMemcpy(d_keys, keys, n * sizeof(T), cudaMemcpyHostToDevice));
 
         size_t numBlocks = SDIV(n, blockSize);
 
@@ -373,7 +369,6 @@ class CuckooFilter {
 
         CUDA_CALL(cudaDeviceSynchronize());
 
-        CUDA_CALL(cudaFree(d_keys));
         CUDA_CALL(cudaFree(d_packedTags));
 
         return occupiedSlots();
