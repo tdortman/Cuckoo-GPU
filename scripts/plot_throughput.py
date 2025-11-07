@@ -28,7 +28,7 @@ def main():
 
         base_name, size_str = name.rsplit("/", 1)
         suffix = base_name.rsplit("_", 1)[-1]
-        if not re.fullmatch(r"(?:Query|Insert)(<\d+>)?", suffix):
+        if not re.fullmatch(r"(?:Query|Insert)(?:AddSub)?(<\d+>)?", suffix):
             continue
 
         try:
@@ -68,7 +68,7 @@ def main():
     ax.set_xlabel("Input Size", fontsize=12)
     ax.set_ylabel("Throughput (MOPS)", fontsize=12)
     ax.set_xscale("log", base=2)
-    ax.set_yscale("log")
+    # ax.set_yscale("log")
     ax.legend(fontsize=10, loc="best", ncol=2)
     ax.grid(True, which="both", ls="--", alpha=0.5)
     ax.set_title("Throughput Comparison", fontsize=14)

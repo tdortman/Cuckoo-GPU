@@ -9,6 +9,7 @@
 #include <cuda/std/cstdint>
 #include <iostream>
 #include <vector>
+#include "hash_strategies.cuh"
 #include "hashutil.cuh"
 #include "helpers.cuh"
 
@@ -22,13 +23,21 @@ template <
     size_t bitsPerTag_,
     size_t maxEvictions_,
     size_t blockSize_,
-    size_t bucketSize_>
+    size_t bucketSize_,
+    template <typename, typename, size_t, size_t> class HashStrategy_ = XorHashStrategy>
 struct CuckooConfig {
     using KeyType = T;
     static constexpr size_t bitsPerTag = bitsPerTag_;
     static constexpr size_t maxEvictions = maxEvictions_;
     static constexpr size_t blockSize = blockSize_;
     static constexpr size_t bucketSize = bucketSize_;
+
+    using TagType = typename std::conditional<
+        bitsPerTag <= 8,
+        uint8_t,
+        typename std::conditional<bitsPerTag <= 16, uint16_t, uint32_t>::type>::type;
+
+    using HashStrategy = HashStrategy_<KeyType, TagType, bitsPerTag, bucketSize_>;
 };
 
 template <typename Config>
@@ -79,10 +88,8 @@ class CuckooFilter {
     using T = typename Config::KeyType;
     static constexpr size_t bitsPerTag = Config::bitsPerTag;
 
-    using TagType = typename std::conditional<
-        bitsPerTag <= 8,
-        uint8_t,
-        typename std::conditional<bitsPerTag <= 16, uint16_t, uint32_t>::type>::type;
+    using TagType = typename Config::TagType;
+    using HashStrategy = typename Config::HashStrategy;
 
     static constexpr size_t tagEntryBytes = sizeof(TagType);
     static constexpr size_t bucketSize = Config::bucketSize;
@@ -252,42 +259,17 @@ class CuckooFilter {
    public:
     template <typename H>
     static __host__ __device__ uint64_t hash64(const H& key) {
-        return xxhash::xxhash64(key);
+        return HashStrategy::hash64(key);
     }
 
-    /**
-     * @brief Performs partial-key cuckoo hashing to find the fingerprint and both
-     * bucket indices for a given key.
-     *
-     * We derive the fingerprint and bucket indices from different parts of the key's
-     * hash to greatly reduce the number of collisions. The fingerprint value 0 is reserved to
-     * indicate an empty slot, so we use 1 if the computed fingerprint is 0.
-     *
-     * @param key Key to hash
-     * @param numBuckets Number of buckets in the filter
-     * @return A tuple of (bucket1, bucket2, fingerprint)
-     */
     static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
     getCandidateBuckets(const T& key, size_t numBuckets) {
-        const uint64_t h = hash64(key);
-
-        // Upper 32 bits for the fingerprint
-        const uint32_t h_fp = h >> 32;
-        const uint32_t masked = h_fp & fpMask;
-
-        const auto fp = TagType(masked == 0 ? 1 : masked);
-
-        // Lower 32 bits for the bucket indices
-        const uint32_t h_bucket = h & 0xFFFFFFFF;
-        const size_t i1 = h_bucket & (numBuckets - 1);
-        const size_t i2 = getAlternateBucket(i1, fp, numBuckets);
-
-        return {i1, i2, fp};
+        return HashStrategy::getCandidateBuckets(key, numBuckets);
     }
 
     static __host__ __device__ size_t
     getAlternateBucket(size_t bucket, TagType fp, size_t numBuckets) {
-        return bucket ^ (hash64(fp) & (numBuckets - 1));
+        return HashStrategy::getAlternateBucket(bucket, fp, numBuckets);
     }
 
     /**
@@ -295,9 +277,7 @@ class CuckooFilter {
      * modulo on the bucket indices
      */
     static size_t calculateNumBuckets(size_t capacity) {
-        auto requiredBuckets = std::ceil(static_cast<double>(capacity) / bucketSize);
-
-        return nextPowerOfTwo(requiredBuckets);
+        return HashStrategy::calculateNumBuckets(capacity);
     }
 
    public:
@@ -307,8 +287,6 @@ class CuckooFilter {
     explicit CuckooFilter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
         CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
         CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
-
-        assert(powerOfTwo(numBuckets) && "Number of buckets must be a power of 2");
 
         clear();
     }

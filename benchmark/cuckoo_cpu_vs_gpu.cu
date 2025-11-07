@@ -3,38 +3,17 @@
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/iterator/counting_iterator.h>
-#include <thrust/random.h>
-#include <thrust/transform.h>
 #include <cstdint>
 #include <CuckooFilter.cuh>
 #include <helpers.cuh>
 #include <random>
+#include "benchmark_common.cuh"
 
 namespace bm = benchmark;
 
 constexpr double TARGET_LOAD_FACTOR = 0.95;
 using GPUConfig = CuckooConfig<uint32_t, 16, 500, 128, 16>;
 constexpr size_t CPU_BITS_PER_ITEM = GPUConfig::bitsPerTag;
-
-template <typename T>
-void generateKeysGPU(
-    thrust::device_vector<T>& d_keys,
-    T max = std::numeric_limits<T>::max()
-) {
-    size_t n = d_keys.size();
-    thrust::transform(
-        thrust::counting_iterator<size_t>(0),
-        thrust::counting_iterator<size_t>(n),
-        d_keys.begin(),
-        [max] __device__(size_t idx) {
-            thrust::default_random_engine rng(42);
-            thrust::uniform_int_distribution<T> dist(1, max);
-            rng.discard(idx);
-            return dist(rng);
-        }
-    );
-}
 
 template <typename T>
 std::vector<T>
@@ -47,14 +26,13 @@ generateKeysCPU(size_t n, unsigned seed = 42, T min = 1, T max = std::numeric_li
 }
 
 static void BM_GPU_CuckooFilter_Insert(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
     generateKeysGPU(d_keys);
-    CuckooFilter<GPUConfig> filter(n);
+    CuckooFilter<GPUConfig> filter(capacity);
 
     size_t filterMemory = filter.sizeInBytes();
-    size_t capacity = filter.capacity();
 
     for (auto _ : state) {
         state.PauseTiming();
@@ -108,15 +86,14 @@ static void BM_GPU_CuckooFilter_Query(bm::State& state) {
 }
 
 static void BM_GPU_CuckooFilter_Delete(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
     generateKeysGPU(d_keys);
-    CuckooFilter<GPUConfig> filter(n);
+    CuckooFilter<GPUConfig> filter(capacity);
     thrust::device_vector<uint8_t> d_output(n);
 
     size_t filterMemory = filter.sizeInBytes();
-    size_t capacity = filter.capacity();
 
     for (auto _ : state) {
         state.PauseTiming();
@@ -142,15 +119,14 @@ static void BM_GPU_CuckooFilter_Delete(bm::State& state) {
 }
 
 static void BM_GPU_CuckooFilter_InsertQueryDelete(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
     generateKeysGPU(d_keys);
     thrust::device_vector<uint8_t> d_output(n);
-    CuckooFilter<GPUConfig> filter(n);
+    CuckooFilter<GPUConfig> filter(capacity);
 
     size_t filterMemory = filter.sizeInBytes();
-    size_t capacity = filter.capacity();
 
     for (auto _ : state) {
         state.PauseTiming();
@@ -180,17 +156,17 @@ static void BM_GPU_CuckooFilter_InsertQueryDelete(bm::State& state) {
 }
 
 static void BM_CPU_CuckooFilter_Insert(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint32_t>(n);
-    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(n);
+    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(capacity);
 
     size_t filterMemory = filter.SizeInBytes();
-    size_t capacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
+    size_t actualCapacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
 
     for (auto _ : state) {
         state.PauseTiming();
-        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(n);
+        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
         state.ResumeTiming();
 
         size_t inserted = 0;
@@ -207,24 +183,24 @@ static void BM_CPU_CuckooFilter_Insert(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
     state.counters["bytes_per_item"] = bm::Counter(
-        static_cast<double>(filterMemory) / static_cast<double>(capacity),
+        static_cast<double>(filterMemory) / static_cast<double>(actualCapacity),
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
 }
 
 static void BM_CPU_CuckooFilter_Query(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint32_t>(n);
-    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(n);
+    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(capacity);
 
     for (const auto& key : keys) {
         filter.Add(key);
     }
 
     size_t filterMemory = filter.SizeInBytes();
-    size_t capacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
+    size_t actualCapacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
 
     for (auto _ : state) {
         size_t found = 0;
@@ -241,24 +217,24 @@ static void BM_CPU_CuckooFilter_Query(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
     state.counters["bytes_per_item"] = bm::Counter(
-        static_cast<double>(filterMemory) / static_cast<double>(capacity),
+        static_cast<double>(filterMemory) / static_cast<double>(actualCapacity),
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
 }
 
 static void BM_CPU_CuckooFilter_Delete(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint32_t>(n);
-    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(n);
+    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(capacity);
 
     size_t filterMemory = filter.SizeInBytes();
-    size_t capacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
+    size_t actualCapacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
 
     for (auto _ : state) {
         state.PauseTiming();
-        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(n);
+        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
         for (const auto& key : keys) {
             tempFilter.Add(key);
         }
@@ -278,24 +254,24 @@ static void BM_CPU_CuckooFilter_Delete(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
     state.counters["bytes_per_item"] = bm::Counter(
-        static_cast<double>(filterMemory) / static_cast<double>(capacity),
+        static_cast<double>(filterMemory) / static_cast<double>(actualCapacity),
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
 }
 
 static void BM_CPU_CuckooFilter_InsertQueryDelete(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint32_t>(n);
-    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(n);
+    cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> filter(capacity);
 
     size_t filterMemory = filter.SizeInBytes();
-    size_t capacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
+    size_t actualCapacity = filterMemory / (CPU_BITS_PER_ITEM / 8);
 
     for (auto _ : state) {
         state.PauseTiming();
-        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(n);
+        cuckoofilter::CuckooFilter<uint32_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
         state.ResumeTiming();
 
         size_t inserted = 0;
@@ -329,21 +305,21 @@ static void BM_CPU_CuckooFilter_InsertQueryDelete(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
     state.counters["bytes_per_item"] = bm::Counter(
-        static_cast<double>(filterMemory) / static_cast<double>(capacity),
+        static_cast<double>(filterMemory) / static_cast<double>(actualCapacity),
         bm::Counter::kDefaults,
         bm::Counter::kIs1024
     );
 }
 
 static void BM_GPU_CuckooFilter_FalsePositiveRate(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
-
     using FPRConfig = CuckooConfig<uint64_t, 16, 500, 128, 4>;
+
+    auto [capacity, n] = calculateCapacityAndSize<FPRConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU<uint64_t>(d_keys, UINT32_MAX);
 
-    CuckooFilter<FPRConfig> filter(n);
+    CuckooFilter<FPRConfig> filter(capacity);
     filter.insertMany(d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
@@ -390,10 +366,10 @@ static void BM_GPU_CuckooFilter_FalsePositiveRate(bm::State& state) {
 }
 
 static void BM_CPU_CuckooFilter_FalsePositiveRate(bm::State& state) {
-    const size_t n = state.range(0) * TARGET_LOAD_FACTOR;
+    auto [capacity, n] = calculateCapacityAndSize<GPUConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint64_t>(n, 1, UINT32_MAX);
-    cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> filter(n);
+    cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> filter(capacity);
     for (const auto& k : keys) {
         filter.Add(k);
     }

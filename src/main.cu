@@ -9,6 +9,7 @@
 #include <CuckooFilter.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
+#include <hash_strategies.cuh>
 #include <helpers.cuh>
 #include <iostream>
 #include <random>
@@ -30,7 +31,12 @@ int main(int argc, char** argv) {
 
     CLI11_PARSE(app, argc, argv);
 
-    size_t n = (UINT64_C(1) << exponent) * target_load_factor;
+    using Config = CuckooConfig<uint64_t, 16, 500, 256, 16, AddSubHashStrategy>;
+
+    size_t capacity = 1ULL << exponent;
+    size_t n = capacity * target_load_factor;
+
+    std::cout << "Using " << Config::HashStrategy::name << " as the hash strategy" << std::endl;
 
     thrust::device_vector<uint64_t> d_input(n);
     thrust::device_vector<uint8_t> d_output(n);
@@ -48,8 +54,7 @@ int main(int argc, char** argv) {
         }
     );
 
-    using Config = CuckooConfig<uint64_t, 16, 500, 256, 16>;
-    auto filter = CuckooFilter<Config>(n);
+    auto filter = CuckooFilter<Config>(capacity);
 
     auto start = std::chrono::high_resolution_clock::now();
     size_t count = filter.insertMany(d_input);
