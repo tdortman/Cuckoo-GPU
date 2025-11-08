@@ -24,7 +24,7 @@ enum class RequestType {
 struct FilterRequest {
     RequestType type;
     uint32_t count;                   // Number of keys in this batch
-    cudaIpcMemHandle_t keysHandle;    // handle to device memory containing keys
+    cudaIpcMemHandle_t keysHandle;    // optional handle to device memory containing keys
     cudaIpcMemHandle_t outputHandle;  // optional handle for results (for lookup/deletion)
     uint64_t requestId;               // Unique request identifier
     std::atomic<bool> completed;      // Completion flag
@@ -145,36 +145,34 @@ class CuckooFilterIPCServer {
                 break;
             }
 
-            FilterRequest* reqPtr = queue->dequeue();
+            FilterRequest* req = queue->dequeue();
 
             // check if we should continue
-            if (!reqPtr) {
+            if (!req) {
                 if (errno == EINTR) {
                     continue;
                 }
                 break;
             }
 
-            FilterRequest& req = *reqPtr;
-
-            if (req.type == RequestType::SHUTDOWN) {
+            if (req->type == RequestType::SHUTDOWN) {
                 shutdownReceived = true;
-                req.completed.store(true, std::memory_order_release);
+                req->completed.store(true, std::memory_order_release);
                 queue->signalDequeued();
                 continue;
             }
 
-            if (req.type == RequestType::CLEAR) {
+            if (req->type == RequestType::CLEAR) {
                 filter->clear();
-                req.result = 0;
-                req.completed.store(true, std::memory_order_release);
+                req->result = 0;
+                req->completed.store(true, std::memory_order_release);
                 queue->signalDequeued();
                 continue;
             }
 
             // Skip cancelled requests (from force shutdown)
-            if (req.cancelled.load(std::memory_order_acquire)) {
-                req.completed.store(true, std::memory_order_release);
+            if (req->cancelled.load(std::memory_order_acquire)) {
+                req->completed.store(true, std::memory_order_release);
                 queue->signalDequeued();
                 continue;
             }
@@ -183,59 +181,59 @@ class CuckooFilterIPCServer {
                 processRequest(req);
             } catch (const std::exception& e) {
                 std::cerr << "Error processing request: " << e.what() << std::endl;
-                req.result = 0;
+                req->result = 0;
             }
 
-            req.completed.store(true, std::memory_order_release);
+            req->completed.store(true, std::memory_order_release);
 
             queue->signalDequeued();
         }
     }
 
-    void processRequest(FilterRequest& req) {
+    void processRequest(FilterRequest* req) {
         using T = typename Config::KeyType;
 
         T* d_keys = nullptr;
         bool* d_output = nullptr;
 
         cudaIpcMemHandle_t zeroHandle = {0};
-        bool hasKeys = memcmp(&req.keysHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
+        bool hasKeys = memcmp(&req->keysHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
 
         if (hasKeys) {
             CUDA_CALL(cudaIpcOpenMemHandle(
-                (void**)&d_keys, req.keysHandle, cudaIpcMemLazyEnablePeerAccess
+                (void**)&d_keys, req->keysHandle, cudaIpcMemLazyEnablePeerAccess
             ));
         }
 
         bool hasOutput = false;
-        if (req.type == RequestType::CONTAINS || req.type == RequestType::DELETE) {
+        if (req->type == RequestType::CONTAINS || req->type == RequestType::DELETE) {
             bool handleValid =
-                memcmp(&req.outputHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
+                memcmp(&req->outputHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
 
             if (handleValid) {
                 CUDA_CALL(cudaIpcOpenMemHandle(
-                    (void**)&d_output, req.outputHandle, cudaIpcMemLazyEnablePeerAccess
+                    (void**)&d_output, req->outputHandle, cudaIpcMemLazyEnablePeerAccess
                 ));
                 hasOutput = true;
             }
         }
 
-        switch (req.type) {
+        switch (req->type) {
             case RequestType::INSERT:
-                req.result = filter->insertMany(d_keys, req.count);
+                req->result = filter->insertMany(d_keys, req->count);
                 break;
 
             case RequestType::CONTAINS:
-                filter->containsMany(d_keys, req.count, d_output);
-                req.result = 0;
+                filter->containsMany(d_keys, req->count, d_output);
+                req->result = 0;
                 break;
 
             case RequestType::DELETE:
-                req.result = filter->deleteMany(d_keys, req.count, d_output);
+                req->result = filter->deleteMany(d_keys, req->count, d_output);
                 break;
 
             default:
-                req.result = 0;
+                req->result = 0;
                 break;
         }
 
@@ -336,12 +334,11 @@ class CuckooFilterIPCServer {
 
         // Send shutdown request to the worker thread before
         // setting shutdown flag so the enqueue() doesn't reject it
-        FilterRequest* reqPtr = queue->enqueue();
-        if (reqPtr) {
-            FilterRequest& req = *reqPtr;
-            req.type = RequestType::SHUTDOWN;
-            req.completed.store(false, std::memory_order_release);
-            req.cancelled.store(false, std::memory_order_release);
+        FilterRequest* req = queue->enqueue();
+        if (req) {
+            req->type = RequestType::SHUTDOWN;
+            req->completed.store(false, std::memory_order_release);
+            req->cancelled.store(false, std::memory_order_release);
 
             queue->signalEnqueued();
         }
@@ -424,16 +421,15 @@ class CuckooFilterIPCClient {
 
         queue->initiateShutdown();
 
-        FilterRequest* reqPtr = queue->enqueue();
-        if (reqPtr) {
-            FilterRequest& req = *reqPtr;
-            req.type = RequestType::SHUTDOWN;
-            req.completed.store(false, std::memory_order_release);
-            req.cancelled.store(false, std::memory_order_release);
+        FilterRequest* req = queue->enqueue();
+        if (req) {
+            req->type = RequestType::SHUTDOWN;
+            req->completed.store(false, std::memory_order_release);
+            req->cancelled.store(false, std::memory_order_release);
 
             queue->signalEnqueued();
 
-            while (!req.completed.load(std::memory_order_acquire)) {
+            while (!req->completed.load(std::memory_order_acquire)) {
                 std::this_thread::yield();
             }
         }
@@ -441,43 +437,41 @@ class CuckooFilterIPCClient {
 
    private:
     size_t submitRequest(RequestType type, const T* d_keys, size_t count, bool* d_output) {
-        FilterRequest* reqPtr = queue->enqueue();
-        if (!reqPtr) {
+        FilterRequest* req = queue->enqueue();
+        if (!req) {
             throw std::runtime_error("Server is shutting down, not accepting new requests");
         }
 
-        FilterRequest& req = *reqPtr;
-
         if (d_keys != nullptr) {
-            CUDA_CALL(cudaIpcGetMemHandle(&req.keysHandle, const_cast<T*>(d_keys)));
+            CUDA_CALL(cudaIpcGetMemHandle(&req->keysHandle, const_cast<T*>(d_keys)));
         } else {
-            memset(&req.keysHandle, 0, sizeof(cudaIpcMemHandle_t));
+            memset(&req->keysHandle, 0, sizeof(cudaIpcMemHandle_t));
         }
 
         if (d_output != nullptr) {
-            CUDA_CALL(cudaIpcGetMemHandle(&req.outputHandle, d_output));
+            CUDA_CALL(cudaIpcGetMemHandle(&req->outputHandle, d_output));
         } else {
-            memset(&req.outputHandle, 0, sizeof(cudaIpcMemHandle_t));
+            memset(&req->outputHandle, 0, sizeof(cudaIpcMemHandle_t));
         }
 
-        req.type = type;
-        req.count = count;
-        req.requestId = nextRequestId++;
-        req.completed.store(false, std::memory_order_release);
-        req.cancelled.store(false, std::memory_order_release);
-        req.result = 0;
+        req->type = type;
+        req->count = count;
+        req->requestId = nextRequestId++;
+        req->completed.store(false, std::memory_order_release);
+        req->cancelled.store(false, std::memory_order_release);
+        req->result = 0;
 
         queue->signalEnqueued();
 
-        while (!req.completed.load(std::memory_order_acquire)) {
+        while (!req->completed.load(std::memory_order_acquire)) {
             std::this_thread::yield();
         }
 
-        if (req.cancelled.load(std::memory_order_acquire)) {
+        if (req->cancelled.load(std::memory_order_acquire)) {
             throw std::runtime_error("Request cancelled, server is shutting down");
         }
 
-        return req.result;
+        return req->result;
     }
 };
 
