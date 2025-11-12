@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     size_t capacity = 1ULL << exponent;
     auto n = static_cast<size_t>(capacity * targetLoadFactor);
 
-    std::cout << "Using " << Config::AltBucketPolicy::name << " as the hash strategy" << std::endl;
+    std::cout << "Using " << Config::AltBucketPolicy::name << std::endl;
 
     thrust::host_vector<uint64_t> h_input(n);
 

@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     size_t capacity = 1ULL << exponent;
     size_t n = capacity * target_load_factor;
 
-    std::cout << "Using " << Config::AltBucketPolicy::name << " as the hash strategy" << std::endl;
+    std::cout << "Using " << Config::AltBucketPolicy::name << std::endl;
 
     thrust::device_vector<uint64_t> d_input(n);
     thrust::device_vector<uint8_t> d_output(n);
