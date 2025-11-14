@@ -35,6 +35,8 @@
           pkgs.stdenv.cc.cc.lib
           pkgs.openssl.dev
           pkgs.openssl.out
+          nccl.dev
+          nccl.out
         ];
 
         packages = with pkgs; [
@@ -42,6 +44,7 @@
           llvm.lldb
           meson
           uv
+          pkg-config
         ];
 
         CPATH = pkgs.lib.makeIncludePath [
@@ -65,6 +68,7 @@
               - -I${toString ./.}/include
               - -I${toString ./.}/subprojects/cuco/include
               - -I${toString ./.}/subprojects/googletest-1.17.0/googletest/include
+              - -I${cudaPkgs.nccl.dev}/include
               - -I${pkgs.openssl.dev}/include
               - -D__LIBCUDAXX__STD_VER=${cuda.version.major}
               - -D__CUDACC_VER_MAJOR__=${cuda.version.major}

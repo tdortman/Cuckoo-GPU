@@ -4,28 +4,41 @@
 #include <thrust/execution_policy.h>
 #include <thrust/host_vector.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
 #include <thrust/reduce.h>
 #include <thrust/scan.h>
 #include <thrust/scatter.h>
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
+#include <thrust/tuple.h>
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <numeric>
+#include <thread>
+#include <type_traits>
 #include <vector>
 #include "CuckooFilter.cuh"
 #include "helpers.cuh"
+
+#include <nccl.h>
+
+#define NCCL_CALL(cmd)                                                                    \
+    do {                                                                                  \
+        ncclResult_t r = cmd;                                                             \
+        if (r != ncclSuccess) {                                                           \
+            printf("NCCL error %s:%d '%s'\n", __FILE__, __LINE__, ncclGetErrorString(r)); \
+            exit(EXIT_FAILURE);                                                           \
+        }                                                                                 \
+    } while (0)
 
 template <typename Config>
 class CuckooFilterMultiGPU {
    public:
     using T = typename Config::KeyType;
-
-    static constexpr double CHUNK_SIZE_FACTOR = 0.8;
-    static constexpr double CAPACITY_HEADROOM = 1.05;
 
     struct Partitioner {
         size_t numGPUs;
@@ -39,46 +52,54 @@ class CuckooFilterMultiGPU {
    private:
     size_t numGPUs;
     size_t capacityPerGPU;
-    size_t primaryGPU;
-    size_t chunkSize;
     std::vector<CuckooFilter<Config>*> filters;
     std::vector<cudaStream_t> streams;
+    std::vector<ncclComm_t> comms;
 
     /**
-     * @brief Partitions a device vector of keys by their target GPU.
-     *
-     * This function takes a vector of keys, determines the target GPU for each key
-     * and then sorts the keys according to their destination GPU.
-     * It can optionally sort a companion vector of indices at the same time.
-     * The results (counts and offsets for each GPU's data) are returned via output parameters.
-     *
-     * @param d_keys The device vector of keys to be partitioned and sorted. Modified in place.
-     * @param d_indicesToSort (Optional) A pointer to a device vector of indices to be sorted
-     *        along with the keys. Modified in place.
-     * @param h_counts A host vector to be filled with the number of keys for each GPU.
-     * @param h_offsets A host vector to be filled with the starting offset for each GPU's data.
+     * @brief Gets the available free memory for each GPU.
+     * @return A vector where the i-th element is the free memory on GPU i.
      */
-    void partitionKeysByGpu(
+    [[nodiscard]] std::vector<size_t> getGpuMemoryInfo() const {
+        std::vector<size_t> freeMem(numGPUs);
+        parallelForGPUs([&](size_t gpuId) {
+            size_t free, total;
+            CUDA_CALL(cudaMemGetInfo(&free, &total));
+            freeMem[gpuId] = free;
+        });
+        return freeMem;
+    }
+
+    /**
+     * @brief Partitions keys (and optionally an index array) by their target GPU. This function
+     * sorts the keys in place.
+     */
+    void partitionByGPU(
         thrust::device_vector<T>& d_keys,
-        thrust::device_vector<size_t>* d_indicesToSort,
-        thrust::host_vector<size_t>& h_counts,
-        thrust::host_vector<size_t>& h_offsets
+        thrust::device_vector<size_t>& d_counts,
+        thrust::device_vector<size_t>& d_offsets,
+        thrust::device_vector<size_t>* d_indices = nullptr
     ) {
         size_t n = d_keys.size();
+        if (n == 0) {
+            d_counts.assign(numGPUs, 0);
+            d_offsets.assign(numGPUs, 0);
+            return;
+        }
+
         thrust::device_vector<size_t> d_gpuIndices(n);
         Partitioner partitioner{numGPUs};
         thrust::transform(
             thrust::device, d_keys.begin(), d_keys.end(), d_gpuIndices.begin(), partitioner
         );
 
-        if (d_indicesToSort) {
+        // Sort keys and optionally indices based on the target GPU index
+        if (d_indices) {
             thrust::sort_by_key(
                 thrust::device,
                 d_gpuIndices.begin(),
                 d_gpuIndices.end(),
-                thrust::make_zip_iterator(
-                    thrust::make_tuple(d_keys.begin(), d_indicesToSort->begin())
-                )
+                thrust::make_zip_iterator(thrust::make_tuple(d_keys.begin(), d_indices->begin()))
             );
         } else {
             thrust::sort_by_key(
@@ -86,190 +107,424 @@ class CuckooFilterMultiGPU {
             );
         }
 
-        thrust::device_vector<size_t> d_counts(numGPUs);
-        thrust::device_vector<size_t> d_offsets(numGPUs);
-        thrust::device_vector<size_t> d_uniqueGpuIds(numGPUs);
-        thrust::reduce_by_key(
+        d_counts.assign(numGPUs, 0);
+        d_offsets.assign(numGPUs, 0);
+
+        // Count the number of keys destined for each GPU
+        thrust::device_vector<size_t> d_uniqueGPUIds(numGPUs);
+        auto end = thrust::reduce_by_key(
             thrust::device,
             d_gpuIndices.begin(),
             d_gpuIndices.end(),
             thrust::make_constant_iterator<size_t>(1),
-            d_uniqueGpuIds.begin(),
+            d_uniqueGPUIds.begin(),
             d_counts.begin()
         );
+
+        // Scatter the counts to their correct positions in the final counts vector
+        size_t numFoundGPUs = thrust::distance(d_uniqueGPUIds.begin(), end.first);
+        thrust::device_vector<size_t> d_finalCounts(numGPUs, 0);
+        thrust::scatter(
+            thrust::device,
+            d_counts.begin(),
+            d_counts.begin() + numFoundGPUs,
+            d_uniqueGPUIds.begin(),
+            d_finalCounts.begin()
+        );
+        d_counts = d_finalCounts;
+
+        // Calculate offsets for data shuffling
         thrust::exclusive_scan(
             thrust::device, d_counts.begin(), d_counts.end(), d_offsets.begin(), 0
         );
-
-        h_counts = d_counts;
-        h_offsets = d_offsets;
     }
 
-    template <typename FilterFunctor>
-    void queryAndReorder(
+    /**
+     * @brief Generic function for querying the filter and reordering results.
+     * Processes keys in chunks dynamically sized based on available GPU VRAM.
+     * @tparam returnOccupied If true, the function queries and returns
+     * the total number of occupied slots after the operation.
+     * @tparam FilterFunctor A callable that performs the desired CuckooFilter operation (e.g.,
+     * contains, delete).
+     * @param h_keys Host vector of keys to process.
+     * @param h_output Host vector to store the boolean results.
+     * @param filterOp The specific filter operation to execute.
+     * @return Total occupied slots if returnOccupied is true, otherwise 0.
+     */
+    template <bool returnOccupied, typename FilterFunctor>
+    size_t queryAndReorder(
         const thrust::host_vector<T>& h_keys,
-        thrust::host_vector<bool>& h_output,
+        thrust::host_vector<bool>* h_output,
         FilterFunctor filterOp
     ) {
         size_t n = h_keys.size();
-        h_output.resize(n);
+        h_output->resize(n);
 
         if (n == 0) {
-            return;
+            return returnOccupied ? totalOccupiedSlots() : 0;
         }
 
-        for (size_t chunkOffset = 0; chunkOffset < n; chunkOffset += chunkSize) {
-            size_t currentChunkSize = std::min(chunkSize, n - chunkOffset);
+        size_t processedCount = 0;
+        while (processedCount < n) {
+            std::vector<size_t> freeMem = getGpuMemoryInfo();
 
-            CUDA_CALL(cudaSetDevice(primaryGPU));
-            thrust::device_vector<T> d_chunkKeys(
-                h_keys.begin() + chunkOffset, h_keys.begin() + chunkOffset + currentChunkSize
-            );
-            thrust::device_vector<size_t> d_originalIndices(currentChunkSize);
-            thrust::sequence(thrust::device, d_originalIndices.begin(), d_originalIndices.end());
+            // Estimate memory needed per item for sorting, including overhead.
+            // (key + original_index + target_gpu_index) * safety_factor
+            const size_t memPerItem = sizeof(T) + 2 * sizeof(size_t);
 
-            thrust::host_vector<size_t> h_counts(numGPUs);
-            thrust::host_vector<size_t> h_offsets(numGPUs);
-            partitionKeysByGpu(d_chunkKeys, &d_originalIndices, h_counts, h_offsets);
+            // Thrust likes to use A LOT of temporary memory
+            const float safetyFactor = 3.0f;
+            const auto requiredMemPerItem = static_cast<size_t>(memPerItem * safetyFactor);
 
-            thrust::device_vector<bool> d_chunkResultsSorted(currentChunkSize);
+            std::vector<size_t> chunkSizes(numGPUs);
+            size_t totalChunkSize = 0;
+            size_t remainingKeys = n - processedCount;
+
+            // Determine how many keys each GPU can handle in this chunk
+            for (size_t i = 0; i < numGPUs; ++i) {
+                size_t maxItemsForGPU = freeMem[i] / requiredMemPerItem;
+                chunkSizes[i] = maxItemsForGPU;
+                totalChunkSize += chunkSizes[i];
+            }
+
+            totalChunkSize = std::min(totalChunkSize, remainingKeys);
+
+            std::vector<size_t> chunkOffsets(numGPUs + 1, 0);
+            // Proportionally resize chunk sizes to match the total we can process
+            for (size_t i = 0; i < numGPUs; ++i) {
+                auto keysForGPU = static_cast<size_t>(
+                    static_cast<double>(chunkSizes[i]) /
+                    static_cast<double>(
+                        std::accumulate(chunkSizes.begin(), chunkSizes.end(), size_t(0))
+                    ) *
+                    totalChunkSize
+                );
+                chunkOffsets[i + 1] = chunkOffsets[i] + keysForGPU;
+            }
+
+            // Ensure the last offset covers the entire chunk due to potential rounding
+            chunkOffsets[numGPUs] = totalChunkSize;
 
             parallelForGPUs([&](size_t gpuId) {
-                if (h_counts[gpuId] > 0) {
-                    thrust::device_vector<T> d_receivedKeys(h_counts[gpuId]);
-                    thrust::device_vector<bool> d_gpuResults(h_counts[gpuId]);
+                size_t localChunkStart = chunkOffsets[gpuId];
+                size_t localChunkEnd = chunkOffsets[gpuId + 1];
+                size_t localChunkSize = localChunkEnd - localChunkStart;
 
-                    CUDA_CALL(cudaMemcpyPeerAsync(
-                        d_receivedKeys.data().get(),
-                        gpuId,
-                        d_chunkKeys.data().get() + h_offsets[gpuId],
-                        primaryGPU,
-                        h_counts[gpuId] * sizeof(T),
-                        streams[gpuId]
-                    ));
-
-                    filterOp(filters[gpuId], d_receivedKeys, d_gpuResults, streams[gpuId]);
-
-                    CUDA_CALL(cudaMemcpyPeerAsync(
-                        d_chunkResultsSorted.data().get() + h_offsets[gpuId],
-                        primaryGPU,
-                        d_gpuResults.data().get(),
-                        gpuId,
-                        h_counts[gpuId] * sizeof(bool),
-                        streams[primaryGPU]
-                    ));
+                if (localChunkSize == 0) {
+                    return;
                 }
+
+                thrust::device_vector<T> d_localKeys(
+                    h_keys.begin() + processedCount + localChunkStart,
+                    h_keys.begin() + processedCount + localChunkEnd
+                );
+
+                thrust::device_vector<size_t> d_localIndices(localChunkSize);
+                thrust::sequence(thrust::device, d_localIndices.begin(), d_localIndices.end(), 0);
+
+                thrust::device_vector<size_t> d_sendCounts(numGPUs);
+                thrust::device_vector<size_t> d_sendOffsets(numGPUs);
+                partitionByGPU(d_localKeys, d_sendCounts, d_sendOffsets, &d_localIndices);
+
+                thrust::device_vector<size_t> d_recvCounts(numGPUs);
+
+                exchangeCounts(gpuId, d_sendCounts, d_recvCounts);
+
+                thrust::device_vector<size_t> d_recvOffsets(numGPUs);
+                thrust::exclusive_scan(
+                    thrust::device,
+                    d_recvCounts.begin(),
+                    d_recvCounts.end(),
+                    d_recvOffsets.begin(),
+                    0
+                );
+
+                size_t totalToReceive = thrust::reduce(
+                    thrust::device, d_recvCounts.begin(), d_recvCounts.end(), size_t(0)
+                );
+
+                if (totalToReceive == 0) {
+                    return;
+                }
+
+                // Shuffle keys between GPUs (All-to-All)
+                thrust::device_vector<T> d_receivedKeys(totalToReceive);
+                NCCL_CALL(ncclGroupStart());
+                for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
+                    if (d_sendCounts[peerId] > 0) {
+                        NCCL_CALL(ncclSend(
+                            d_localKeys.data().get() + d_sendOffsets[peerId],
+                            d_sendCounts[peerId] * sizeof(T),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                    if (d_recvCounts[peerId] > 0) {
+                        NCCL_CALL(ncclRecv(
+                            d_receivedKeys.data().get() + d_recvOffsets[peerId],
+                            d_recvCounts[peerId] * sizeof(T),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                }
+                NCCL_CALL(ncclGroupEnd());
+
+                // Perform the filter operation on the received keys
+                thrust::device_vector<bool> d_localResults(totalToReceive);
+                filterOp(filters[gpuId], d_receivedKeys, d_localResults, streams[gpuId]);
+
+                // Shuffle results back to the original GPUs
+                thrust::device_vector<bool> d_resultsToSendBack(localChunkSize);
+                NCCL_CALL(ncclGroupStart());
+                for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
+                    if (d_recvCounts[peerId] > 0) {
+                        NCCL_CALL(ncclSend(
+                            d_localResults.data().get() + d_recvOffsets[peerId],
+                            d_recvCounts[peerId] * sizeof(bool),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                    if (d_sendCounts[peerId] > 0) {
+                        NCCL_CALL(ncclRecv(
+                            d_resultsToSendBack.data().get() + d_sendOffsets[peerId],
+                            d_sendCounts[peerId] * sizeof(bool),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                }
+                NCCL_CALL(ncclGroupEnd());
+
+                // Unsort the results to match the original input order for this chunk
+                thrust::device_vector<bool> d_finalChunkOutput(localChunkSize);
+                thrust::scatter(
+                    thrust::device,
+                    d_resultsToSendBack.begin(),
+                    d_resultsToSendBack.end(),
+                    d_localIndices.begin(),
+                    d_finalChunkOutput.begin()
+                );
+
+                // Copy the chunk's results back to the correct position
+                // in the final host output vector
+                thrust::copy(
+                    d_finalChunkOutput.begin(),
+                    d_finalChunkOutput.end(),
+                    h_output->begin() + processedCount + localChunkStart
+                );
             });
 
             synchronizeAllGPUs();
-
-            CUDA_CALL(cudaSetDevice(primaryGPU));
-            thrust::device_vector<bool> d_chunkOutput(currentChunkSize);
-            thrust::scatter(
-                thrust::device,
-                d_chunkResultsSorted.begin(),
-                d_chunkResultsSorted.end(),
-                d_originalIndices.begin(),
-                d_chunkOutput.begin()
-            );
-            thrust::copy(
-                d_chunkOutput.begin(), d_chunkOutput.end(), h_output.begin() + chunkOffset
-            );
+            processedCount += totalChunkSize;
         }
-        CUDA_CALL(cudaSetDevice(primaryGPU));
+
+        return returnOccupied ? totalOccupiedSlots() : 0;
+    }
+
+    /**
+     * @brief Exchanges the send and receive counts between GPUs.
+     * This is expected to be called once for each GPU.
+     * @param gpuId Current GPU Id
+     * @param d_sendCounts The send counts to exchange
+     * @param d_recvCounts The receive counts to exchange
+     */
+    void exchangeCounts(
+        size_t gpuId,
+        thrust::device_vector<size_t>& d_sendCounts,
+        thrust::device_vector<size_t>& d_recvCounts
+    ) {
+        NCCL_CALL(ncclGroupStart());
+        for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
+            NCCL_CALL(ncclSend(
+                d_sendCounts.data().get() + peerId,
+                1,
+                ncclUint64,
+                peerId,
+                comms[gpuId],
+                streams[gpuId]
+            ));
+            NCCL_CALL(ncclRecv(
+                d_recvCounts.data().get() + peerId,
+                1,
+                ncclUint64,
+                peerId,
+                comms[gpuId],
+                streams[gpuId]
+            ));
+        }
+        NCCL_CALL(ncclGroupEnd());
     }
 
    public:
-    CuckooFilterMultiGPU(size_t numGPUs, size_t capacity, size_t primaryGPU = 0)
-        : numGPUs(numGPUs),
-          capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * CAPACITY_HEADROOM)),
-          primaryGPU(primaryGPU) {
+    CuckooFilterMultiGPU(size_t numGPUs, size_t capacity)
+        : numGPUs(numGPUs), capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * 1.05)) {
         assert(numGPUs > 0 && "Number of GPUs must be at least 1");
-        assert(primaryGPU < numGPUs && "Invalid primary GPU index");
 
         streams.resize(numGPUs);
-        parallelForGPUs([&](size_t i) {
-            CUDA_CALL(cudaStreamCreate(&streams[i]));
-            for (size_t j = 0; j < numGPUs; ++j) {
-                if (i != j) {
-                    int canAccessPeer = 0;
-                    cudaDeviceCanAccessPeer(&canAccessPeer, i, j);
-                    if (canAccessPeer) {
-                        cudaDeviceEnablePeerAccess(j, 0);
-                    } else {
-                        std::cerr << "Warning: P2P access not supported between GPU " << i
-                                  << " and GPU " << j << std::endl;
-                    }
-                }
-            }
-        });
-
+        comms.resize(numGPUs);
         filters.resize(numGPUs);
-        parallelForGPUs([&](size_t i) { filters[i] = new CuckooFilter<Config>(capacityPerGPU); });
 
-        CUDA_CALL(cudaSetDevice(primaryGPU));
-        size_t freeMem, totalMem;
-        cudaMemGetInfo(&freeMem, &totalMem);
-        chunkSize =
-            static_cast<size_t>(static_cast<double>(totalMem) * CHUNK_SIZE_FACTOR / sizeof(T));
+        ncclUniqueId ncclUid;
+        NCCL_CALL(ncclGetUniqueId(&ncclUid));
+
+        parallelForGPUs([&](size_t i) {
+            CUDA_CALL(cudaSetDevice(i));
+            NCCL_CALL(ncclCommInitRank(&comms[i], numGPUs, ncclUid, i));
+            CUDA_CALL(cudaStreamCreate(&streams[i]));
+            filters[i] = new CuckooFilter<Config>(capacityPerGPU);
+        });
+        synchronizeAllGPUs();
     }
 
     ~CuckooFilterMultiGPU() {
         parallelForGPUs([&](size_t i) {
+            CUDA_CALL(cudaSetDevice(i));
             delete filters[i];
+            NCCL_CALL(ncclCommDestroy(comms[i]));
             CUDA_CALL(cudaStreamDestroy(streams[i]));
         });
-
-        CUDA_CALL(cudaSetDevice(primaryGPU));
     }
 
     CuckooFilterMultiGPU(const CuckooFilterMultiGPU&) = delete;
     CuckooFilterMultiGPU& operator=(const CuckooFilterMultiGPU&) = delete;
 
+    /**
+     * @brief Inserts a batch of keys into the distributed filter.
+     * Processes keys in chunks dynamically sized based on available GPU VRAM to prevent OOM errors.
+     * @param h_keys The keys to insert.
+     * @return The total number of occupied slots across all GPUs after insertion.
+     */
     size_t insertMany(const thrust::host_vector<T>& h_keys) {
         size_t n = h_keys.size();
         if (n == 0) {
             return totalOccupiedSlots();
         }
 
-        for (size_t chunkOffset = 0; chunkOffset < n; chunkOffset += chunkSize) {
-            size_t currentChunkSize = std::min(chunkSize, n - chunkOffset);
+        size_t processedCount = 0;
+        while (processedCount < n) {
+            std::vector<size_t> freeMem = getGpuMemoryInfo();
 
-            CUDA_CALL(cudaSetDevice(primaryGPU));
-            thrust::device_vector<T> d_chunkKeys(
-                h_keys.begin() + chunkOffset, h_keys.begin() + chunkOffset + currentChunkSize
-            );
+            // Estimate memory needed per item, including overhead.
+            // (key + target_gpu_index) * safety_factor
+            const size_t memPerItem = sizeof(T) + sizeof(size_t);
 
-            thrust::host_vector<size_t> h_counts;
-            thrust::host_vector<size_t> h_offsets;
-            partitionKeysByGpu(d_chunkKeys, nullptr, h_counts, h_offsets);
+            // Thrust likes to use A LOT of temporary memory
+            const float safetyFactor = 3.0f;
+            const auto requiredMemPerItem = static_cast<size_t>(memPerItem * safetyFactor);
+
+            std::vector<size_t> chunkSizes(numGPUs);
+            size_t totalChunkSize = 0;
+            size_t remainingKeys = n - processedCount;
+
+            for (size_t i = 0; i < numGPUs; ++i) {
+                size_t maxItemsForGPU = freeMem[i] / requiredMemPerItem;
+                chunkSizes[i] = maxItemsForGPU;
+                totalChunkSize += chunkSizes[i];
+            }
+
+            totalChunkSize = std::min(totalChunkSize, remainingKeys);
+
+            std::vector<size_t> chunkOffsets(numGPUs + 1, 0);
+            for (size_t i = 0; i < numGPUs; ++i) {
+                auto keysForGPU = static_cast<size_t>(
+                    static_cast<double>(chunkSizes[i]) /
+                    static_cast<double>(
+                        std::accumulate(chunkSizes.begin(), chunkSizes.end(), size_t(0))
+                    ) *
+                    totalChunkSize
+                );
+
+                chunkOffsets[i + 1] = chunkOffsets[i] + keysForGPU;
+            }
+            chunkOffsets[numGPUs] = totalChunkSize;
 
             parallelForGPUs([&](size_t gpuId) {
-                if (h_counts[gpuId] > 0) {
-                    thrust::device_vector<T> d_receivedKeys(h_counts[gpuId]);
-                    CUDA_CALL(cudaMemcpyPeerAsync(
-                        d_receivedKeys.data().get(),
-                        gpuId,
-                        d_chunkKeys.data().get() + h_offsets[gpuId],
-                        primaryGPU,
-                        h_counts[gpuId] * sizeof(T),
-                        streams[gpuId]
-                    ));
-                    filters[gpuId]->insertMany(d_receivedKeys, streams[gpuId]);
+                size_t localChunkStart = chunkOffsets[gpuId];
+                size_t localChunkEnd = chunkOffsets[gpuId + 1];
+                size_t localChunkSize = localChunkEnd - localChunkStart;
+
+                if (localChunkSize <= 0) {
+                    return;
                 }
+
+                thrust::device_vector<T> d_localKeys(
+                    h_keys.begin() + processedCount + localChunkStart,
+                    h_keys.begin() + processedCount + localChunkEnd
+                );
+
+                thrust::device_vector<size_t> d_sendCounts(numGPUs);
+                thrust::device_vector<size_t> d_sendOffsets(numGPUs);
+                partitionByGPU(d_localKeys, d_sendCounts, d_sendOffsets);
+
+                thrust::device_vector<size_t> d_recvCounts(numGPUs);
+
+                exchangeCounts(gpuId, d_sendCounts, d_recvCounts);
+
+                thrust::device_vector<size_t> d_recvOffsets(numGPUs);
+                thrust::exclusive_scan(
+                    thrust::device,
+                    d_recvCounts.begin(),
+                    d_recvCounts.end(),
+                    d_recvOffsets.begin(),
+                    0
+                );
+                size_t totalToReceive = thrust::reduce(
+                    thrust::device, d_recvCounts.begin(), d_recvCounts.end(), (size_t)0
+                );
+
+                if (totalToReceive == 0)
+                    return;
+
+                thrust::device_vector<T> d_receivedKeys(totalToReceive);
+                NCCL_CALL(ncclGroupStart());
+                for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
+                    if (d_sendCounts[peerId] > 0) {
+                        NCCL_CALL(ncclSend(
+                            d_localKeys.data().get() + d_sendOffsets[peerId],
+                            d_sendCounts[peerId] * sizeof(T),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                    if (d_recvCounts[peerId] > 0) {
+                        NCCL_CALL(ncclRecv(
+                            d_receivedKeys.data().get() + d_recvOffsets[peerId],
+                            d_recvCounts[peerId] * sizeof(T),
+                            ncclChar,
+                            peerId,
+                            comms[gpuId],
+                            streams[gpuId]
+                        ));
+                    }
+                }
+                NCCL_CALL(ncclGroupEnd());
+
+                filters[gpuId]->insertMany(d_receivedKeys, streams[gpuId]);
             });
 
             synchronizeAllGPUs();
+            processedCount += totalChunkSize;
         }
 
-        CUDA_CALL(cudaSetDevice(primaryGPU));
         return totalOccupiedSlots();
     }
 
     void containsMany(const thrust::host_vector<T>& h_keys, thrust::host_vector<bool>& h_output) {
-        queryAndReorder(
+        queryAndReorder<false>(
             h_keys,
-            h_output,
+            &h_output,
             [](CuckooFilter<Config>* filter,
                const thrust::device_vector<T>& keys,
                thrust::device_vector<bool>& results,
@@ -278,15 +533,14 @@ class CuckooFilterMultiGPU {
     }
 
     size_t deleteMany(const thrust::host_vector<T>& h_keys, thrust::host_vector<bool>& h_output) {
-        queryAndReorder(
+        return queryAndReorder<true>(
             h_keys,
-            h_output,
+            &h_output,
             [](CuckooFilter<Config>* filter,
                const thrust::device_vector<T>& keys,
                thrust::device_vector<bool>& results,
                cudaStream_t stream) { filter->deleteMany(keys, results, stream); }
         );
-        return totalOccupiedSlots();
     }
 
     float loadFactor() {
@@ -295,9 +549,16 @@ class CuckooFilterMultiGPU {
 
     template <typename Func>
     void parallelForGPUs(Func func) const {
+        std::vector<std::thread> threads;
         for (size_t i = 0; i < numGPUs; ++i) {
-            CUDA_CALL(cudaSetDevice(i));
-            func(i);
+            threads.emplace_back([=]() {
+                CUDA_CALL(cudaSetDevice(i));
+                func(i);
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
         }
     }
 
@@ -310,7 +571,8 @@ class CuckooFilterMultiGPU {
         parallelForGPUs([&](size_t i) {
             total.fetch_add(filters[i]->occupiedSlots(), std::memory_order_relaxed);
         });
-        return total;
+
+        return total.load();
     }
 
     void clear() {
@@ -319,11 +581,9 @@ class CuckooFilterMultiGPU {
 
     [[nodiscard]] size_t totalCapacity() const {
         std::atomic<size_t> total(0);
-
         parallelForGPUs([&](size_t i) {
             total.fetch_add(filters[i]->capacity(), std::memory_order_relaxed);
         });
-
-        return total;
+        return total.load();
     }
 };
