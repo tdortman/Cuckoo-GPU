@@ -482,8 +482,9 @@ class CuckooFilterMultiGPU {
                     thrust::device, d_recvCounts.begin(), d_recvCounts.end(), (size_t)0
                 );
 
-                if (totalToReceive == 0)
+                if (totalToReceive == 0) {
                     return;
+                }
 
                 thrust::device_vector<T> d_receivedKeys(totalToReceive);
                 NCCL_CALL(ncclGroupStart());
