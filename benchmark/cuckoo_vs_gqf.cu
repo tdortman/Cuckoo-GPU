@@ -36,7 +36,7 @@ void convertKeysToUint(
     );
 }
 
-static void CuckooFilter_Insert(bm::State& state) {
+static void CF_Insert(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
@@ -50,7 +50,7 @@ static void CuckooFilter_Insert(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         cudaDeviceSynchronize();
         bm::DoNotOptimize(inserted);
     }
@@ -58,7 +58,7 @@ static void CuckooFilter_Insert(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void CuckooFilter_Query(bm::State& state) {
+static void CF_Query(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
@@ -66,7 +66,7 @@ static void CuckooFilter_Query(bm::State& state) {
     CuckooFilter<Config> filter(capacity);
     thrust::device_vector<uint8_t> d_output(n);
 
-    filter.insertMany(d_keys);
+    adaptiveInsert(filter, d_keys);
 
     size_t filterMemory = filter.sizeInBytes();
 
@@ -79,7 +79,7 @@ static void CuckooFilter_Query(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void CuckooFilter_Delete(bm::State& state) {
+static void CF_Delete(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
@@ -92,7 +92,7 @@ static void CuckooFilter_Delete(bm::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         filter.clear();
-        filter.insertMany(d_keys);
+        adaptiveInsert(filter, d_keys);
         state.ResumeTiming();
 
         size_t remaining = filter.deleteMany(d_keys, d_output);
@@ -104,7 +104,7 @@ static void CuckooFilter_Delete(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void CuckooFilter_InsertAndQuery(bm::State& state) {
+static void CF_InsertAndQuery(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
@@ -119,7 +119,7 @@ static void CuckooFilter_InsertAndQuery(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         filter.containsMany(d_keys, d_output);
 
         cudaDeviceSynchronize();
@@ -131,7 +131,7 @@ static void CuckooFilter_InsertAndQuery(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void CuckooFilter_InsertQueryDelete(bm::State& state) {
+static void CF_InsertQueryDelete(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint32_t> d_keys(n);
@@ -146,7 +146,7 @@ static void CuckooFilter_InsertQueryDelete(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         filter.containsMany(d_keys, d_output);
         size_t remaining = filter.deleteMany(d_keys, d_output);
 
@@ -160,14 +160,14 @@ static void CuckooFilter_InsertQueryDelete(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void CuckooFilter_FalsePositiveRate(bm::State& state) {
+static void CF_FalsePositiveRate(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
-    generateKeysGPU<uint64_t>(d_keys, UINT32_MAX);
+    generateKeysGPU(d_keys, static_cast<uint64_t>(UINT16_MAX));
 
     CuckooFilter<Config> filter(capacity);
-    filter.insertMany(d_keys);
+    adaptiveInsert(filter, d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);
@@ -211,8 +211,7 @@ static void CuckooFilter_FalsePositiveRate(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
 }
-
-static void QuotientFilter_BulkBuild(bm::State& state) {
+static void QF_BulkBuild(bm::State& state) {
     auto q = static_cast<unsigned int>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -243,8 +242,7 @@ static void QuotientFilter_BulkBuild(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_Insert(bm::State& state) {
+static void QF_Insert(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -273,8 +271,7 @@ static void QuotientFilter_Insert(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_Query_Sorted(bm::State& state) {
+static void QF_Query_Sorted(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -311,8 +308,7 @@ static void QuotientFilter_Query_Sorted(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_Query_Unsorted(bm::State& state) {
+static void QF_Query_Unsorted(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -349,8 +345,7 @@ static void QuotientFilter_Query_Unsorted(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_Delete(bm::State& state) {
+static void QF_Delete(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -383,8 +378,7 @@ static void QuotientFilter_Delete(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_BuildAndQuery(bm::State& state) {
+static void QF_BuildAndQuery(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -426,8 +420,7 @@ static void QuotientFilter_BuildAndQuery(bm::State& state) {
         cudaFree(qf.table);
     }
 }
-
-static void QuotientFilter_BuildQueryDelete(bm::State& state) {
+static void QF_BuildQueryDelete(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -475,8 +468,8 @@ static void QuotientFilter_BuildQueryDelete(bm::State& state) {
 
 // FIXME: This segfaults on the GPU for some reason
 // It also just kind of sucks that we have to use uint32_t for the keys because there aren't that
-// many of them
-static void QuotientFilter_FalsePositiveRate(bm::State& state) {
+// many of the
+static void QF_FalsePositiveRate(bm::State& state) {
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * TARGET_LOAD_FACTOR;
@@ -552,72 +545,41 @@ static void QuotientFilter_FalsePositiveRate(bm::State& state) {
     }
 }
 
-BENCHMARK(CuckooFilter_Insert)
+BENCHMARK(CF_Insert)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+
+BENCHMARK(CF_InsertAndQuery)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_Query)
+BENCHMARK(CF_InsertQueryDelete)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_Delete)
+BENCHMARK(CF_FalsePositiveRate)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_InsertAndQuery)
+BENCHMARK(QF_BulkBuild)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(QF_Insert)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(QF_Query_Sorted)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(QF_Query_Unsorted)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_InsertQueryDelete)
+BENCHMARK(QF_Delete)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(QF_BuildAndQuery)->RangeMultiplier(2)->Range(1 << 10, 1ULL << 18)->Unit(bm::kMillisecond);
+BENCHMARK(QF_BuildQueryDelete)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_FalsePositiveRate)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_BulkBuild)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_Insert)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_Query_Sorted)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_Query_Unsorted)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_Delete)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_BuildAndQuery)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_BuildQueryDelete)
-    ->RangeMultiplier(2)
-    ->Range(1 << 10, 1ULL << 18)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(QuotientFilter_FalsePositiveRate)
+BENCHMARK(QF_FalsePositiveRate)
     ->RangeMultiplier(2)
     ->Range(1 << 10, 1ULL << 18)
     ->Unit(bm::kMillisecond);

@@ -13,7 +13,7 @@ namespace bm = benchmark;
 constexpr double TARGET_LOAD_FACTOR = 0.95;
 
 template <size_t bucketSize>
-static void CuckooFilter_Insert(bm::State& state) {
+static void CF_Insert(bm::State& state) {
     using Config = CuckooConfig<uint32_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -28,7 +28,7 @@ static void CuckooFilter_Insert(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         cudaDeviceSynchronize();
         bm::DoNotOptimize(inserted);
     }
@@ -38,7 +38,7 @@ static void CuckooFilter_Insert(bm::State& state) {
 }
 
 template <size_t bucketSize>
-static void CuckooFilter_Query(bm::State& state) {
+static void CF_Query(bm::State& state) {
     using Config = CuckooConfig<uint32_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -47,7 +47,7 @@ static void CuckooFilter_Query(bm::State& state) {
     CuckooFilter<Config> filter(capacity);
     thrust::device_vector<uint8_t> d_output(n);
 
-    filter.insertMany(d_keys);
+    adaptiveInsert(filter, d_keys);
 
     size_t filterMemory = filter.sizeInBytes();
 
@@ -62,7 +62,7 @@ static void CuckooFilter_Query(bm::State& state) {
 }
 
 template <size_t bucketSize>
-static void CuckooFilter_Delete(bm::State& state) {
+static void CF_Delete(bm::State& state) {
     using Config = CuckooConfig<uint32_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -76,7 +76,7 @@ static void CuckooFilter_Delete(bm::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         filter.clear();
-        filter.insertMany(d_keys);
+        adaptiveInsert(filter, d_keys);
         state.ResumeTiming();
 
         size_t remaining = filter.deleteMany(d_keys, d_output);
@@ -90,7 +90,7 @@ static void CuckooFilter_Delete(bm::State& state) {
 }
 
 template <size_t bucketSize>
-static void CuckooFilter_InsertAndQuery(bm::State& state) {
+static void CF_InsertAndQuery(bm::State& state) {
     using Config = CuckooConfig<uint32_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -106,7 +106,7 @@ static void CuckooFilter_InsertAndQuery(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         filter.containsMany(d_keys, d_output);
 
         cudaDeviceSynchronize();
@@ -120,7 +120,7 @@ static void CuckooFilter_InsertAndQuery(bm::State& state) {
 }
 
 template <size_t bucketSize>
-static void CuckooFilter_InsertQueryDelete(bm::State& state) {
+static void CF_InsertQueryDelete(bm::State& state) {
     using Config = CuckooConfig<uint32_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -136,7 +136,7 @@ static void CuckooFilter_InsertQueryDelete(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         filter.containsMany(d_keys, d_output);
         size_t remaining = filter.deleteMany(d_keys, d_output);
 
@@ -152,7 +152,7 @@ static void CuckooFilter_InsertQueryDelete(bm::State& state) {
 }
 
 template <size_t bucketSize>
-static void CuckooFilter_FalsePositiveRate(bm::State& state) {
+static void CF_FalsePositiveRate(bm::State& state) {
     using FPRConfig = CuckooConfig<uint64_t, 16, 500, 128, bucketSize>;
     auto [capacity, n] = calculateCapacityAndSize<FPRConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -160,7 +160,7 @@ static void CuckooFilter_FalsePositiveRate(bm::State& state) {
     generateKeysGPU<uint64_t>(d_keys, UINT32_MAX);
 
     CuckooFilter<FPRConfig> filter(capacity);
-    filter.insertMany(d_keys);
+    adaptiveInsert(filter, d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);
@@ -172,9 +172,7 @@ static void CuckooFilter_FalsePositiveRate(bm::State& state) {
         d_neverInserted.begin(),
         [] __device__(size_t idx) {
             thrust::default_random_engine rng(99999);
-            thrust::uniform_int_distribution<uint64_t> dist(
-                static_cast<uint64_t>(UINT32_MAX) + 1, UINT64_MAX
-            );
+            thrust::uniform_int_distribution<uint64_t> dist(UINT32_MAX + 1, UINT64_MAX);
             rng.discard(idx);
             return dist(rng);
         }
@@ -206,152 +204,98 @@ static void CuckooFilter_FalsePositiveRate(bm::State& state) {
     state.counters["bucket_size"] = bm::Counter(bucketSize);
 }
 
-BENCHMARK(CuckooFilter_Insert<4>)
+BENCHMARK(CF_Insert<4>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Insert<8>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Insert<16>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Insert<32>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Insert<64>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Insert<128>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+
+BENCHMARK(CF_Query<4>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query<8>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query<16>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query<32>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query<64>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Query<128>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+
+BENCHMARK(CF_Delete<4>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete<8>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete<16>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete<32>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete<64>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(CF_Delete<128>)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+
+BENCHMARK(CF_InsertAndQuery<4>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Insert<8>)
+BENCHMARK(CF_InsertAndQuery<8>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Insert<16>)
+BENCHMARK(CF_InsertAndQuery<16>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Insert<32>)
+BENCHMARK(CF_InsertAndQuery<32>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Insert<64>)
+BENCHMARK(CF_InsertAndQuery<64>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Insert<128>)
+BENCHMARK(CF_InsertAndQuery<128>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_Query<4>)
+BENCHMARK(CF_InsertQueryDelete<4>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Query<8>)
+BENCHMARK(CF_InsertQueryDelete<8>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Query<16>)
+BENCHMARK(CF_InsertQueryDelete<16>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Query<32>)
+BENCHMARK(CF_InsertQueryDelete<32>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Query<64>)
+BENCHMARK(CF_InsertQueryDelete<64>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Query<128>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(CuckooFilter_Delete<4>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Delete<8>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Delete<16>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Delete<32>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Delete<64>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_Delete<128>)
+BENCHMARK(CF_InsertQueryDelete<128>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
 
-BENCHMARK(CuckooFilter_InsertAndQuery<4>)
+BENCHMARK(CF_FalsePositiveRate<4>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertAndQuery<8>)
+BENCHMARK(CF_FalsePositiveRate<8>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertAndQuery<16>)
+BENCHMARK(CF_FalsePositiveRate<16>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertAndQuery<32>)
+BENCHMARK(CF_FalsePositiveRate<32>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertAndQuery<64>)
+BENCHMARK(CF_FalsePositiveRate<64>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertAndQuery<128>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(CuckooFilter_InsertQueryDelete<4>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertQueryDelete<8>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertQueryDelete<16>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertQueryDelete<32>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertQueryDelete<64>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_InsertQueryDelete<128>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-
-BENCHMARK(CuckooFilter_FalsePositiveRate<4>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_FalsePositiveRate<8>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_FalsePositiveRate<16>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_FalsePositiveRate<32>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_FalsePositiveRate<64>)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(CuckooFilter_FalsePositiveRate<128>)
+BENCHMARK(CF_FalsePositiveRate<128>)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);

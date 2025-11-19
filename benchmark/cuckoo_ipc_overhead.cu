@@ -76,7 +76,7 @@ static void Local_Insert(bm::State& state) {
         filter.clear();
         state.ResumeTiming();
 
-        size_t inserted = filter.insertMany(d_keys);
+        size_t inserted = adaptiveInsert(filter, d_keys);
         cudaDeviceSynchronize();
         bm::DoNotOptimize(inserted);
     }
@@ -122,7 +122,7 @@ static void Local_Query(bm::State& state) {
     CuckooFilter<Config> filter(capacity);
     thrust::device_vector<uint8_t> d_output(n);
 
-    filter.insertMany(d_keys);
+    adaptiveInsert(filter, d_keys);
 
     size_t filterMemory = filter.sizeInBytes();
 

@@ -11,10 +11,25 @@
 #include <limits>
 #include <random>
 #include <string>
+#include <CuckooFilter.cuh>
+
+constexpr size_t SORTED_INSERT_THRESHOLD = 1ULL << 25;
 
 template <typename ConfigType>
 std::pair<size_t, size_t> calculateCapacityAndSize(size_t capacity, double loadFactor) {
     return {capacity, capacity * loadFactor};
+}
+
+template <typename FilterConfig, typename KeyType>
+size_t adaptiveInsert(
+    CuckooFilter<FilterConfig>& filter,
+    thrust::device_vector<KeyType>& d_keys
+) {
+    if (d_keys.size() < SORTED_INSERT_THRESHOLD) {
+        return filter.insertMany(d_keys);
+    } else {
+        return filter.insertManySorted(d_keys);
+    }
 }
 
 /**

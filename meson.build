@@ -94,6 +94,15 @@ if get_option('BUILD_BENCHMARKS') == true
 
     gqf_dep = dependency('quotient-filters', fallback: ['quotient-filters', 'gqf_dep'])
 
+    tcf_opts = cmake.subproject_options()
+    tcf_opts.add_cmake_defines(
+        {
+            'BUILD_TESTING': 'OFF',
+        },
+    )
+    tcf_sub = cmake.subproject('tcf', options: tcf_opts)
+    tcf_dep = tcf_sub.dependency('bulk_tcf')
+
     bench_deps = [
         benchmark_dep,
         benchmark_main_dep,
@@ -151,6 +160,15 @@ if get_option('BUILD_BENCHMARKS') == true
         dependencies: bench_deps + [gqf_dep],
         include_directories: includes,
         cuda_args: cuda_args,
+        install: false,
+    )
+
+    executable(
+        'benchmark-cuckoo-vs-tcf',
+        './benchmark/cuckoo_vs_tcf.cu',
+        dependencies: bench_deps + [tcf_dep],
+        include_directories: includes,
+        cuda_args: cuda_args + ['-w'],
         install: false,
     )
 endif

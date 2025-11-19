@@ -1,0 +1,421 @@
+diff --git a/bulk-tcf/README.md b/bulk-tcf/README.md
+index dfbb2bd..bc6271c 100755
+--- a/bulk-tcf/README.md
++++ b/bulk-tcf/README.md
+@@ -35,7 +35,7 @@ Metadata
+ 
+ The size of the internal blocks used in the bulk TCF can be modified inside of `include/tcf_bulk_metadata.cuh`. The configurable parameters are:
+ 
+-* `WARPS_PER_BLOCK`: How many warps are assigned per filter block. More warps is more throughput.
++* `TCF_WARPS_PER_BLOCK`: How many warps are assigned per filter block. More warps is more throughput.
+ * `BLOCKS_PER_THREAD_BLOCK`: how many filter sections are assigned to each thread block. Increasing this increased the maximum load factor the filter can scale to, but the size is limited by shared memory.
+ * `BYTES_PER_CACHE_LINE / CACHE_LINES_PER_BLOCK`: These two values multiplied together is the amount of space given to each filter section. Upping this increases throughput but is limited by shared memory.
+ 
+diff --git a/bulk-tcf/include/bulk_tcf.cuh b/bulk-tcf/include/bulk_tcf.cuh
+index f28d4ad..808fb47 100644
+--- a/bulk-tcf/include/bulk_tcf.cuh
++++ b/bulk-tcf/include/bulk_tcf.cuh
+@@ -1438,7 +1438,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 	__device__ void load_local_blocks(thread_team_block<block_type> * primary_block_ptr, int * local_counters, uint64_t blockID, int warpID, int threadID){
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			primary_block_ptr->internal_blocks[i] = blocks[blockIdx.x].internal_blocks[i];
+ 
+@@ -1451,7 +1451,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 	__device__ void unload_local_blocks(thread_team_block<block_type> * primary_block_ptr, int * local_counters, uint64_t blockID, int warpID, int threadID){
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			blocks[blockIdx.x].internal_blocks[i] = primary_block_ptr->internal_blocks[i];
+ 
+@@ -1490,7 +1490,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 		int threadID = threadIdx.x % 32;
+ 
+-		// for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		// for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 		// 	primary_block.internal_blocks[i] = blocks[blockIdx.x].internal_blocks[i];
+ 
+@@ -1511,7 +1511,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 		//get counters for new_items
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 		buffer_get_primary_count(primary_block_ptr, (int *)& buffer_offsets, blockID, i ,warpID, threadID);
+ 
+@@ -1530,7 +1530,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 		unload_local_blocks(primary_block_ptr, &local_counters[0], blockID, warpID, threadID);
+ 
+ 		//unload from primary ptr
+-		// for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		// for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 		// 	blocks[blockIdx.x].internal_blocks[i] = primary_block_ptr->internal_blocks[i];
+ 
+@@ -1567,7 +1567,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 		//each warp should grab one block
+ 		//TODO modify for #filter blocks per thread_team_block
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			block.internal_blocks[i] = blocks[blockIdx.x].internal_blocks[i];
+ 
+@@ -1620,7 +1620,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 		uint64_t load_block_start = clock();
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			
+ 
+@@ -1730,7 +1730,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 		if (threadID == 0){
+ 
+-			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 				//remaining counters now takes into account the main list as well as new inserts
+@@ -1764,7 +1764,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 
+ 		//loop through blocks
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 			//for each item in parallel, we check the global counters to determine which hash is submitted
+@@ -1979,7 +1979,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 		//start of dump
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			if (counters[i] >  block_type::max_size()){
+ 
+@@ -2229,7 +2229,7 @@ struct __attribute__ ((__packed__)) bulk_tcf {
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			assert(assert_sorted(blocks[blockID].internal_blocks[i].tags,block_counters[blockID*BLOCKS_PER_THREAD_BLOCK+i]));
+ 
+@@ -2264,7 +2264,7 @@ __device__ void dump_all_buffers_sorted_cycles(thread_team_block<block_type> * l
+ 
+ 		if (threadID == 0){
+ 
+-			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 				//remaining counters now takes into account the main list as well as new inserts
+@@ -2296,7 +2296,7 @@ __device__ void dump_all_buffers_sorted_cycles(thread_team_block<block_type> * l
+ 
+ 		int slot;
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 			//for each item in parallel, we check the global counters to determine which hash is submitted
+@@ -2471,7 +2471,7 @@ __device__ void dump_all_buffers_sorted_cycles(thread_team_block<block_type> * l
+ 		//start of dump
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			if (counters[i] >  block_type::max_size()){
+ 
+@@ -2733,7 +2733,7 @@ __device__ void dump_all_buffers_sorted_cycles(thread_team_block<block_type> * l
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			assert(assert_sorted(blocks[blockID].internal_blocks[i].tags,block_counters[blockID*BLOCKS_PER_THREAD_BLOCK+i]));
+ 
+@@ -2768,7 +2768,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		if (threadID == 0){
+ 
+-			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++			for (int i =warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 				//remaining counters now takes into account the main list as well as new inserts
+@@ -2800,7 +2800,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		int slot;
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 			//for each item in parallel, we check the global counters to determine which hash is submitted
+@@ -2969,7 +2969,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 		//start of dump
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			if (counters[i] >  block_type::max_size()){
+ 
+@@ -3208,7 +3208,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			assert(assert_sorted(output_block->internal_blocks[i].tags,local_block_counters[i]));
+ 
+@@ -3327,7 +3327,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			block.internal_blocks[i] = blocks[blockID].internal_blocks[i]; 
+ 			//printf("i: %d\n",i);
+@@ -3348,7 +3348,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		//debug code
+ 		//first off, all tags should be findable
+-		for (int i = warpID; i< BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i< BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+ 
+@@ -3389,7 +3389,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		#endif
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			//global buffer blockID*BLOCKS_PER_THREAD_BLOCK + i
+ 
+@@ -3425,7 +3425,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 		//anyone remaining should only be in secondary bucket?
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+@@ -3480,7 +3480,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 		#endif
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+ 
+@@ -3537,7 +3537,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		//second set of queries
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+@@ -3587,7 +3587,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		#endif
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			//this version does not yet support updating the counts.
+ 			int new_counter = blocks[blockID].internal_blocks[i].dump_buffer_compress(block.internal_blocks[i].tags, block_counters[blockID*BLOCKS_PER_THREAD_BLOCK+i], warpID, threadID, dividing_line);
+@@ -3636,7 +3636,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			block.internal_blocks[i] = blocks[blockID].internal_blocks[i]; 
+ 			//printf("i: %d\n",i);
+@@ -3647,7 +3647,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		__syncthreads();
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			//global buffer blockID*BLOCKS_PER_THREAD_BLOCK + i
+ 
+@@ -3664,7 +3664,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 		}
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+ 
+@@ -3724,7 +3724,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			block.internal_blocks[i] = blocks[blockID].internal_blocks[i]; 
+ 			//printf("i: %d\n",i);
+@@ -3735,7 +3735,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 
+ 		__syncthreads();
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			//global buffer blockID*BLOCKS_PER_THREAD_BLOCK + i
+ 
+@@ -3750,7 +3750,7 @@ __device__ void dump_all_buffers_into_local_block(thread_team_block<block_type>
+ 		}
+ 
+ 
+-		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=WARPS_PER_BLOCK){
++		for (int i = warpID; i < BLOCKS_PER_THREAD_BLOCK; i+=TCF_WARPS_PER_BLOCK){
+ 
+ 			uint64_t global_buffer = blockID*BLOCKS_PER_THREAD_BLOCK+i;
+ 
+diff --git a/bulk-tcf/include/bulk_tcf_metadata.cuh b/bulk-tcf/include/bulk_tcf_metadata.cuh
+index 061fb07..d27978a 100644
+--- a/bulk-tcf/include/bulk_tcf_metadata.cuh
++++ b/bulk-tcf/include/bulk_tcf_metadata.cuh
+@@ -16,13 +16,13 @@
+ 
+ 
+ //number of warps launched per grid block
+-// #define WARPS_PER_BLOCK 16
+-// #define BLOCK_SIZE (WARPS_PER_BLOCK * 32)
++// #define TCF_WARPS_PER_BLOCK 16
++// #define BLOCK_SIZE (TCF_WARPS_PER_BLOCK * 32)
+ 
+ // #define BLOCKS_PER_THREAD_BLOCK 128
+ 
+-#define WARPS_PER_BLOCK 16
+-#define BLOCK_SIZE (WARPS_PER_BLOCK * 32)
++#define TCF_WARPS_PER_BLOCK 16
++#define BLOCK_SIZE (TCF_WARPS_PER_BLOCK * 32)
+ 
+ #define BLOCKS_PER_THREAD_BLOCK 64
+ 
+diff --git a/bulk-tcf/include/templated_block.cuh b/bulk-tcf/include/templated_block.cuh
+index 0a28071..eb7ce44 100644
+--- a/bulk-tcf/include/templated_block.cuh
++++ b/bulk-tcf/include/templated_block.cuh
+@@ -88,13 +88,13 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 	__device__ void dump_all_buffers_sorted_smol(Tag_type * global_buffer, int buffer_count, Tag_type * primary, int primary_nitems, Tag_type * secondary, int secondary_nitems, int teamID, int warpID){
+ 
+-		__shared__ int buffer_counters [WARPS_PER_BLOCK*32];
++		__shared__ int buffer_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		__shared__ int primary_counters [WARPS_PER_BLOCK*32];
++		__shared__ int primary_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		__shared__ int secondary_counters [WARPS_PER_BLOCK*32];
++		__shared__ int secondary_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		__shared__ int merged_counters[WARPS_PER_BLOCK*32];
++		__shared__ int merged_counters[TCF_WARPS_PER_BLOCK*32];
+ 
+ 		#if DEBUG_ASSERTS
+ 
+@@ -110,13 +110,13 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 	__device__ void dump_all_buffers_sorted(Tag_type * global_buffer, int buffer_count, Tag_type * primary, int primary_nitems, Tag_type * secondary, const int secondary_nitems, const int teamID, const int warpID, uint64_t dividing_line){
+ 
+-		__shared__ int buffer_counters [WARPS_PER_BLOCK*32];
++		__shared__ int buffer_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		__shared__ int primary_counters [WARPS_PER_BLOCK*32];
++		__shared__ int primary_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		__shared__ int secondary_counters [WARPS_PER_BLOCK*32];
++		__shared__ int secondary_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+-		//__shared__ int merged_counters[WARPS_PER_BLOCK*32];
++		//__shared__ int merged_counters[TCF_WARPS_PER_BLOCK*32];
+ 
+ 
+ 		#if DEBUG_ASSERTS
+@@ -189,7 +189,7 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 			#if DEBUG_ASSERTS
+ 
+-			assert(teamID*32 + index < 32*WARPS_PER_BLOCK);
++			assert(teamID*32 + index < 32*TCF_WARPS_PER_BLOCK);
+ 
+ 			#endif
+ 
+@@ -211,7 +211,7 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 			#if DEBUG_ASSERTS
+ 
+-			assert(teamID*32 + index < 32*WARPS_PER_BLOCK);
++			assert(teamID*32 + index < 32*TCF_WARPS_PER_BLOCK);
+ 			
+ 			#endif
+ 
+@@ -233,7 +233,7 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 			#if DEBUG_ASSERTS
+ 
+-			assert(teamID*32 + index < 32*WARPS_PER_BLOCK);
++			assert(teamID*32 + index < 32*TCF_WARPS_PER_BLOCK);
+ 			
+ 			#endif
+ 
+@@ -490,14 +490,14 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 		//generate start and end zone for every thread.
+ 
+-		__shared__ int buffer_counters [WARPS_PER_BLOCK*32];
++		__shared__ int buffer_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+ 		//output counter not needed.
+-		//__shared__ int output_counters [WARPS_PER_BLOCK*32];
++		//__shared__ int output_counters [TCF_WARPS_PER_BLOCK*32];
+ 
+ 	
+ 
+-		//__shared__ int merged_counters[WARPS_PER_BLOCK*32];
++		//__shared__ int merged_counters[TCF_WARPS_PER_BLOCK*32];
+ 		//start of merge
+ 
+ 
+@@ -526,7 +526,7 @@ struct __attribute__ ((__packed__)) templated_block {
+ 
+ 			#if DEBUG_ASSERTS
+ 
+-			assert(teamID*32 + warpID < 32*WARPS_PER_BLOCK);
++			assert(teamID*32 + warpID < 32*TCF_WARPS_PER_BLOCK);
+ 			
+ 			#endif
+ 

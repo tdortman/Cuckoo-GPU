@@ -1,13 +1,15 @@
 #include <benchmark/benchmark.h>
-#include <cuckoofilter.h>
 #include <cuda_runtime_api.h>
+#include <thrust/device_ptr.h>
 #include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
+#include <thrust/remove.h>
+#include <thrust/sort.h>
+#include <bulk_tcf_host.cuh>
 #include <cstdint>
 #include <CuckooFilter.cuh>
-#include <cuco/bloom_filter.cuh>
-#include <cuco/utility/cuda_thread_scope.cuh>
 #include <cuda/std/cstdint>
 #include <hash_strategies.cuh>
 #include <helpers.cuh>
@@ -16,15 +18,10 @@
 
 namespace bm = benchmark;
 
-constexpr double TARGET_LOAD_FACTOR = 0.95;
+constexpr double TARGET_LOAD_FACTOR = 0.85;
+constexpr double TCF_LOAD_FACTOR = 0.85;
 using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
-
-template <typename Filter>
-size_t cucoNumBlocks(size_t n) {
-    constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
-
-    return (n * Config::bitsPerTag) / (Filter::words_per_block * bitsPerWord);
-}
+using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 
 static void CF_Insert(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
@@ -94,62 +91,6 @@ static void CF_Delete(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void BBF_Insert(bm::State& state) {
-    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
-
-    using BloomFilter = cuco::bloom_filter<uint64_t>;
-
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
-
-    thrust::device_vector<uint64_t> d_keys(n);
-    generateKeysGPU(d_keys);
-    BloomFilter filter(numBlocks);
-
-    size_t filterMemory = filter.block_extent() * BloomFilter::words_per_block *
-                          sizeof(typename BloomFilter::word_type);
-
-    for (auto _ : state) {
-        state.PauseTiming();
-        filter.clear();
-        state.ResumeTiming();
-
-        filter.add(d_keys.begin(), d_keys.end());
-        cudaDeviceSynchronize();
-    }
-
-    setCommonCounters(state, filterMemory, n);
-}
-
-static void BBF_Query(bm::State& state) {
-    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
-
-    using BloomFilter = cuco::bloom_filter<uint64_t>;
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
-
-    thrust::device_vector<uint64_t> d_keys(n);
-    generateKeysGPU(d_keys);
-    BloomFilter filter(numBlocks);
-
-    thrust::device_vector<uint8_t> d_output(n);
-
-    filter.add(d_keys.begin(), d_keys.end());
-
-    size_t filterMemory = filter.block_extent() * BloomFilter::words_per_block *
-                          sizeof(typename BloomFilter::word_type);
-
-    for (auto _ : state) {
-        filter.contains(
-            d_keys.begin(),
-            d_keys.end(),
-            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
-        );
-        cudaDeviceSynchronize();
-        bm::DoNotOptimize(d_output.data().get());
-    }
-
-    setCommonCounters(state, filterMemory, n);
-}
-
 static void CF_InsertAndQuery(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -206,42 +147,7 @@ static void CF_InsertQueryDelete(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void BBF_InsertAndQuery(bm::State& state) {
-    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
-
-    using BloomFilter = cuco::bloom_filter<uint64_t>;
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
-
-    thrust::device_vector<uint64_t> d_keys(n);
-    generateKeysGPU(d_keys);
-    thrust::device_vector<uint8_t> d_output(n);
-
-    BloomFilter filter(numBlocks);
-
-    size_t filterMemory = filter.block_extent() * BloomFilter::words_per_block *
-                          sizeof(typename BloomFilter::word_type);
-
-    for (auto _ : state) {
-        state.PauseTiming();
-        filter.clear();
-        state.ResumeTiming();
-
-        filter.add(d_keys.begin(), d_keys.end());
-        filter.contains(
-            d_keys.begin(),
-            d_keys.end(),
-            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
-        );
-
-        cudaDeviceSynchronize();
-
-        bm::DoNotOptimize(d_output.data().get());
-    }
-
-    setCommonCounters(state, filterMemory, n);
-}
-
-static void CF_FalsePositiveRate(bm::State& state) {
+static void CF_FPR(bm::State& state) {
     auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -293,21 +199,181 @@ static void CF_FalsePositiveRate(bm::State& state) {
     );
 }
 
-static void BBF_FalsePositiveRate(bm::State& state) {
-    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
+static void TCF_Insert(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
 
-    using BloomFilter = cuco::bloom_filter<uint64_t>;
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+    thrust::device_vector<uint64_t> d_keys(n);
+    generateKeysGPU(d_keys);
+
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+
+    size_t filterMemory = capacity * sizeof(uint16_t);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        TCFType* filter = TCFType::host_build_tcf(capacity);
+        cudaMemset(d_misses, 0, sizeof(uint64_t));
+        state.ResumeTiming();
+
+        filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
+        cudaDeviceSynchronize();
+
+        state.PauseTiming();
+        TCFType::host_free_tcf(filter);
+        state.ResumeTiming();
+    }
+
+    cudaFree(d_misses);
+    setCommonCounters(state, filterMemory, n);
+}
+
+static void TCF_Query(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
+
+    thrust::device_vector<uint64_t> d_keys(n);
+    generateKeysGPU(d_keys);
+
+    TCFType* filter = TCFType::host_build_tcf(capacity);
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+    cudaMemset(d_misses, 0, sizeof(uint64_t));
+
+    filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
+
+    size_t filterMemory = capacity * sizeof(uint16_t);
+
+    for (auto _ : state) {
+        bool* d_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);
+        cudaDeviceSynchronize();
+        bm::DoNotOptimize(d_output);
+        cudaFree(d_output);
+    }
+
+    cudaFree(d_misses);
+    TCFType::host_free_tcf(filter);
+    setCommonCounters(state, filterMemory, n);
+}
+
+static void TCF_Delete(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
+
+    thrust::device_vector<uint64_t> d_keys(n);
+    generateKeysGPU(d_keys);
+
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+
+    size_t filterMemory = capacity * sizeof(uint16_t);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        TCFType* filter = TCFType::host_build_tcf(capacity);
+        cudaMemset(d_misses, 0, sizeof(uint64_t));
+        filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
+        state.ResumeTiming();
+
+        bool* d_output = filter->bulk_delete(thrust::raw_pointer_cast(d_keys.data()), n);
+        cudaDeviceSynchronize();
+
+        bm::DoNotOptimize(d_output);
+
+        state.PauseTiming();
+        cudaFree(d_output);
+        TCFType::host_free_tcf(filter);
+        state.ResumeTiming();
+    }
+
+    cudaFree(d_misses);
+    setCommonCounters(state, filterMemory, n);
+}
+
+static void TCF_InsertAndQuery(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
+
+    thrust::device_vector<uint64_t> d_keys(n);
+    generateKeysGPU(d_keys);
+
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+
+    size_t filterMemory = capacity * sizeof(uint16_t);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        TCFType* filter = TCFType::host_build_tcf(capacity);
+        cudaMemset(d_misses, 0, sizeof(uint64_t));
+        state.ResumeTiming();
+
+        filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
+        bool* d_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);
+
+        cudaDeviceSynchronize();
+
+        bm::DoNotOptimize(d_output);
+
+        state.PauseTiming();
+        cudaFree(d_output);
+        TCFType::host_free_tcf(filter);
+        state.ResumeTiming();
+    }
+
+    cudaFree(d_misses);
+    setCommonCounters(state, filterMemory, n);
+}
+
+static void TCF_InsertQueryDelete(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
+
+    thrust::device_vector<uint64_t> d_keys(n);
+    generateKeysGPU(d_keys);
+
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+
+    size_t filterMemory = capacity * sizeof(uint16_t);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        TCFType* filter = TCFType::host_build_tcf(capacity);
+        cudaMemset(d_misses, 0, sizeof(uint64_t));
+        state.ResumeTiming();
+
+        filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
+        bool* d_query_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);
+        bool* d_delete_output = filter->bulk_delete(thrust::raw_pointer_cast(d_keys.data()), n);
+
+        cudaDeviceSynchronize();
+
+        bm::DoNotOptimize(d_query_output);
+        bm::DoNotOptimize(d_delete_output);
+
+        state.PauseTiming();
+        cudaFree(d_query_output);
+        cudaFree(d_delete_output);
+        TCFType::host_free_tcf(filter);
+        state.ResumeTiming();
+    }
+
+    cudaFree(d_misses);
+    setCommonCounters(state, filterMemory, n);
+}
+
+static void TCF_FPR(bm::State& state) {
+    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TCF_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU<uint64_t>(d_keys, UINT32_MAX);
 
-    BloomFilter filter(numBlocks);
-    filter.add(d_keys.begin(), d_keys.end());
+    TCFType* filter = TCFType::host_build_tcf(capacity);
+    uint64_t* d_misses;
+    cudaMalloc(&d_misses, sizeof(uint64_t));
+    cudaMemset(d_misses, 0, sizeof(uint64_t));
+
+    filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);
-    thrust::device_vector<uint8_t> d_output(fprTestSize);
 
     thrust::transform(
         thrust::counting_iterator<size_t>(0),
@@ -323,17 +389,33 @@ static void BBF_FalsePositiveRate(bm::State& state) {
         }
     );
 
-    size_t filterMemory = filter.block_extent() * BloomFilter::words_per_block *
-                          sizeof(typename BloomFilter::word_type);
+    size_t filterMemory = capacity * sizeof(uint16_t);
 
     for (auto _ : state) {
-        filter.contains(d_neverInserted.begin(), d_neverInserted.end(), d_output.begin());
+        bool* d_output =
+            filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), fprTestSize);
         cudaDeviceSynchronize();
-        bm::DoNotOptimize(d_output.data().get());
+
+        state.PauseTiming();
+        thrust::device_ptr<bool> d_output_ptr(d_output);
+        size_t falsePositives = thrust::reduce(
+            d_output_ptr, d_output_ptr + fprTestSize, 0ULL, cuda::std::plus<size_t>()
+        );
+        cudaFree(d_output);
+        state.ResumeTiming();
+
+        bm::DoNotOptimize(falsePositives);
     }
 
+    // Calculate FPR for the counter
+    bool* d_output =
+        filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), fprTestSize);
+    cudaDeviceSynchronize();
+    thrust::device_ptr<bool> d_output_ptr(d_output);
     size_t falsePositives =
-        thrust::reduce(d_output.begin(), d_output.end(), 0ULL, cuda::std::plus<size_t>());
+        thrust::reduce(d_output_ptr, d_output_ptr + fprTestSize, 0ULL, cuda::std::plus<size_t>());
+    cudaFree(d_output);
+
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize);
 
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * fprTestSize));
@@ -347,21 +429,25 @@ static void BBF_FalsePositiveRate(bm::State& state) {
     state.counters["memory_bytes"] = bm::Counter(
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
+
+    cudaFree(d_misses);
+    TCFType::host_free_tcf(filter);
 }
 
 BENCHMARK(CF_Insert)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
-BENCHMARK(BBF_Insert)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(TCF_Insert)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
 
 BENCHMARK(CF_Query)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
-BENCHMARK(BBF_Query)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(TCF_Query)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
 
 BENCHMARK(CF_Delete)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(TCF_Delete)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
 
 BENCHMARK(CF_InsertAndQuery)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
-BENCHMARK(BBF_InsertAndQuery)
+BENCHMARK(TCF_InsertAndQuery)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
@@ -370,14 +456,12 @@ BENCHMARK(CF_InsertQueryDelete)
     ->RangeMultiplier(2)
     ->Range(1 << 16, 1ULL << 28)
     ->Unit(bm::kMillisecond);
+BENCHMARK(TCF_InsertQueryDelete)
+    ->RangeMultiplier(2)
+    ->Range(1 << 16, 1ULL << 28)
+    ->Unit(bm::kMillisecond);
 
-BENCHMARK(CF_FalsePositiveRate)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
-BENCHMARK(BBF_FalsePositiveRate)
-    ->RangeMultiplier(2)
-    ->Range(1 << 16, 1ULL << 28)
-    ->Unit(bm::kMillisecond);
+BENCHMARK(CF_FPR)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
+BENCHMARK(TCF_FPR)->RangeMultiplier(2)->Range(1 << 16, 1ULL << 28)->Unit(bm::kMillisecond);
 
 BENCHMARK_MAIN();
