@@ -241,7 +241,7 @@ static void GPU_CF_FalsePositiveRate(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU<uint64_t>(d_keys, UINT32_MAX);
 
-    CuckooFilter<Config> filter(capacity);
+    CuckooFilter<FPRConfig> filter(capacity);
     adaptiveInsert(filter, d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));

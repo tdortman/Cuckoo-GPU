@@ -6,26 +6,40 @@
 #include <thrust/random.h>
 #include <thrust/transform.h>
 #include <cstdint>
+#include <CuckooFilter.cuh>
 #include <fstream>
 #include <hash_strategies.cuh>
 #include <limits>
 #include <random>
 #include <string>
-#include <CuckooFilter.cuh>
-
-constexpr size_t SORTED_INSERT_THRESHOLD = 1ULL << 25;
 
 template <typename ConfigType>
 std::pair<size_t, size_t> calculateCapacityAndSize(size_t capacity, double loadFactor) {
     return {capacity, capacity * loadFactor};
 }
 
-template <typename FilterConfig, typename KeyType>
-size_t adaptiveInsert(
+inline size_t getGPUL2CacheSize() {
+    static size_t cachedSize = []() {
+        int device;
+        cudaGetDevice(&device);
+
+        int l2CacheSize;
+        cudaDeviceGetAttribute(&l2CacheSize, cudaDevAttrL2CacheSize, device);
+
+        return static_cast<size_t>(l2CacheSize);
+    }();
+
+    return cachedSize;
+}
+
+template <typename FilterConfig>
+inline size_t adaptiveInsert(
     CuckooFilter<FilterConfig>& filter,
-    thrust::device_vector<KeyType>& d_keys
+    thrust::device_vector<typename FilterConfig::KeyType>& d_keys
 ) {
-    if (d_keys.size() < SORTED_INSERT_THRESHOLD) {
+    static size_t threshold = getGPUL2CacheSize() / sizeof(typename FilterConfig::KeyType);
+
+    if (d_keys.size() < threshold) {
         return filter.insertMany(d_keys);
     } else {
         return filter.insertManySorted(d_keys);

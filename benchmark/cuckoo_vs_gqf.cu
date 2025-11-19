@@ -161,12 +161,13 @@ static void CF_InsertQueryDelete(bm::State& state) {
 }
 
 static void CF_FalsePositiveRate(bm::State& state) {
-    auto [capacity, n] = calculateCapacityAndSize<Config>(state.range(0), TARGET_LOAD_FACTOR);
+    using FPRConfig = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+    auto [capacity, n] = calculateCapacityAndSize<FPRConfig>(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys, static_cast<uint64_t>(UINT16_MAX));
 
-    CuckooFilter<Config> filter(capacity);
+    CuckooFilter<FPRConfig> filter(capacity);
     adaptiveInsert(filter, d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
