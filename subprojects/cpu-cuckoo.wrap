@@ -2,7 +2,8 @@
 url = https://github.com/efficient/cuckoofilter.git
 revision = 917583d6abef692dfa8e14453bd77d6e0b61eef3
 depth = 1
-diff_files = bad-printutil.patch,meson-build.patch
+diff_files = bad-printutil.patch
+patch_directory = cpu-cuckoo
 
 [provide]
 dependency_names = cpu-cuckoo

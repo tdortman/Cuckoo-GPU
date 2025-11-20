@@ -7,6 +7,7 @@ build
 !/subprojects/packagefiles
 !/subprojects/*.wrap
 /subprojects/moderngpu.wrap
+/subprojects/openssl.wrap
 *.*-rep
 *.sqlite
 *.html

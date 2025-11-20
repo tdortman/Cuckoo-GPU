@@ -18,10 +18,11 @@ cuda_args = [
     '-gencode=arch=compute_75,code=compute_75',
 ]
 
+cli11_dep = subproject('cli11').get_variable('CLI11_dep')
+
 includes = ['./include']
-deps = [
-    dependency('CLI11', required: true),
-]
+deps = [cli11_dep]
+
 
 executable(
     'cuckoo-filter-ipc',
@@ -64,9 +65,9 @@ if nccl_dep.found()
 endif
 
 if get_option('BUILD_BENCHMARKS') == true
-    benchmark_dep = dependency('benchmark', required: true)
-    benchmark_main_dep = dependency('benchmark_main', required: true)
-    cpu_cuckoo_dep = dependency('cpu-cuckoo', fallback: ['cpu-cuckoo', 'cpu_cuckoo_dep'])
+    benchmark_dep = subproject('google-benchmark').get_variable('google_benchmark_dep')
+    benchmark_main_dep = subproject('google-benchmark').get_variable('google_benchmark_main_dep')
+    cpu_cuckoo_dep = subproject('cpu-cuckoo').get_variable('cpu_cuckoo_dep')
 
     cmake = import('cmake')
 
@@ -92,7 +93,7 @@ if get_option('BUILD_BENCHMARKS') == true
     partitioned_sub = cmake.subproject('partitioned-filters', options: partitioned_opts)
     partitioned_dep = partitioned_sub.dependency('filters')
 
-    gqf_dep = dependency('quotient-filters', fallback: ['quotient-filters', 'gqf_dep'])
+    gqf_dep = subproject('quotient-filters').get_variable('gqf_dep')
 
     tcf_opts = cmake.subproject_options()
     tcf_opts.add_cmake_defines(
@@ -174,8 +175,8 @@ if get_option('BUILD_BENCHMARKS') == true
 endif
 
 if get_option('BUILD_TESTS') == true
-    gtest_dep = dependency('gtest', required: true)
-    gtest_main_dep = dependency('gtest_main', required: true)
+    gtest_dep = subproject('gtest').get_variable('gtest_dep')
+    gtest_main_dep = subproject('gtest').get_variable('gtest_main_dep')
 
     test_exe = executable(
         'test-cuckoo-filter',
