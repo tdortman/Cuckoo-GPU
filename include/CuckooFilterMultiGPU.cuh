@@ -565,4 +565,12 @@ class CuckooFilterMultiGPU {
         });
         return total.load();
     }
+
+    [[nodiscard]] size_t sizeInBytes() const {
+        std::atomic<size_t> total(0);
+        parallelForGPUs([&](size_t i) {
+            total.fetch_add(filters[i]->sizeInBytes(), std::memory_order_relaxed);
+        });
+        return total.load();
+    }
 };

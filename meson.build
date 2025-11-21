@@ -171,6 +171,17 @@ if get_option('BUILD_BENCHMARKS') == true
         cuda_args: cuda_args + ['-w'],
         install: false,
     )
+
+    if nccl_dep.found()
+        executable(
+            'benchmark-cuckoo-single-vs-multi-gpu',
+            './benchmark/cuckoo_single_vs_multi_gpu.cu',
+            dependencies: bench_deps + [nccl_dep],
+            include_directories: includes,
+            cuda_args: cuda_args,
+            install: false,
+        )
+    endif
 endif
 
 if get_option('BUILD_TESTS') == true
