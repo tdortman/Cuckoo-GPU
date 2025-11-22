@@ -53,7 +53,7 @@ def main():
         size_str = parts[1]
 
         suffix = base_name.rsplit("_", 1)[-1]
-        if not re.fullmatch(r"(?:Query|Insert)(?:AddSub)?(<\d+>)?", suffix):
+        if not re.fullmatch(r"(?:Query|Insert|Delete)(?:AddSub)?(<\d+>)?", suffix):
             continue
 
         try:
