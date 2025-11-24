@@ -31,14 +31,14 @@ enum class RequestType {
  * through IPC, including memory handles for keys and results.
  */
 struct FilterRequest {
-    RequestType type;
-    uint32_t count;                   // Number of keys in this batch
-    cudaIpcMemHandle_t keysHandle;    // optional handle to device memory containing keys
-    cudaIpcMemHandle_t outputHandle;  // optional handle for results (for lookup/deletion)
-    uint64_t requestId;               // Unique request identifier
-    std::atomic<bool> completed;      // Completion flag
-    std::atomic<bool> cancelled;      // Cancellation flag (for force shutdown)
-    size_t result;                    // Updated number of occupied slots after insert/delete
+    RequestType type;                 ///< Type of request
+    uint32_t count;                   ///< Number of keys in this batch
+    cudaIpcMemHandle_t keysHandle;    ///< optional handle to device memory containing keys
+    cudaIpcMemHandle_t outputHandle;  ///< optional handle for results (for lookup/deletion)
+    uint64_t requestId;               ///< Unique request identifier
+    std::atomic<bool> completed;      ///< Completion flag
+    std::atomic<bool> cancelled;      ///< Cancellation flag (for force shutdown)
+    size_t result;                    ///< Updated number of occupied slots after insert/delete
 };
 
 /**
@@ -52,15 +52,15 @@ struct SharedQueue {
     static constexpr size_t QUEUE_SIZE = 256;
     static_assert(powerOfTwo(QUEUE_SIZE), "queue size must be a power of two");
 
-    std::atomic<uint64_t> head;  // Producer index
-    std::atomic<uint64_t> tail;  // Consumer index
-    sem_t producerSem;           // Semaphore for available slots
-    sem_t consumerSem;           // Semaphore for pending requests
+    std::atomic<uint64_t> head;  ///< Producer index
+    std::atomic<uint64_t> tail;  ///< Consumer index
+    sem_t producerSem;           ///< Semaphore for available slots
+    sem_t consumerSem;           ///< Semaphore for pending requests
 
     FilterRequest requests[QUEUE_SIZE];
 
-    std::atomic<bool> initialised;
-    std::atomic<bool> shuttingDown;
+    std::atomic<bool> initialised;   ///< Whether the queue has been initialised
+    std::atomic<bool> shuttingDown;  ///< Whether the queue is shutting down
 
     /**
      * @brief Attempts to acquire a slot in the queue for a new request.
@@ -190,12 +190,12 @@ struct SharedQueue {
 template <typename Config>
 class CuckooFilterIPCServer {
    private:
-    CuckooFilter<Config>* filter;
-    SharedQueue* queue;
-    int shmFd;
-    std::string shmName;
-    bool running;
-    std::thread workerThread;
+    CuckooFilter<Config>* filter;  ///< Pointer to the Cuckoo Filter instance
+    SharedQueue* queue;            ///< Pointer to the shared queue
+    int shmFd;                     ///< File descriptor for the shared memory segment
+    std::string shmName;           ///< Name of the shared memory segment
+    bool running;                  ///< Whether the server is running
+    std::thread workerThread;      ///< Worker thread for processing requests
 
     void processRequests() {
         bool shutdownReceived = false;
@@ -404,12 +404,16 @@ class CuckooFilterIPCServer {
         if (force) {
             size_t cancelled = queue->cancelPendingRequests();
             if (cancelled > 0) {
-                std::cout << std::format("Force shutdown: cancelled {} pending requests\n", cancelled);
+                std::cout << std::format(
+                    "Force shutdown: cancelled {} pending requests\n", cancelled
+                );
             }
         } else {
             size_t pending = queue->pendingRequests();
             if (pending > 0) {
-                std::cout << std::format("Graceful shutdown: draining {} pending requests...\n", pending);
+                std::cout << std::format(
+                    "Graceful shutdown: draining {} pending requests...\n", pending
+                );
             }
         }
 
@@ -452,10 +456,10 @@ class CuckooFilterIPCServer {
 template <typename Config>
 class CuckooFilterIPCClient {
    private:
-    SharedQueue* queue;
-    int shmFd;
-    std::string shmName;
-    uint64_t nextRequestId;
+    SharedQueue* queue;      ///< Pointer to the shared queue
+    int shmFd;               ///< File descriptor for the shared memory segment
+    std::string shmName;     ///< Name of the shared memory segment
+    uint64_t nextRequestId;  ///< Next request identifier
 
    public:
     using T = typename Config::KeyType;
@@ -622,7 +626,7 @@ class CuckooFilterIPCClient {
 template <typename Config>
 class CuckooFilterIPCClientThrust {
    private:
-    CuckooFilterIPCClient<Config> client;
+    CuckooFilterIPCClient<Config> client;  ///< The IPC client instance
 
    public:
     using T = typename Config::KeyType;

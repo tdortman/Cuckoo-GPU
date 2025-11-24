@@ -282,11 +282,12 @@ struct CuckooFilter {
         }
     };
 
-    size_t numBuckets;
-    Bucket* d_buckets;
-    cuda::std::atomic<size_t>* d_numOccupied{};
+    size_t numBuckets;  ///< Number of buckets in the filter
+    Bucket* d_buckets;  ///< Pointer to the device memory for the buckets
+    cuda::std::atomic<size_t>*
+        d_numOccupied{};  ///< Pointer to the device memory for the occupancy counter
 
-    size_t h_numOccupied = 0;
+    size_t h_numOccupied = 0;  ///< Number of occupied buckets in the filter
 
     template <typename H>
     static __host__ __device__ uint64_t hash64(const H& key) {
