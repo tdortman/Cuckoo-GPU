@@ -81,7 +81,7 @@ class IPCCFFixture : public benchmark::Fixture {
         d_output.resize(n);
         generateKeysGPU(d_keys);
 
-        client = std::make_unique<CuckooFilterIPCClientThrust<Config>>(SERVER_NAME);
+        client = std::make_unique<CuckooFilterIPCClient<Config>>(SERVER_NAME);
 
         size_t requiredBuckets = std::ceil(static_cast<double>(capacity) / Config::bucketSize);
         size_t numBuckets = 1ULL << static_cast<size_t>(std::ceil(std::log2(requiredBuckets)));
@@ -106,7 +106,7 @@ class IPCCFFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilterIPCClientThrust<Config>> client;
+    std::unique_ptr<CuckooFilterIPCClient<Config>> client;
     Timer timer;
 };
 
