@@ -40,82 +40,9 @@ void runClient(const std::string& name, int clientId, size_t numKeys) {
     std::cout << std::format("Client {} starting...\n", clientId);
 
     try {
-        // Give the server some time to initialise
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         CuckooFilterIPCClient<Config> client(name);
-
-        std::vector<uint64_t> h_keys(numKeys);
-        std::random_device rd;
-        std::mt19937_64 gen(rd() + clientId);
-        std::uniform_int_distribution<uint64_t> dis(1, UINT32_MAX);
-        for (size_t i = 0; i < numKeys; i++) {
-            h_keys[i] = dis(gen);
-        }
-
-        uint64_t* d_keys;
-        bool* d_results;
-        CUDA_CALL(cudaMalloc(&d_keys, numKeys * sizeof(uint64_t)));
-        CUDA_CALL(cudaMalloc(&d_results, numKeys * sizeof(bool)));
-        CUDA_CALL(
-            cudaMemcpy(d_keys, h_keys.data(), numKeys * sizeof(uint64_t), cudaMemcpyHostToDevice)
-        );
-
-        auto start = std::chrono::high_resolution_clock::now();
-
-        size_t occupiedAfterInsert = client.insertMany(d_keys, numKeys);
-        std::cout << std::format(
-            "Client {} inserted {} keys (filter now has {} occupied slots)\n",
-            clientId,
-            numKeys,
-            occupiedAfterInsert
-        );
-
-        client.containsMany(d_keys, numKeys, d_results);
-
-        std::vector<uint8_t> h_results(numKeys);
-        CUDA_CALL(
-            cudaMemcpy(h_results.data(), d_results, numKeys * sizeof(bool), cudaMemcpyDeviceToHost)
-        );
-
-        size_t found = 0;
-        for (bool result : h_results) {
-            if (result) {
-                found++;
-            }
-        }
-        std::cout << std::format("Client {} found {}/{} keys\n", clientId, found, numKeys);
-
-        size_t deleteCount = numKeys / 2;
-        size_t occupiedAfterDelete = client.deleteMany(d_keys, deleteCount, d_results);
-
-        std::cout << std::format(
-            "Client {} deleted {} keys (filter now has {} occupied slots)\n",
-            clientId,
-            deleteCount,
-            occupiedAfterDelete
-        );
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-        std::cout << std::format("Client {} completed in {}ms\n", clientId, duration.count());
-
-        CUDA_CALL(cudaFree(d_keys));
-        CUDA_CALL(cudaFree(d_results));
-
-    } catch (const std::exception& e) {
-        std::cerr << std::format("Client {} error: {}\n", clientId, e.what());
-    }
-}
-
-void runClientThrust(const std::string& name, int clientId, size_t numKeys) {
-    std::cout << std::format("Thrust Client {} starting...\n", clientId);
-
-    try {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-        CuckooFilterIPCClientThrust<Config> client(name);
 
         thrust::host_vector<uint64_t> h_keys(numKeys);
         std::random_device rd;
@@ -133,7 +60,7 @@ void runClientThrust(const std::string& name, int clientId, size_t numKeys) {
         size_t occupiedAfterInsert = client.insertMany(d_keys);
 
         std::cout << std::format(
-            "Thrust Client {} inserted {} keys (filter now has {} occupied slots)\n",
+            "Client {} inserted {} keys (filter now has {} occupied slots)\n",
             clientId,
             numKeys,
             occupiedAfterInsert
@@ -148,7 +75,7 @@ void runClientThrust(const std::string& name, int clientId, size_t numKeys) {
                 found++;
             }
         }
-        std::cout << std::format("Thrust Client {} found {}/{} keys\n", clientId, found, numKeys);
+        std::cout << std::format("Client {} found {}/{} keys\n", clientId, found, numKeys);
 
         size_t deleteCount = numKeys / 2;
         thrust::device_vector<uint64_t> d_keysToDelete(
@@ -157,7 +84,7 @@ void runClientThrust(const std::string& name, int clientId, size_t numKeys) {
         size_t occupiedAfterDelete = client.deleteMany(d_keysToDelete);
 
         std::cout << std::format(
-            "Thrust Client {} deleted {} keys (filter now has {} occupied slots)\n",
+            "Client {} deleted {} keys (filter now has {} occupied slots)\n",
             clientId,
             deleteCount,
             occupiedAfterDelete
@@ -166,12 +93,10 @@ void runClientThrust(const std::string& name, int clientId, size_t numKeys) {
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-        std::cout << std::format(
-            "Thrust Client {} completed in {}ms\n", clientId, duration.count()
-        );
+        std::cout << std::format("Client {} completed in {}ms\n", clientId, duration.count());
 
     } catch (const std::exception& e) {
-        std::cerr << std::format("Thrust Client {} error: {}\n", clientId, e.what());
+        std::cerr << std::format("Client {} error: {}\n", clientId, e.what());
     }
 }
 
@@ -202,10 +127,6 @@ int main(int argc, char** argv) {
 
     clientCmd->add_option("name", serverName, "Server name to connect to")->required();
 
-    clientCmd->add_option("-t,--type", clientType, "Client type")
-        ->default_val("normal")
-        ->check(CLI::IsMember({"normal", "thrust"}));
-
     clientCmd->add_option("-n,--num-clients", numClients, "Number of concurrent clients")
         ->default_val(1)
         ->check(CLI::PositiveNumber);
@@ -230,11 +151,10 @@ int main(int argc, char** argv) {
         runServer(serverName, capacity, forceShutdown);
     } else if (*clientCmd) {
         size_t numKeys = (1ULL << clientCapacityExp) * targetLoadFactor;
-        auto clientFunc = (clientType == "normal") ? runClient : runClientThrust;
 
         std::vector<std::thread> clientThreads;
         for (int i = 0; i < numClients; i++) {
-            clientThreads.emplace_back(clientFunc, serverName, i, numKeys);
+            clientThreads.emplace_back(runClient, serverName, i, numKeys);
         }
 
         for (auto& thread : clientThreads) {

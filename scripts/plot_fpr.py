@@ -4,17 +4,21 @@
 # dependencies = [
 #   "matplotlib",
 #   "pandas",
+#   "typer",
 # ]
 # ///
-import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import typer
+
+app = typer.Typer(help="Plot false positive rate benchmark results")
 
 
-def normalize_benchmark_name(name: str):
+def normalize_benchmark_name(name: str) -> str:
     """Convert FixtureName/BenchmarkName/... to FixtureName_BenchmarkName/..."""
     parts = name.split("/")
     if len(parts) >= 2 and "Fixture" in parts[0]:
@@ -26,12 +30,40 @@ def normalize_benchmark_name(name: str):
     return "/".join(parts)
 
 
-def main():
+@app.command()
+def main(
+    csv_file: Path = typer.Argument(
+        "-",
+        help="Path to CSV file, or '-' to read from stdin (default: stdin)",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory for plots (default: build/)",
+    ),
+):
+    """
+    Generate false positive rate plots from benchmark CSV results.
+
+    Creates two plots: FPR percentage and total false positives count.
+
+    Examples:
+        cat results.csv | plot_fpr.py
+        plot_fpr.py < results.csv
+        plot_fpr.py results.csv
+        plot_fpr.py results.csv -o custom/dir
+    """
     try:
-        df = pd.read_csv(sys.stdin)
+        if str(csv_file) == "-":
+            import sys
+
+            df = pd.read_csv(sys.stdin)
+        else:
+            df = pd.read_csv(csv_file)
     except Exception as e:
-        print(f"Error parsing CSV: {e}", file=sys.stderr)
-        sys.exit(1)
+        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
     # Filter for median records only
     df = df[df["name"].str.endswith("_median")]
@@ -69,12 +101,17 @@ def main():
             continue
 
     if not fpr_data and not false_positives_data:
-        print("No false positive rate data found in csv", file=sys.stderr)
-        sys.exit(1)
+        typer.secho(
+            "No false positive rate data found in csv", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(1)
 
-    script_dir = Path(__file__).parent
-    build_dir = script_dir.parent / "build"
-    build_dir.mkdir(exist_ok=True)
+    # Determine output directory
+    if output_dir is None:
+        script_dir = Path(__file__).parent
+        output_dir = script_dir.parent / "build"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
 
@@ -126,10 +163,10 @@ def main():
         ax2.set_title("Total False Positives Count", fontsize=14)
 
     plt.tight_layout()
-    output_file = build_dir / "benchmark_false_positives.png"
+    output_file = output_dir / "benchmark_false_positives.png"
     plt.savefig(output_file, dpi=150)
-    print(f"False positive plot saved to {output_file}")
+    typer.secho(f"False positive plot saved to {output_file}", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":
-    main()
+    app()

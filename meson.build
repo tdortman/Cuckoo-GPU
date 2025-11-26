@@ -170,6 +170,16 @@ if get_option('BUILD_BENCHMARKS') == true
         install: false,
     )
 
+    executable(
+        'benchmark-load-factor',
+        './benchmark/load_factor_benchmark.cu',
+        dependencies: bench_deps + [cuco_dep, tcf_dep, partitioned_dep],
+        include_directories: includes,
+        cuda_args: cuda_args + ['-w'],
+        install: false,
+    )
+
+
     if nccl_dep.found()
         executable(
             'benchmark-cuckoo-single-vs-multi-gpu',

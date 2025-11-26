@@ -4,18 +4,22 @@
 # dependencies = [
 #   "matplotlib",
 #   "pandas",
+#   "typer",
 # ]
 # ///
-
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import typer
+
+app = typer.Typer(help="Plot memory usage benchmark results")
 
 
-def normalize_benchmark_name(name):
+def normalize_benchmark_name(name: str) -> str:
     """Convert FixtureName/BenchmarkName/... to FixtureName_BenchmarkName/..."""
     parts = name.split("/")
     if len(parts) >= 2 and "Fixture" in parts[0]:
@@ -27,12 +31,38 @@ def normalize_benchmark_name(name):
     return "/".join(parts)
 
 
-def main():
+@app.command()
+def main(
+    csv_file: Path = typer.Argument(
+        "-",
+        help="Path to CSV file, or '-' to read from stdin (default: stdin)",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory for plots (default: build/)",
+    ),
+):
+    """
+    Generate memory usage plots from benchmark CSV results.
+
+    Creates two plots: total memory usage and bits per item efficiency metric.
+
+    Examples:
+        cat results.csv | plot_memory.py
+        plot_memory.py < results.csv
+        plot_memory.py results.csv
+        plot_memory.py results.csv -o custom/dir
+    """
     try:
-        df = pd.read_csv(sys.stdin)
+        if str(csv_file) == "-":
+            df = pd.read_csv(sys.stdin)
+        else:
+            df = pd.read_csv(csv_file)
     except Exception as e:
-        print(f"Error parsing CSV: {e}", file=sys.stderr)
-        sys.exit(1)
+        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
     # Filter for median records only
     df = df[df["name"].str.endswith("_median")]
@@ -76,12 +106,15 @@ def main():
             continue
 
     if not memory_data and not bits_per_item_data:
-        print("No memory data found in JSON", file=sys.stderr)
-        sys.exit(1)
+        typer.secho("No memory data found in CSV", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
-    script_dir = Path(__file__).parent
-    build_dir = script_dir.parent / "build"
-    build_dir.mkdir(exist_ok=True)
+    # Determine output directory
+    if output_dir is None:
+        script_dir = Path(__file__).parent
+        output_dir = script_dir.parent / "build"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
 
@@ -136,10 +169,10 @@ def main():
 
     plt.tight_layout()
 
-    output_file = build_dir / "benchmark_memory.png"
+    output_file = output_dir / "benchmark_memory.png"
     plt.savefig(output_file, dpi=150)
-    print(f"Memory plot saved to {output_file}")
+    typer.secho(f"Memory plot saved to {output_file}", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":
-    main()
+    app()

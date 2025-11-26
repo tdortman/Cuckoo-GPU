@@ -2,22 +2,26 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "matplotlib",
-#     "pandas",
-#     "seaborn"
+#   "matplotlib",
+#   "pandas",
+#   "seaborn",
+#   "typer",
 # ]
 # ///
 import re
-import sys
 from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import typer
+
+app = typer.Typer(help="Plot bucket size benchmark results")
 
 
-def normalize_benchmark_name(name):
+def normalize_benchmark_name(name: str) -> str:
     """Convert FixtureName/BenchmarkName/... to FixtureName_BenchmarkName/..."""
     parts = name.split("/")
     if len(parts) >= 2 and "Fixture" in parts[0]:
@@ -29,14 +33,7 @@ def normalize_benchmark_name(name):
     return "/".join(parts)
 
 
-df = pd.read_csv(sys.stdin)
-
-# Filter for median records only and normalize names
-df = df[df["name"].str.endswith("_median")]
-df["name"] = df["name"].apply(normalize_benchmark_name)
-
-
-def parse_benchmark_name(name):
+def parse_benchmark_name(name: str) -> pd.Series:
     # Pattern: BS<BucketSize>_<Operation>/<InputSize>/min_time:<MinTime>/repeats:<Repetitions>_<stat>
     # Extract the operation and input size
     match = re.match(r"BS\d+_(\w+)/(\d+)", name)
@@ -53,34 +50,7 @@ def parse_benchmark_name(name):
     return pd.Series({"operation": None, "input_size": None, "exponent": None})
 
 
-parsed = df["name"].apply(parse_benchmark_name)
-df = pd.concat([df, parsed], axis=1)
-
-# bucket_size comes as float from json
-df["bucket_size"] = df["bucket_size"].astype(int)
-
-df_filtered = df[df["operation"].isin(["Insert", "Query"])].copy()
-
-df_filtered["time_ms"] = df_filtered["real_time"]
-df_filtered["throughput_mops"] = df_filtered["items_per_second"] / 1_000_000
-
-plt.style.use("default")
-plt.rcParams.update(
-    {
-        "font.size": 12,
-        "axes.labelsize": 14,
-        "axes.titlesize": 16,
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
-        "legend.fontsize": 12,
-        "figure.titlesize": 18,
-    }
-)
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
-
-
-def create_performance_heatmap(df, operation, ax):
+def create_performance_heatmap(df: pd.DataFrame, operation: str, ax):
     subset = df[df["operation"] == operation].copy()
 
     subset["normalized_time"] = subset.groupby("exponent")["time_ms"].transform(
@@ -110,22 +80,97 @@ def create_performance_heatmap(df, operation, ax):
     ax.set_yticklabels([f"$2^{{{int(exp)}}}$" for exp in pivot_table.index], rotation=0)
 
 
-create_performance_heatmap(df_filtered, "Insert", ax1)
-create_performance_heatmap(df_filtered, "Query", ax2)
+@app.command()
+def main(
+    csv_file: Path = typer.Argument(
+        "-",
+        help="Path to CSV file, or '-' to read from stdin (default: stdin)",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory for plots (default: build/)",
+    ),
+):
+    """
+    Generate bucket size performance heatmap plots from benchmark CSV results.
 
-script_dir = Path(__file__).parent
-build_dir = script_dir.parent / "build"
-build_dir.mkdir(exist_ok=True)
+    Shows normalized performance for Insert and Query operations across different
+    bucket sizes and input sizes.
 
-output_file = build_dir / "benchmark_bucket_size.png"
+    Examples:
+        cat results.csv | plot_bucket_size.py
+        plot_bucket_size.py < results.csv
+        plot_bucket_size.py results.csv
+        plot_bucket_size.py results.csv -o custom/dir
+    """
+    try:
+        if str(csv_file) == "-":
+            import sys
 
-plt.tight_layout()
-plt.savefig(
-    output_file,
-    dpi=300,
-    bbox_inches="tight",
-    facecolor="white",
-    edgecolor="none",
-)
+            df = pd.read_csv(sys.stdin)
+        else:
+            df = pd.read_csv(csv_file)
+    except Exception as e:
+        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
-print(f"Bucket size performance plot saved to {output_file}")
+    # Filter for median records only and normalize names
+    df = df[df["name"].str.endswith("_median")]
+    df["name"] = df["name"].apply(normalize_benchmark_name)
+
+    parsed = df["name"].apply(parse_benchmark_name)
+    df = pd.concat([df, parsed], axis=1)
+
+    # bucket_size comes as float from json
+    df["bucket_size"] = df["bucket_size"].astype(int)
+
+    df_filtered = df[df["operation"].isin(["Insert", "Query"])].copy()
+
+    df_filtered["time_ms"] = df_filtered["real_time"]
+    df_filtered["throughput_mops"] = df_filtered["items_per_second"] / 1_000_000
+
+    plt.style.use("default")
+    plt.rcParams.update(
+        {
+            "font.size": 12,
+            "axes.labelsize": 14,
+            "axes.titlesize": 16,
+            "xtick.labelsize": 12,
+            "ytick.labelsize": 12,
+            "legend.fontsize": 12,
+            "figure.titlesize": 18,
+        }
+    )
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
+
+    create_performance_heatmap(df_filtered, "Insert", ax1)
+    create_performance_heatmap(df_filtered, "Query", ax2)
+
+    # Determine output directory
+    if output_dir is None:
+        script_dir = Path(__file__).parent
+        output_dir = script_dir.parent / "build"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_file = output_dir / "benchmark_bucket_size.png"
+
+    plt.tight_layout()
+    plt.savefig(
+        output_file,
+        dpi=300,
+        bbox_inches="tight",
+        facecolor="white",
+        edgecolor="none",
+    )
+
+    typer.secho(
+        f"Bucket size performance plot saved to {output_file}", fg=typer.colors.GREEN
+    )
+
+
+if __name__ == "__main__":
+    app()

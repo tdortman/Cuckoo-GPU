@@ -573,6 +573,96 @@ class CuckooFilterIPCClient {
         }
     }
 
+#ifdef CUCKOO_FILTER_HAS_THRUST
+    /**
+     * @brief Inserts keys from a Thrust device vector.
+     * @param d_keys Vector of keys to insert.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertMany(const thrust::device_vector<T>& d_keys) {
+        return insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size());
+    }
+
+    /**
+     * @brief Checks for existence of keys in a Thrust device vector.
+     * @param d_keys Vector of keys to check.
+     * @param d_output Vector to store results (bool). Resized if necessary.
+     */
+    void
+    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        containsMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_output.data())
+        );
+    }
+
+    /**
+     * @brief Checks for existence of keys in a Thrust device vector (uint8_t output).
+     * @param d_keys Vector of keys to check.
+     * @param d_output Vector to store results (uint8_t). Resized if necessary.
+     */
+    void
+    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        containsMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
+        );
+    }
+
+    /**
+     * @brief Deletes keys in a Thrust device vector.
+     * @param d_keys Vector of keys to delete.
+     * @param d_output Vector to store results (bool). Resized if necessary.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t
+    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return deleteMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_output.data())
+        );
+    }
+
+    /**
+     * @brief Deletes keys in a Thrust device vector (uint8_t output).
+     * @param d_keys Vector of keys to delete.
+     * @param d_output Vector to store results (uint8_t). Resized if necessary.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t
+    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return deleteMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
+        );
+    }
+
+    /**
+     * @brief Deletes keys in a Thrust device vector without outputting results.
+     * @param d_keys Vector of keys to delete.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t deleteMany(const thrust::device_vector<T>& d_keys) {
+        return deleteMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr);
+    }
+#endif
+
    private:
     size_t submitRequest(RequestType type, const T* d_keys, size_t count, bool* d_output) {
         FilterRequest* req = queue->enqueue();
@@ -612,125 +702,3 @@ class CuckooFilterIPCClient {
         return req->result;
     }
 };
-
-#ifdef CUCKOO_FILTER_HAS_THRUST
-/**
- * @brief Thrust-compatible wrapper for the IPC Client.
- *
- * This class provides a convenient interface for using the IPC client
- * with Thrust vectors, automatically handling pointer casting and
- * vector resizing.
- *
- * @tparam Config The configuration structure for the Cuckoo Filter.
- */
-template <typename Config>
-class CuckooFilterIPCClientThrust {
-   private:
-    CuckooFilterIPCClient<Config> client;  ///< The IPC client instance
-
-   public:
-    using T = typename Config::KeyType;
-
-    /**
-     * @brief Constructs a new CuckooFilterIPCClientThrust.
-     * @param name Name of the shared memory segment.
-     */
-    explicit CuckooFilterIPCClientThrust(const std::string& name) : client(name) {
-    }
-
-    /**
-     * @brief Inserts keys from a Thrust device vector.
-     * @param d_keys Vector of keys to insert.
-     * @return size_t Total number of occupied slots.
-     */
-    size_t insertMany(const thrust::device_vector<T>& d_keys) {
-        return client.insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size());
-    }
-
-    /**
-     * @brief Checks for existence of keys in a Thrust device vector.
-     * @param d_keys Vector of keys to check.
-     * @param d_output Vector to store results (bool). Resized if necessary.
-     */
-    void
-    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
-        if (d_output.size() != d_keys.size()) {
-            d_output.resize(d_keys.size());
-        }
-        client.containsMany(
-            thrust::raw_pointer_cast(d_keys.data()),
-            d_keys.size(),
-            thrust::raw_pointer_cast(d_output.data())
-        );
-    }
-
-    /**
-     * @brief Checks for existence of keys in a Thrust device vector (uint8_t output).
-     * @param d_keys Vector of keys to check.
-     * @param d_output Vector to store results (uint8_t). Resized if necessary.
-     */
-    void
-    containsMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
-        if (d_output.size() != d_keys.size()) {
-            d_output.resize(d_keys.size());
-        }
-        client.containsMany(
-            thrust::raw_pointer_cast(d_keys.data()),
-            d_keys.size(),
-            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
-        );
-    }
-
-    /**
-     * @brief Deletes keys in a Thrust device vector.
-     * @param d_keys Vector of keys to delete.
-     * @param d_output Vector to store results (bool). Resized if necessary.
-     * @return size_t Total number of occupied slots.
-     */
-    size_t
-    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<bool>& d_output) {
-        if (d_output.size() != d_keys.size()) {
-            d_output.resize(d_keys.size());
-        }
-        return client.deleteMany(
-            thrust::raw_pointer_cast(d_keys.data()),
-            d_keys.size(),
-            thrust::raw_pointer_cast(d_output.data())
-        );
-    }
-
-    /**
-     * @brief Deletes keys in a Thrust device vector (uint8_t output).
-     * @param d_keys Vector of keys to delete.
-     * @param d_output Vector to store results (uint8_t). Resized if necessary.
-     * @return size_t Total number of occupied slots.
-     */
-    size_t
-    deleteMany(const thrust::device_vector<T>& d_keys, thrust::device_vector<uint8_t>& d_output) {
-        if (d_output.size() != d_keys.size()) {
-            d_output.resize(d_keys.size());
-        }
-        return client.deleteMany(
-            thrust::raw_pointer_cast(d_keys.data()),
-            d_keys.size(),
-            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
-        );
-    }
-
-    /**
-     * @brief Deletes keys in a Thrust device vector without outputting results.
-     * @param d_keys Vector of keys to delete.
-     * @return size_t Total number of occupied slots.
-     */
-    size_t deleteMany(const thrust::device_vector<T>& d_keys) {
-        return client.deleteMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr);
-    }
-
-    /**
-     * @brief Clears the filter.
-     */
-    void clear() {
-        client.clear();
-    }
-};
-#endif
