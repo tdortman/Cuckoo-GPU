@@ -156,9 +156,11 @@ def main(
                 )
 
             ax.set_xlabel("Filter Capacity (elements)", fontsize=14, fontweight="bold")
-            ax.set_ylabel(f"{metric_name} (% of Peak)", fontsize=14, fontweight="bold")
+            ax.set_ylabel(
+                f"{metric_name} Throughput (% of Peak)", fontsize=14, fontweight="bold"
+            )
             ax.set_title(
-                f"{metric_name} Comparison - {operation.capitalize()}",
+                f"{metric_name} Throughput Comparison - {operation.capitalize()}",
                 fontsize=16,
                 fontweight="bold",
                 pad=20,
