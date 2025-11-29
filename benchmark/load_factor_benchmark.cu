@@ -117,6 +117,8 @@ class BloomFilterFixture : public benchmark::Fixture {
         filter.reset();
         d_keys.clear();
         d_keys.shrink_to_fit();
+        d_keysNegative.clear();
+        d_keysNegative.shrink_to_fit();
         d_output.clear();
         d_output.shrink_to_fit();
     }
@@ -213,7 +215,9 @@ class PartitionedCFFixture : public benchmark::Fixture {
 
     void TearDown(const benchmark::State&) override {
         keys.clear();
+        keys.shrink_to_fit();
         keysNegative.clear();
+        keysNegative.shrink_to_fit();
     }
 
     void setCounters(benchmark::State& state, size_t filterMemory) const {
@@ -248,7 +252,9 @@ class CPUCuckooFilterFixture : public benchmark::Fixture {
 
     void TearDown(const benchmark::State&) override {
         keys.clear();
+        keys.shrink_to_fit();
         keysNegative.clear();
+        keysNegative.shrink_to_fit();
     }
 
     void setCounters(benchmark::State& state, size_t filterMemory) const {
