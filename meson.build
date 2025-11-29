@@ -180,6 +180,15 @@ if get_option('BUILD_BENCHMARKS') == true
     )
 
     executable(
+        'benchmark-fpr',
+        './benchmark/fpr_benchmark.cu',
+        dependencies: bench_deps + [cuco_dep, tcf_dep, partitioned_dep, cpu_cuckoo_dep],
+        include_directories: includes,
+        cuda_args: cuda_args + ['-w'],
+        install: false,
+    )
+
+    executable(
         'profiler-benchmark',
         './benchmark/profiler_benchmark.cu',
         dependencies: [cli11_dep, cuco_dep, tcf_dep, benchmark_dep],

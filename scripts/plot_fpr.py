@@ -15,157 +15,165 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import typer
 
-app = typer.Typer(help="Plot false positive rate benchmark results")
+app = typer.Typer(help="Plot FPR benchmark results")
 
 
-def normalize_benchmark_name(name: str) -> str:
-    """Convert FixtureName/BenchmarkName/... to FixtureName_BenchmarkName/..."""
-    parts = name.split("/")
-    if len(parts) >= 2 and "Fixture" in parts[0]:
-        # Convert "CFFixture/FPR/..." to "CF_FPR/..."
-        fixture_name = parts[0].replace("Fixture", "")
-        bench_name = parts[1]
-        parts[0] = f"{fixture_name}_{bench_name}"
-        parts.pop(1)  # Remove the benchmark name since it's now in parts[0]
-    return "/".join(parts)
+def extract_filter_type(name: str) -> Optional[str]:
+    """Extract filter type from benchmark name"""
+    if "GPUCF_FPR" in name:
+        return "Cuckoo Filter"
+    elif "CPUCF_FPR" in name:
+        return "CPU Cuckoo"
+    elif "Bloom_FPR" in name:
+        return "Bloom Filter"
+    elif "TCF_FPR" in name:
+        return "TCF"
+    elif "PartitionedCF_FPR" in name:
+        return "Partitioned Cuckoo"
+    return None
 
 
 @app.command()
 def main(
     csv_file: Path = typer.Argument(
-        "-",
-        help="Path to CSV file, or '-' to read from stdin (default: stdin)",
+        Path("./benchmark_results/fpr_results.csv"),
+        help="Path to the CSV file containing benchmark results",
     ),
-    output_dir: Optional[Path] = typer.Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Output directory for plots (default: build/)",
+    output_dir: Path = typer.Option(
+        Path("./build"),
+        help="Directory to save output plots",
     ),
 ):
     """
-    Generate false positive rate plots from benchmark CSV results.
-
-    Creates two plots: FPR percentage and total false positives count.
-
-    Examples:
-        cat results.csv | plot_fpr.py
-        plot_fpr.py < results.csv
-        plot_fpr.py results.csv
-        plot_fpr.py results.csv -o custom/dir
+    Parse FPR benchmark CSV results and generate plots.
     """
-    try:
-        if str(csv_file) == "-":
-            import sys
-
-            df = pd.read_csv(sys.stdin)
-        else:
-            df = pd.read_csv(csv_file)
-    except Exception as e:
-        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
+    if not csv_file.exists():
+        typer.secho(f"CSV file not found: {csv_file}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
+
+    typer.secho(f"Reading CSV from: {csv_file}", fg=typer.colors.CYAN)
+
+    df = pd.read_csv(csv_file)
 
     # Filter for median records only
     df = df[df["name"].str.endswith("_median")]
 
+    # Dictionary structure: filter_type -> {memory_size: metric_value}
     fpr_data = defaultdict(dict)
-    false_positives_data = defaultdict(dict)
+    bits_per_item_data = defaultdict(dict)
 
     for _, row in df.iterrows():
-        name = normalize_benchmark_name(row["name"])
-        if "/" not in name:
+        name = row["name"]
+        filter_type = extract_filter_type(name)
+
+        if filter_type is None:
             continue
 
-        # Extract base_name and size from name
-        parts = name.split("/")
-        if len(parts) < 2:
-            continue
+        memory_bytes = row.get("memory_bytes")
+        fpr_percentage = row.get("fpr_percentage")
+        bits_per_item = row.get("bits_per_item")
 
-        base_name = parts[0]
-        size_str = parts[1]
-
-        if "FalsePositiveRate" not in base_name and "FPR" not in base_name:
-            continue
-
-        try:
-            size = int(size_str)
-            fpr_percentage = row.get("fpr_percentage")
-            false_positives = row.get("false_positives")
-
+        if pd.notna(memory_bytes):
             if pd.notna(fpr_percentage):
-                fpr_data[base_name][size] = fpr_percentage
-            if pd.notna(false_positives):
-                false_positives_data[base_name][size] = false_positives
+                fpr_data[filter_type][memory_bytes] = fpr_percentage
+            if pd.notna(bits_per_item):
+                bits_per_item_data[filter_type][memory_bytes] = bits_per_item
 
-        except (ValueError, KeyError):
-            continue
-
-    if not fpr_data and not false_positives_data:
-        typer.secho(
-            "No false positive rate data found in csv", fg=typer.colors.RED, err=True
-        )
+    if not fpr_data:
+        typer.secho("No FPR data found in CSV", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
-
-    # Determine output directory
-    if output_dir is None:
-        script_dir = Path(__file__).parent
-        output_dir = script_dir.parent / "build"
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+    # Define colors and markers for each filter type
+    filter_styles = {
+        "Cuckoo Filter": {"color": "#2E86AB", "marker": "o"},
+        "CPU Cuckoo": {"color": "#00B4D8", "marker": "o"},
+        "Bloom Filter": {"color": "#A23B72", "marker": "s"},
+        "TCF": {"color": "#C73E1D", "marker": "v"},
+        "Partitioned Cuckoo": {"color": "#6A994E", "marker": "D"},
+    }
 
-    if fpr_data:
+    # Plot 1: FPR vs Memory Size
+    fig, ax = plt.subplots(figsize=(12, 8))
 
-        def get_last_fpr_value(bench_name):
-            sizes = sorted(fpr_data[bench_name].keys())
-            if sizes:
-                return fpr_data[bench_name][sizes[-1]]
-            return 0
+    for filter_type in sorted(fpr_data.keys()):
+        memory_sizes = sorted(fpr_data[filter_type].keys())
+        fpr_values = [fpr_data[filter_type][mem] for mem in memory_sizes]
 
-        benchmark_names = sorted(fpr_data.keys(), key=get_last_fpr_value, reverse=True)
-
-        for bench_name in benchmark_names:
-            sizes = sorted(fpr_data[bench_name].keys())
-            fpr = [fpr_data[bench_name][size] for size in sizes]
-            ax1.plot(sizes, fpr, "o-", label=bench_name, linewidth=2, markersize=6)
-
-        ax1.set_xlabel("Input Size", fontsize=12)
-        ax1.set_ylabel("False Positive Rate (%)", fontsize=12)
-        ax1.set_xscale("log", base=2)
-        ax1.legend(fontsize=10, loc="best")
-        ax1.grid(True, which="both", ls="--", alpha=0.5)
-        ax1.set_title("False Positive Rate Percentage", fontsize=14)
-
-    if false_positives_data:
-
-        def get_last_fp_value(bench_name):
-            sizes = sorted(false_positives_data[bench_name].keys())
-            if sizes:
-                return false_positives_data[bench_name][sizes[-1]]
-            return 0
-
-        benchmark_names = sorted(
-            false_positives_data.keys(), key=get_last_fp_value, reverse=True
+        style = filter_styles.get(filter_type, {"marker": "o"})
+        ax.plot(
+            memory_sizes,
+            fpr_values,
+            label=filter_type,
+            linewidth=2.5,
+            markersize=8,
+            color=style.get("color"),
+            marker=style.get("marker", "o"),
         )
 
-        for bench_name in benchmark_names:
-            sizes = sorted(false_positives_data[bench_name].keys())
-            fp = [false_positives_data[bench_name][size] for size in sizes]
-            ax2.plot(sizes, fp, "o-", label=bench_name, linewidth=2, markersize=6)
-
-        ax2.set_xlabel("Input Size", fontsize=12)
-        ax2.set_ylabel("Total False Positives", fontsize=12)
-        ax2.set_xscale("log", base=2)
-        ax2.set_yscale("log")
-        ax2.legend(fontsize=10, loc="best")
-        ax2.grid(True, which="both", ls="--", alpha=0.5)
-        ax2.set_title("Total False Positives Count", fontsize=14)
+    ax.set_xlabel("Memory Size [bytes]", fontsize=14, fontweight="bold")
+    ax.set_ylabel("False Positive Rate [%]", fontsize=14, fontweight="bold")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=1)
+    ax.set_title(
+        "False Positive Rate vs Memory Size",
+        fontsize=16,
+        fontweight="bold",
+    )
 
     plt.tight_layout()
-    output_file = output_dir / "benchmark_false_positives.png"
-    plt.savefig(output_file, dpi=150)
-    typer.secho(f"False positive plot saved to {output_file}", fg=typer.colors.GREEN)
+
+    output_file = output_dir / "fpr_vs_memory.png"
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=False)
+    typer.secho(
+        f"FPR vs memory plot saved to {output_file}",
+        fg=typer.colors.GREEN,
+    )
+    plt.close()
+
+    # Plot 2: Bits per Item vs Memory Size
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    for filter_type in sorted(bits_per_item_data.keys()):
+        memory_sizes = sorted(bits_per_item_data[filter_type].keys())
+        bits_values = [bits_per_item_data[filter_type][mem] for mem in memory_sizes]
+
+        style = filter_styles.get(filter_type, {"marker": "o"})
+        ax.plot(
+            memory_sizes,
+            bits_values,
+            label=filter_type,
+            linewidth=2.5,
+            markersize=8,
+            color=style.get("color"),
+            marker=style.get("marker", "o"),
+        )
+
+    ax.set_xlabel("Memory Size [bytes]", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Bits per Item", fontsize=14, fontweight="bold")
+    ax.set_xscale("log")
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=1)
+    ax.set_title(
+        "Space Efficiency vs Memory Size",
+        fontsize=16,
+        fontweight="bold",
+    )
+
+    plt.tight_layout()
+
+    output_file = output_dir / "bits_per_item_vs_memory.png"
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=False)
+    typer.secho(
+        f"Bits per item plot saved to {output_file}",
+        fg=typer.colors.GREEN,
+    )
+    plt.close()
+
+    typer.secho("\nAll plots generated successfully!", fg=typer.colors.GREEN, bold=True)
 
 
 if __name__ == "__main__":

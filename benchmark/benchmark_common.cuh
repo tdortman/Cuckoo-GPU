@@ -35,6 +35,11 @@ class Timer {
 std::pair<size_t, size_t> calculateCapacityAndSize(size_t capacity, double loadFactor) {
     return {capacity, capacity * loadFactor};
 }
+template <typename Filter, size_t bitsPerTag>
+size_t cucoNumBlocks(size_t n) {
+    constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
+    return SDIV(n * bitsPerTag, Filter::words_per_block * bitsPerWord);
+}
 
 inline size_t getGPUL2CacheSize() {
     static size_t cachedSize = []() {
@@ -160,6 +165,28 @@ void setCommonCounters(benchmark::State& state, size_t memory, size_t n) {
     );
     state.counters["fpr_percentage"] = 0.0;
     state.counters["false_positives"] = 0.0;
+}
+
+void setFPRCounters(
+    benchmark::State& state,
+    size_t memory,
+    size_t n,
+    double fpr,
+    size_t falsePositives,
+    size_t testSize
+) {
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * testSize));
+    state.counters["memory_bytes"] = benchmark::Counter(
+        static_cast<double>(memory), benchmark::Counter::kDefaults, benchmark::Counter::kIs1024
+    );
+    state.counters["bits_per_item"] = benchmark::Counter(
+        static_cast<double>(memory * 8) / static_cast<double>(n),
+        benchmark::Counter::kDefaults,
+        benchmark::Counter::kIs1024
+    );
+    state.counters["fpr_percentage"] = benchmark::Counter(fpr * 100);
+    state.counters["false_positives"] = benchmark::Counter(static_cast<double>(falsePositives));
+    state.counters["num_items"] = benchmark::Counter(static_cast<double>(n));
 }
 
 template <typename Fixture>
