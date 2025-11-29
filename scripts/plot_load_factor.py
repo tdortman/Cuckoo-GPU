@@ -47,13 +47,24 @@ def extract_filter_type(name: str) -> Optional[str]:
 
 
 def extract_operation_type(name: str) -> Optional[str]:
-    """Extract operation type (Insert, Query, Delete) from benchmark name"""
+    """Extract operation type from benchmark name"""
     if "/Insert/" in name:
         return "Insert"
+    elif "/QueryNegative/" in name:
+        return "Query"
     elif "/Query/" in name:
         return "Query"
     elif "/Delete/" in name:
         return "Delete"
+    return None
+
+
+def extract_lookup_type(name: str) -> Optional[str]:
+    """Extract lookup type (Positive or Negative) for Query operations"""
+    if "/QueryNegative/" in name:
+        return "Negative"
+    elif "/Query/" in name:
+        return "Positive"
     return None
 
 
@@ -105,14 +116,21 @@ def main(
         filter_type = extract_filter_type(name)
         load_factor = extract_load_factor(name)
         operation = extract_operation_type(name)
+        lookup_type = extract_lookup_type(name)
 
         if filter_type is None or load_factor is None or operation is None:
             continue
 
+        # For Query operations, append lookup type to filter name
+        if operation == "Query" and lookup_type:
+            filter_key = f"{filter_type} ({lookup_type})"
+        else:
+            filter_key = filter_type
+
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
             throughput_mops = items_per_second / 1_000_000
-            benchmark_data[operation][filter_type][load_factor] = throughput_mops
+            benchmark_data[operation][filter_key][load_factor] = throughput_mops
 
     if not benchmark_data:
         typer.secho("No throughput data found in CSV", fg=typer.colors.RED, err=True)
@@ -125,16 +143,38 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Define colors and markers for each filter type
-    filter_styles = {
-        "Cuckoo Filter": {"color": "#2E86AB", "marker": "o", "linestyle": "-"},
-        "Bloom Filter": {"color": "#A23B72", "marker": "s", "linestyle": "-"},
-        "Quotient Filter": {"color": "#F18F01", "marker": "^", "linestyle": "-"},
-        "TCF": {"color": "#C73E1D", "marker": "v", "linestyle": "-"},
-        "Partitioned Cuckoo": {"color": "#6A994E", "marker": "D", "linestyle": "-"},
+    # Define colors and markers for each filter type (base colors)
+    base_styles = {
+        "Cuckoo Filter": {"color": "#2E86AB", "marker": "o"},
+        "Bloom Filter": {"color": "#A23B72", "marker": "s"},
+        "Quotient Filter": {"color": "#F18F01", "marker": "^"},
+        "TCF": {"color": "#C73E1D", "marker": "v"},
+        "Partitioned Cuckoo": {"color": "#6A994E", "marker": "D"},
     }
 
-    for operation in ["Insert", "Query", "Delete"]:
+    # Generate styles for both positive and negative variants
+    filter_styles = {}
+    for filter_name, base_style in base_styles.items():
+        # Positive lookups: solid line
+        filter_styles[f"{filter_name} (Positive)"] = {
+            "color": base_style["color"],
+            "marker": base_style["marker"],
+            "linestyle": "-",
+        }
+        # Negative lookups: dashed line
+        filter_styles[f"{filter_name} (Negative)"] = {
+            "color": base_style["color"],
+            "marker": base_style["marker"],
+            "linestyle": "--",
+        }
+        # Base filter (for non-query operations)
+        filter_styles[filter_name] = {
+            "color": base_style["color"],
+            "marker": base_style["marker"],
+            "linestyle": "-",
+        }
+
+    for operation in sorted(benchmark_data.keys()):
         if operation not in benchmark_data or not benchmark_data[operation]:
             typer.secho(
                 f"No data for {operation} operation",
@@ -151,7 +191,7 @@ def main(
                 benchmark_data[operation][filter_type][lf] for lf in load_factors
             ]
 
-            style = filter_styles.get(filter_type, {})
+            style = filter_styles.get(filter_type, {"marker": "o", "linestyle": "-"})
             ax.plot(
                 load_factors,
                 throughputs,
@@ -174,11 +214,13 @@ def main(
             fontweight="bold",
         )
 
-        ax.set_yscale("log")
+        # ax.set_yscale("log")
 
         plt.tight_layout()
 
-        output_file = output_dir / f"load_factor_{operation.lower()}.png"
+        output_file = (
+            output_dir / f"load_factor_{operation.lower().replace(' ', '_')}.png"
+        )
         plt.savefig(output_file, dpi=150, bbox_inches="tight")
         typer.secho(
             f"{operation} throughput plot saved to {output_file}",
