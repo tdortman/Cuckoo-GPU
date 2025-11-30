@@ -117,7 +117,7 @@ def main(
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
     ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=1)
+    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=0)
     ax.set_title(
         "False Positive Rate vs Memory Size",
         fontsize=16,
@@ -127,7 +127,7 @@ def main(
     plt.tight_layout()
 
     output_file = output_dir / "fpr_vs_memory.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=False)
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
     typer.secho(
         f"FPR vs memory plot saved to {output_file}",
         fg=typer.colors.GREEN,
@@ -157,7 +157,7 @@ def main(
     ax.set_ylabel("Bits per Item", fontsize=14, fontweight="bold")
     ax.set_xscale("log", base=2)
     ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=1)
+    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=0)
     ax.set_title(
         "Space Efficiency vs Memory Size",
         fontsize=16,
@@ -167,7 +167,7 @@ def main(
     plt.tight_layout()
 
     output_file = output_dir / "bits_per_item_vs_memory.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=False)
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
     typer.secho(
         f"Bits per item plot saved to {output_file}",
         fg=typer.colors.GREEN,

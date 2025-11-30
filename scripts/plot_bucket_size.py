@@ -74,9 +74,11 @@ def create_performance_heatmap(df: pd.DataFrame, operation: str, ax):
         vmax=pivot_table.max().max() if pivot_table.max().max() > 1.0 else 2.0,
     )
 
-    ax.set_title(f"{operation} Performance vs. Bucket Size")
-    ax.set_xlabel("Bucket Size")
-    ax.set_ylabel("Input Size")
+    ax.set_title(
+        f"{operation} Performance vs. Bucket Size", fontsize=14, fontweight="bold"
+    )
+    ax.set_xlabel("Bucket Size", fontsize=12)
+    ax.set_ylabel("Input Size", fontsize=12)
     ax.set_yticklabels([f"$2^{{{int(exp)}}}$" for exp in pivot_table.index], rotation=0)
 
 
@@ -131,20 +133,7 @@ def main(
     df_filtered["time_ms"] = df_filtered["real_time"]
     df_filtered["throughput_mops"] = df_filtered["items_per_second"] / 1_000_000
 
-    plt.style.use("default")
-    plt.rcParams.update(
-        {
-            "font.size": 12,
-            "axes.labelsize": 14,
-            "axes.titlesize": 16,
-            "xtick.labelsize": 12,
-            "ytick.labelsize": 12,
-            "legend.fontsize": 12,
-            "figure.titlesize": 18,
-        }
-    )
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
 
     create_performance_heatmap(df_filtered, "Insert", ax1)
     create_performance_heatmap(df_filtered, "Query", ax2)
@@ -161,10 +150,10 @@ def main(
     plt.tight_layout()
     plt.savefig(
         output_file,
-        dpi=300,
+        dpi=150,
         bbox_inches="tight",
-        facecolor="white",
         edgecolor="none",
+        transparent=True,
     )
 
     typer.secho(
