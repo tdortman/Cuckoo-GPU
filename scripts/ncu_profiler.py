@@ -6,11 +6,12 @@ from typing import Optional
 import pandas as pd
 import typer
 
-FILTERS = ["cuckoo", "bloom", "tcf"]
+FILTERS = ["cuckoo", "bloom", "tcf", 'gqf']
 OPERATIONS = {
     "cuckoo": ["insert", "query", "delete"],
     "bloom": ["insert", "query"],
     "tcf": ["insert", "query", "delete"],
+    "gqf": ["insert", "query", "delete"]
 }
 
 KERNEL_PATTERNS = {
@@ -27,6 +28,11 @@ KERNEL_PATTERNS = {
         "insert": ["sorted_bulk_insert_kernel"],
         "query": ["bulk_sorted_query_kernel"],
         "delete": ["bulk_sorted_delete_kernel"],
+    },
+    "gqf": {
+        "insert": ["insert_from_buffers_hashed"],
+        "query": ["bulk_get_kernel"],
+        "delete": ["delete_from_buffers_hashed"],
     },
 }
 
