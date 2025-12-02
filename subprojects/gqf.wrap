@@ -3,7 +3,6 @@ url = https://github.com/PASSIONLab/gpu-counting-filter.git
 revision = e17ed543b8ae079cb32e4ca9b49fc7a94233f0ff
 depth = 1
 patch_directory = gqf
-diff_files = gqf-atomicCAS.patch,gqf-macros.patch,gqf-rbits-macro.patch,gqf-print.patch,gqf-hash-rename.patch,gqf-memory-leak.patch
 
 [provide]
 dependency_names = gqf_dep
