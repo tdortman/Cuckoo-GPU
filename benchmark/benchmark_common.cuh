@@ -197,6 +197,7 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
 
         fixture.timer.start();
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
+        cudaDeviceSynchronize();
         double elapsed = fixture.timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -208,10 +209,12 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
 template <typename Fixture>
 void benchmarkQueryBody(Fixture& fixture, benchmark::State& state) {
     adaptiveInsert(*fixture.filter, fixture.d_keys);
+    cudaDeviceSynchronize();
 
     for (auto _ : state) {
         fixture.timer.start();
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
+        cudaDeviceSynchronize();
         double elapsed = fixture.timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -229,6 +232,7 @@ void benchmarkDeleteBody(Fixture& fixture, benchmark::State& state) {
 
         fixture.timer.start();
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
+        cudaDeviceSynchronize();
         double elapsed = fixture.timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -247,6 +251,7 @@ void benchmarkInsertAndQueryBody(Fixture& fixture, benchmark::State& state) {
         fixture.timer.start();
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
+        cudaDeviceSynchronize();
         double elapsed = fixture.timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -266,6 +271,7 @@ void benchmarkInsertQueryDeleteBody(Fixture& fixture, benchmark::State& state) {
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
+        cudaDeviceSynchronize();
         double elapsed = fixture.timer.stop();
 
         state.SetIterationTime(elapsed);

@@ -80,6 +80,7 @@ static void GPUCF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
+        cudaDeviceSynchronize();
         double elapsed = timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -166,6 +167,7 @@ static void Bloom_FPR(bm::State& state) {
             d_neverInserted.end(),
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output_fpr.data()))
         );
+        cudaDeviceSynchronize();
         double elapsed = timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -210,6 +212,7 @@ static void TCF_FPR(bm::State& state) {
         timer.start();
         d_output =
             filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), FPR_TEST_SIZE);
+        cudaDeviceSynchronize();
         double elapsed = timer.stop();
 
         state.SetIterationTime(elapsed);
@@ -329,6 +332,7 @@ static void GQF_FPR(bm::State& state) {
             thrust::raw_pointer_cast(d_neverInserted.data()),
             thrust::raw_pointer_cast(d_results.data())
         );
+        cudaDeviceSynchronize();
         double elapsed = timer.stop();
 
         state.SetIterationTime(elapsed);

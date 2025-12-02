@@ -106,6 +106,7 @@ static void GPUCF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
+        cudaDeviceSynchronize();
         double elapsed = timer.stop();
 
         state.SetIterationTime(elapsed);
