@@ -72,6 +72,7 @@ if get_option('BUILD_BENCHMARKS') == true
     cuco_opts = cmake.subproject_options()
     cuco_opts.add_cmake_defines(
         {
+            'CMAKE_BUILD_TYPE': 'Release',
             'BUILD_TESTS': 'OFF',
             'BUILD_BENCHMARKS': 'OFF',
             'BUILD_EXAMPLES': 'OFF',
@@ -85,6 +86,7 @@ if get_option('BUILD_BENCHMARKS') == true
     partitioned_opts = cmake.subproject_options()
     partitioned_opts.add_cmake_defines(
         {
+            'CMAKE_BUILD_TYPE': 'Release',
             'BUILD_TESTING': 'OFF',
         },
     )
@@ -96,6 +98,7 @@ if get_option('BUILD_BENCHMARKS') == true
     tcf_opts = cmake.subproject_options()
     tcf_opts.add_cmake_defines(
         {
+            'CMAKE_BUILD_TYPE': 'Release',
             'BUILD_TESTING': 'OFF',
         },
     )
