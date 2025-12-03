@@ -85,7 +85,7 @@ static void CF_FPR(bm::State& state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -117,7 +117,7 @@ BENCHMARK_DEFINE_F(TCFFixture, Insert)(bm::State& state) {
         timer.start();
         filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         TCFType::host_free_tcf(filter);
@@ -135,7 +135,7 @@ BENCHMARK_DEFINE_F(TCFFixture, Query)(bm::State& state) {
         timer.start();
         bool* d_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output);
@@ -156,7 +156,7 @@ BENCHMARK_DEFINE_F(TCFFixture, Delete)(bm::State& state) {
         timer.start();
         bool* d_output = filter->bulk_delete(thrust::raw_pointer_cast(d_keys.data()), n);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output);
@@ -194,7 +194,7 @@ static void TCF_FPR(bm::State& state) {
         bool* d_output =
             filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), fprTestSize);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
 

@@ -60,7 +60,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Insert)(bm::State& state) {
                 inserted++;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
@@ -85,7 +85,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Query)(bm::State& state) {
                 found++;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(found);
@@ -107,7 +107,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Delete)(bm::State& state) {
                 deleted++;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(deleted);
@@ -142,7 +142,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, InsertQueryDelete)(bm::State& state) {
                 deleted++;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
@@ -177,7 +177,7 @@ static void GPUCF_FPR(bm::State& state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -223,7 +223,7 @@ static void CPUCF_FPR(bm::State& state) {
                 ++falsePositives;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(falsePositives);

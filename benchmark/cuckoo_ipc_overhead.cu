@@ -118,7 +118,7 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Insert)(bm::State& state) {
         timer.start();
         size_t inserted = client->insertMany(d_keys);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
@@ -135,7 +135,7 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Query)(bm::State& state) {
         timer.start();
         client->containsMany(d_keys, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -152,7 +152,7 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Delete)(bm::State& state) {
         timer.start();
         size_t remaining = client->deleteMany(d_keys, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(remaining);
@@ -170,7 +170,7 @@ BENCHMARK_DEFINE_F(IPCCFFixture, InsertAndQuery)(bm::State& state) {
         size_t inserted = client->insertMany(d_keys);
         client->containsMany(d_keys, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);

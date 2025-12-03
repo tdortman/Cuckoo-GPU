@@ -80,7 +80,7 @@ BENCHMARK_DEFINE_F(BBFFixture, Insert)(bm::State& state) {
         timer.start();
         filter->add(d_keys.begin(), d_keys.end());
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
     }
@@ -101,7 +101,7 @@ BENCHMARK_DEFINE_F(BBFFixture, Query)(bm::State& state) {
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -122,7 +122,7 @@ BENCHMARK_DEFINE_F(BBFFixture, InsertAndQuery)(bm::State& state) {
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -153,7 +153,7 @@ static void CF_FPR(bm::State& state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -202,7 +202,7 @@ static void BBF_FPR(bm::State& state) {
         timer.start();
         filter->contains(d_neverInserted.begin(), d_neverInserted.end(), d_output.begin());
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());

@@ -107,7 +107,7 @@ static void GPUCF_FPR(bm::State& state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -137,7 +137,7 @@ BENCHMARK_DEFINE_F(PartitionedCFFixture, Insert)(bm::State& state) {
 
         timer.start();
         bool success = tempFilter.construct(constructKeys.data(), constructKeys.size());
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(success);
@@ -159,7 +159,7 @@ BENCHMARK_DEFINE_F(PartitionedCFFixture, Query)(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         size_t found = filter.count(keys.data(), keys.size());
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(found);
@@ -203,7 +203,7 @@ static void PartitionedCF_FPR(bm::State& state) {
                 ++falsePositives;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(falsePositives);

@@ -22,7 +22,7 @@ class Timer {
         startTime = std::chrono::high_resolution_clock::now();
     }
 
-    double stop() {
+    double elapsed() {
         auto endTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = endTime - startTime;
         return elapsed.count();
@@ -198,7 +198,7 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
         fixture.timer.start();
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         cudaDeviceSynchronize();
-        double elapsed = fixture.timer.stop();
+        double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
         benchmark::DoNotOptimize(inserted);
@@ -215,7 +215,7 @@ void benchmarkQueryBody(Fixture& fixture, benchmark::State& state) {
         fixture.timer.start();
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         cudaDeviceSynchronize();
-        double elapsed = fixture.timer.stop();
+        double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
         benchmark::DoNotOptimize(fixture.d_output.data().get());
@@ -233,7 +233,7 @@ void benchmarkDeleteBody(Fixture& fixture, benchmark::State& state) {
         fixture.timer.start();
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
         cudaDeviceSynchronize();
-        double elapsed = fixture.timer.stop();
+        double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
         benchmark::DoNotOptimize(remaining);
@@ -252,7 +252,7 @@ void benchmarkInsertAndQueryBody(Fixture& fixture, benchmark::State& state) {
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         cudaDeviceSynchronize();
-        double elapsed = fixture.timer.stop();
+        double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
         benchmark::DoNotOptimize(inserted);
@@ -272,7 +272,7 @@ void benchmarkInsertQueryDeleteBody(Fixture& fixture, benchmark::State& state) {
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
         cudaDeviceSynchronize();
-        double elapsed = fixture.timer.stop();
+        double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
         benchmark::DoNotOptimize(inserted);

@@ -81,7 +81,7 @@ static void GPUCF_FPR(bm::State& state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -119,7 +119,7 @@ static void CPUCF_FPR(bm::State& state) {
                 ++falsePositives;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(falsePositives);
@@ -168,7 +168,7 @@ static void Bloom_FPR(bm::State& state) {
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output_fpr.data()))
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output_fpr.data().get());
@@ -213,7 +213,7 @@ static void TCF_FPR(bm::State& state) {
         d_output =
             filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), FPR_TEST_SIZE);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output);
@@ -273,7 +273,7 @@ static void PartitionedCF_FPR(bm::State& state) {
                 ++falsePositives;
             }
         }
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(falsePositives);
@@ -333,7 +333,7 @@ static void GQF_FPR(bm::State& state) {
             thrust::raw_pointer_cast(d_results.data())
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_results.data().get());

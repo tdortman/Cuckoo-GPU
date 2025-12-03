@@ -74,7 +74,7 @@ BENCHMARK_DEFINE_F(MultiGPUFixture, Insert)(bm::State& state) {
         timer.start();
         size_t inserted = filter->insertMany(h_keys);
         filter->synchronizeAllGPUs();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
@@ -90,7 +90,7 @@ BENCHMARK_DEFINE_F(MultiGPUFixture, Query)(bm::State& state) {
         timer.start();
         filter->containsMany(h_keys, h_output);
         filter->synchronizeAllGPUs();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(h_output.data());
@@ -107,7 +107,7 @@ BENCHMARK_DEFINE_F(MultiGPUFixture, Delete)(bm::State& state) {
         timer.start();
         size_t remaining = filter->deleteMany(h_keys, h_output);
         filter->synchronizeAllGPUs();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(remaining);

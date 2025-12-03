@@ -113,7 +113,7 @@ static void CF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_output.data().get());
@@ -146,7 +146,7 @@ BENCHMARK_DEFINE_F(GQFFixture, Insert)(bm::State& state) {
         timer.start();
         bulk_insert(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
     }
@@ -166,7 +166,7 @@ BENCHMARK_DEFINE_F(GQFFixture, Query)(bm::State& state) {
             thrust::raw_pointer_cast(d_results.data())
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_results.data().get());
@@ -184,7 +184,7 @@ BENCHMARK_DEFINE_F(GQFFixture, Delete)(bm::State& state) {
         timer.start();
         bulk_delete(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
     }
@@ -228,7 +228,7 @@ static void GQF_FPR(bm::State& state) {
             thrust::raw_pointer_cast(d_results.data())
         );
         cudaDeviceSynchronize();
-        double elapsed = timer.stop();
+        double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(d_results.data().get());
