@@ -14,9 +14,9 @@
 #include <random>
 #include <string>
 
-class Timer {
+class CPUTimer {
    public:
-    Timer() = default;
+    CPUTimer() = default;
 
     void start() {
         startTime = std::chrono::high_resolution_clock::now();
@@ -30,6 +30,61 @@ class Timer {
 
    private:
     std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
+};
+
+class GPUTimer {
+   public:
+    GPUTimer() = default;
+
+    ~GPUTimer() {
+        if (startEvent) cudaEventDestroy(startEvent);
+        if (stopEvent) cudaEventDestroy(stopEvent);
+    }
+
+    GPUTimer(const GPUTimer&) = delete;
+    GPUTimer& operator=(const GPUTimer&) = delete;
+
+    GPUTimer(GPUTimer&& other) noexcept
+        : startEvent(other.startEvent), stopEvent(other.stopEvent) {
+        other.startEvent = nullptr;
+        other.stopEvent = nullptr;
+    }
+
+    GPUTimer& operator=(GPUTimer&& other) noexcept {
+        if (this != &other) {
+            if (startEvent) cudaEventDestroy(startEvent);
+            if (stopEvent) cudaEventDestroy(stopEvent);
+            startEvent = other.startEvent;
+            stopEvent = other.stopEvent;
+            other.startEvent = nullptr;
+            other.stopEvent = nullptr;
+        }
+        return *this;
+    }
+
+    void start() {
+        ensureInitialized();
+        cudaEventRecord(startEvent);
+    }
+
+    double elapsed() {
+        cudaEventRecord(stopEvent);
+        cudaEventSynchronize(stopEvent);
+        float milliseconds = 0;
+        cudaEventElapsedTime(&milliseconds, startEvent, stopEvent);
+        return static_cast<double>(milliseconds) / 1000.0;
+    }
+
+   private:
+    void ensureInitialized() {
+        if (!startEvent) {
+            cudaEventCreate(&startEvent);
+            cudaEventCreate(&stopEvent);
+        }
+    }
+
+    cudaEvent_t startEvent = nullptr;
+    cudaEvent_t stopEvent = nullptr;
 };
 
 std::pair<size_t, size_t> calculateCapacityAndSize(size_t capacity, double loadFactor) {
@@ -197,7 +252,6 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
 
         fixture.timer.start();
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
-        cudaDeviceSynchronize();
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -214,7 +268,6 @@ void benchmarkQueryBody(Fixture& fixture, benchmark::State& state) {
     for (auto _ : state) {
         fixture.timer.start();
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
-        cudaDeviceSynchronize();
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -232,7 +285,6 @@ void benchmarkDeleteBody(Fixture& fixture, benchmark::State& state) {
 
         fixture.timer.start();
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
-        cudaDeviceSynchronize();
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -251,7 +303,6 @@ void benchmarkInsertAndQueryBody(Fixture& fixture, benchmark::State& state) {
         fixture.timer.start();
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
-        cudaDeviceSynchronize();
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -271,7 +322,6 @@ void benchmarkInsertQueryDeleteBody(Fixture& fixture, benchmark::State& state) {
         size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
-        cudaDeviceSynchronize();
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -321,7 +371,7 @@ class CuckooFilterFixture : public benchmark::Fixture {
     thrust::device_vector<KeyType> d_keys;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<CuckooFilter<ConfigType>> filter;
-    Timer timer;
+    GPUTimer timer;
 };
 
 #define BENCHMARK_CONFIG                \

@@ -59,7 +59,7 @@ class PartitionedCFFixture : public benchmark::Fixture {
             }
         }
 
-        n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency() / 2));
+        n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency()));
         n_tasks = 1;
     }
 
@@ -78,11 +78,11 @@ class PartitionedCFFixture : public benchmark::Fixture {
     size_t n_threads;
     size_t n_tasks;
     std::vector<uint64_t> keys;
-    Timer timer;
+    CPUTimer timer;
 };
 
 static void GPUCF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TARGET_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -106,7 +106,6 @@ static void GPUCF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -169,7 +168,7 @@ BENCHMARK_DEFINE_F(PartitionedCFFixture, Query)(bm::State& state) {
 }
 
 static void PartitionedCF_FPR(bm::State& state) {
-    Timer timer;
+    CPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TARGET_LOAD_FACTOR);
 
     auto keys = generateKeysCPU<uint64_t>(n);
@@ -185,7 +184,7 @@ static void PartitionedCF_FPR(bm::State& state) {
         }
     }
 
-    size_t n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency() / 2));
+    size_t n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency()));
     size_t n_tasks = 1;
 
     PartitionedCuckooFilter filter(s, n_partitions, n_threads, n_tasks);

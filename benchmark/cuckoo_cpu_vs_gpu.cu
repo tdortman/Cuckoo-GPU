@@ -44,7 +44,7 @@ class CPUCuckooFilterFixture : public benchmark::Fixture {
     size_t n;
     size_t filterMemory;
     std::vector<KeyType> keys;
-    Timer timer;
+    CPUTimer timer;
 };
 
 using CPUCFFixture = CPUCuckooFilterFixture<uint64_t, CPU_BITS_PER_ITEM>;
@@ -155,7 +155,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, InsertQueryDelete)(bm::State& state) {
 }
 
 static void GPUCF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -176,7 +176,6 @@ static void GPUCF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -201,7 +200,7 @@ static void GPUCF_FPR(bm::State& state) {
 }
 
 static void CPUCF_FPR(bm::State& state) {
-    Timer timer;
+    CPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
     auto keys = generateKeysCPU<uint64_t>(n, 42, 1, UINT32_MAX);

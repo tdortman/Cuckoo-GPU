@@ -65,7 +65,7 @@ class BloomFilterFixture : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<BloomFilter> filter;
-    Timer timer;
+    GPUTimer timer;
 };
 
 using CFFixture = CuckooFilterFixture<Config>;
@@ -79,7 +79,6 @@ BENCHMARK_DEFINE_F(BBFFixture, Insert)(bm::State& state) {
 
         timer.start();
         filter->add(d_keys.begin(), d_keys.end());
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -100,7 +99,6 @@ BENCHMARK_DEFINE_F(BBFFixture, Query)(bm::State& state) {
             d_keys.end(),
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -121,7 +119,6 @@ BENCHMARK_DEFINE_F(BBFFixture, InsertAndQuery)(bm::State& state) {
             d_keys.end(),
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -131,7 +128,7 @@ BENCHMARK_DEFINE_F(BBFFixture, InsertAndQuery)(bm::State& state) {
 }
 
 static void CF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -152,7 +149,6 @@ static void CF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -177,7 +173,7 @@ static void CF_FPR(bm::State& state) {
 }
 
 static void BBF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     using BloomFilter = cuco::bloom_filter<uint64_t>;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
@@ -201,7 +197,6 @@ static void BBF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->contains(d_neverInserted.begin(), d_neverInserted.end(), d_output.begin());
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);

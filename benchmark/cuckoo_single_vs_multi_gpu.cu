@@ -60,7 +60,7 @@ class MultiGPUFixture_ : public benchmark::Fixture {
     thrust::host_vector<KeyType> h_keys;
     thrust::host_vector<bool> h_output;
     std::unique_ptr<CuckooFilterMultiGPU<ConfigType>> filter;
-    Timer timer;
+    CPUTimer timer;
 };
 
 using SingleGPUFixture = CuckooFilterFixture<Config, 0.95>;

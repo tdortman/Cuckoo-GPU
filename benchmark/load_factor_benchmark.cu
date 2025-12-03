@@ -90,7 +90,7 @@ class CFFixtureLF : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keysNegative;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<CuckooFilter<Config>> filter;
-    Timer timer;
+    GPUTimer timer;
 };
 
 template <typename Filter>
@@ -146,7 +146,7 @@ class BloomFilterFixture : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keysNegative;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<BloomFilter> filter;
-    Timer timer;
+    GPUTimer timer;
 };
 
 template <double loadFactor>
@@ -195,7 +195,7 @@ class TCFFixture : public benchmark::Fixture {
     uint64_t* d_misses = nullptr;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint64_t> d_keysNegative;
-    Timer timer;
+    GPUTimer timer;
 };
 
 template <double loadFactor>
@@ -225,7 +225,7 @@ class PartitionedCFFixture : public benchmark::Fixture {
             }
         }
 
-        n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency() / 2));
+        n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency()));
         n_tasks = 1;
     }
 
@@ -248,7 +248,7 @@ class PartitionedCFFixture : public benchmark::Fixture {
     size_t n_tasks;
     std::vector<uint64_t> keys;
     std::vector<uint64_t> keysNegative;
-    Timer timer;
+    CPUTimer timer;
 };
 
 template <double loadFactor>
@@ -281,7 +281,7 @@ class CPUCuckooFilterFixture : public benchmark::Fixture {
     size_t n;
     std::vector<uint64_t> keys;
     std::vector<uint64_t> keysNegative;
-    Timer timer;
+    CPUTimer timer;
 };
 
 template <double loadFactor>
@@ -332,7 +332,7 @@ class GQFFixtureLF : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keysNegative;
     thrust::device_vector<uint64_t> d_results;
     QF* qf;
-    Timer timer;
+    GPUTimer timer;
 };
 
 #define BENCHMARK_CONFIG_LF             \
@@ -352,7 +352,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             size_t inserted = adaptiveInsert(*filter, d_keys);                                \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(inserted);                                                      \
         }                                                                                     \
@@ -364,7 +363,6 @@ class GQFFixtureLF : public benchmark::Fixture {
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
             filter->containsMany(d_keys, d_output);                                           \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output.data().get());                                         \
         }                                                                                     \
@@ -376,7 +374,6 @@ class GQFFixtureLF : public benchmark::Fixture {
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
             filter->containsMany(d_keysNegative, d_output);                                   \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output.data().get());                                         \
         }                                                                                     \
@@ -389,7 +386,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             size_t remaining = filter->deleteMany(d_keys, d_output);                          \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(remaining);                                                     \
             bm::DoNotOptimize(d_output.data().get());                                         \
@@ -470,7 +466,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             filter->add(d_keys.begin(), d_keys.end());                                        \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
         }                                                                                     \
         setCounters(state);                                                                   \
@@ -485,7 +480,6 @@ class GQFFixtureLF : public benchmark::Fixture {
                 d_keys.end(),                                                                 \
                 reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))            \
             );                                                                                \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output.data().get());                                         \
         }                                                                                     \
@@ -501,7 +495,6 @@ class GQFFixtureLF : public benchmark::Fixture {
                 d_keysNegative.end(),                                                         \
                 reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data()))            \
             );                                                                                \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output.data().get());                                         \
         }                                                                                     \
@@ -520,7 +513,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);        \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             TCFType::host_free_tcf(filter);                                                   \
         }                                                                                     \
@@ -534,7 +526,6 @@ class GQFFixtureLF : public benchmark::Fixture {
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
             bool* d_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);  \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output);                                                      \
             cudaFree(d_output);                                                               \
@@ -551,7 +542,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             timer.start();                                                                    \
             bool* d_output =                                                                  \
                 filter->bulk_query(thrust::raw_pointer_cast(d_keysNegative.data()), n);       \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output);                                                      \
             cudaFree(d_output);                                                               \
@@ -567,7 +557,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             bool* d_output = filter->bulk_delete(thrust::raw_pointer_cast(d_keys.data()), n); \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_output);                                                      \
             cudaFree(d_output);                                                               \
@@ -590,7 +579,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             bulk_insert(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);                   \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
         }                                                                                     \
         setCounters(state);                                                                   \
@@ -606,7 +594,6 @@ class GQFFixtureLF : public benchmark::Fixture {
                 thrust::raw_pointer_cast(d_keys.data()),                                      \
                 thrust::raw_pointer_cast(d_results.data())                                    \
             );                                                                                \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_results.data().get());                                        \
         }                                                                                     \
@@ -623,7 +610,6 @@ class GQFFixtureLF : public benchmark::Fixture {
                 thrust::raw_pointer_cast(d_keysNegative.data()),                              \
                 thrust::raw_pointer_cast(d_results.data())                                    \
             );                                                                                \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(d_results.data().get());                                        \
         }                                                                                     \
@@ -639,7 +625,6 @@ class GQFFixtureLF : public benchmark::Fixture {
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             bulk_delete(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);                   \
-            cudaDeviceSynchronize();                                                          \
             state.SetIterationTime(timer.elapsed());                                          \
         }                                                                                     \
         setCounters(state);                                                                   \

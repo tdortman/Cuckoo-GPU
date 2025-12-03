@@ -83,11 +83,11 @@ class GQFFixture : public benchmark::Fixture {
     QF* qf;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint64_t> d_results;
-    Timer timer;
+    GPUTimer timer;
 };
 
 static void CF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -145,7 +145,6 @@ BENCHMARK_DEFINE_F(GQFFixture, Insert)(bm::State& state) {
 
         timer.start();
         bulk_insert(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -165,7 +164,6 @@ BENCHMARK_DEFINE_F(GQFFixture, Query)(bm::State& state) {
             thrust::raw_pointer_cast(d_keys.data()),
             thrust::raw_pointer_cast(d_results.data())
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -183,7 +181,6 @@ BENCHMARK_DEFINE_F(GQFFixture, Delete)(bm::State& state) {
 
         timer.start();
         bulk_delete(qf, n, thrust::raw_pointer_cast(d_keys.data()), 0);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -192,7 +189,7 @@ BENCHMARK_DEFINE_F(GQFFixture, Delete)(bm::State& state) {
 }
 
 static void GQF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto q = static_cast<uint32_t>(std::log2(state.range(0)));
     size_t capacity = 1ULL << q;
     size_t n = capacity * 0.95;
@@ -227,7 +224,6 @@ static void GQF_FPR(bm::State& state) {
             thrust::raw_pointer_cast(d_neverInserted.data()),
             thrust::raw_pointer_cast(d_results.data())
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);

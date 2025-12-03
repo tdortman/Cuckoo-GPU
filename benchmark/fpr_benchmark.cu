@@ -59,7 +59,7 @@ const size_t L2_CACHE_SIZE = getL2CacheSize();
 constexpr size_t FPR_TEST_SIZE = 1'000'000;
 
 static void GPUCF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     size_t targetMemory = state.range(0);
 
     size_t capacity = (targetMemory * 8) / Config::bitsPerTag;
@@ -80,7 +80,6 @@ static void GPUCF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -95,7 +94,7 @@ static void GPUCF_FPR(bm::State& state) {
 }
 
 static void CPUCF_FPR(bm::State& state) {
-    Timer timer;
+    CPUTimer timer;
     size_t targetMemory = state.range(0);
     size_t capacity = (targetMemory * 8) / Config::bitsPerTag;
     auto n = static_cast<size_t>(capacity * LOAD_FACTOR);
@@ -132,7 +131,7 @@ static void CPUCF_FPR(bm::State& state) {
 }
 
 static void Bloom_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     size_t targetMemory = state.range(0);
 
     size_t numBlocks =
@@ -167,7 +166,6 @@ static void Bloom_FPR(bm::State& state) {
             d_neverInserted.end(),
             reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output_fpr.data()))
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -182,7 +180,7 @@ static void Bloom_FPR(bm::State& state) {
 }
 
 static void TCF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     size_t targetMemory = state.range(0);
 
     size_t capacity = targetMemory / sizeof(uint16_t);
@@ -212,7 +210,6 @@ static void TCF_FPR(bm::State& state) {
         timer.start();
         d_output =
             filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), FPR_TEST_SIZE);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -236,7 +233,7 @@ static void TCF_FPR(bm::State& state) {
 }
 
 static void PartitionedCF_FPR(bm::State& state) {
-    Timer timer;
+    CPUTimer timer;
     size_t targetMemory = state.range(0);
 
     size_t capacity = (targetMemory * 8) / Config::bitsPerTag;
@@ -255,7 +252,7 @@ static void PartitionedCF_FPR(bm::State& state) {
         }
     }
 
-    size_t n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency() / 2));
+    size_t n_threads = std::min(n_partitions, size_t(std::thread::hardware_concurrency()));
     size_t n_tasks = 1;
 
     PartitionedCuckooFilter filter(s, n_partitions, n_threads, n_tasks);
@@ -295,7 +292,7 @@ static void PartitionedCF_FPR(bm::State& state) {
         ->ReportAggregatesOnly(true);
 
 static void GQF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     size_t targetMemory = state.range(0);
 
     // Estimate capacity based on target memory and bits per slot
@@ -332,7 +329,6 @@ static void GQF_FPR(bm::State& state) {
             thrust::raw_pointer_cast(d_neverInserted.data()),
             thrust::raw_pointer_cast(d_results.data())
         );
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);

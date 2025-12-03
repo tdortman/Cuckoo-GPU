@@ -51,7 +51,7 @@ class BucketSizeFixture : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<CuckooFilter<Config>> filter;
-    Timer timer;
+    GPUTimer timer;
 };
 
 #define REGISTER_BUCKET_BENCHMARK(BSize, BenchName)   \

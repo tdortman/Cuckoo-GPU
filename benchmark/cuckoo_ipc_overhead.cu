@@ -107,7 +107,7 @@ class IPCCFFixture : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
     std::unique_ptr<CuckooFilterIPCClient<Config>> client;
-    Timer timer;
+    GPUTimer timer;
 };
 
 BENCHMARK_DEFINE_F(IPCCFFixture, Insert)(bm::State& state) {
@@ -117,7 +117,6 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Insert)(bm::State& state) {
 
         timer.start();
         size_t inserted = client->insertMany(d_keys);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -134,7 +133,6 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Query)(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         client->containsMany(d_keys, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -151,7 +149,6 @@ BENCHMARK_DEFINE_F(IPCCFFixture, Delete)(bm::State& state) {
 
         timer.start();
         size_t remaining = client->deleteMany(d_keys, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -169,7 +166,6 @@ BENCHMARK_DEFINE_F(IPCCFFixture, InsertAndQuery)(bm::State& state) {
         timer.start();
         size_t inserted = client->insertMany(d_keys);
         client->containsMany(d_keys, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);

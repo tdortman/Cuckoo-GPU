@@ -57,13 +57,13 @@ class TCFFixture : public benchmark::Fixture {
     size_t filterMemory;
     uint64_t* d_misses = nullptr;
     thrust::device_vector<uint64_t> d_keys;
-    Timer timer;
+    GPUTimer timer;
 };
 
 using CFFixture = CuckooFilterFixture<Config, TCF_LOAD_FACTOR>;
 
 static void CF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TCF_LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
@@ -84,7 +84,6 @@ static void CF_FPR(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         filter->containsMany(d_neverInserted, d_output);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -116,7 +115,6 @@ BENCHMARK_DEFINE_F(TCFFixture, Insert)(bm::State& state) {
 
         timer.start();
         filter->bulk_insert(thrust::raw_pointer_cast(d_keys.data()), n, d_misses);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -134,7 +132,6 @@ BENCHMARK_DEFINE_F(TCFFixture, Query)(bm::State& state) {
     for (auto _ : state) {
         timer.start();
         bool* d_output = filter->bulk_query(thrust::raw_pointer_cast(d_keys.data()), n);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -155,7 +152,6 @@ BENCHMARK_DEFINE_F(TCFFixture, Delete)(bm::State& state) {
 
         timer.start();
         bool* d_output = filter->bulk_delete(thrust::raw_pointer_cast(d_keys.data()), n);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -168,7 +164,7 @@ BENCHMARK_DEFINE_F(TCFFixture, Delete)(bm::State& state) {
 }
 
 static void TCF_FPR(bm::State& state) {
-    Timer timer;
+    GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TCF_LOAD_FACTOR);
     size_t filterMemory = capacity * sizeof(uint16_t);
 
@@ -193,7 +189,6 @@ static void TCF_FPR(bm::State& state) {
         timer.start();
         bool* d_output =
             filter->bulk_query(thrust::raw_pointer_cast(d_neverInserted.data()), fprTestSize);
-        cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
