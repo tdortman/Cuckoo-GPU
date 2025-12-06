@@ -17,8 +17,8 @@
  * @brief Eviction policy for the Cuckoo Filter.
  */
 enum class EvictionPolicy {
-    BFS,  ///< Breadth-first search with DFS fallback (default)
-    DFS   ///< Pure depth-first search
+    DFS,  ///< Pure depth-first search (default)
+    BFS   ///< Breadth-first search with DFS fallback
 };
 
 #if __has_include(<thrust/device_vector.h>)
@@ -46,7 +46,7 @@ template <
     size_t blockSize_ = 256,
     size_t bucketSize_ = 16,
     template <typename, typename, size_t, size_t> class AltBucketPolicy_ = XorAltBucketPolicy,
-    EvictionPolicy evictionPolicy_ = EvictionPolicy::BFS>
+    EvictionPolicy evictionPolicy_ = EvictionPolicy::DFS>
 struct CuckooConfig {
     using KeyType = T;
     static constexpr size_t bitsPerTag = bitsPerTag_;
