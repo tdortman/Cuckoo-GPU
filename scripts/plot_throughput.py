@@ -22,12 +22,19 @@ app = typer.Typer(help="Plot benchmark throughput results")
 def normalize_benchmark_name(name: str) -> str:
     """Convert FixtureName/BenchmarkName/... to FixtureName_BenchmarkName/..."""
     parts = name.split("/")
-    if len(parts) >= 2 and "Fixture" in parts[0]:
-        # Convert "CFFixture/Insert/..." to "CF_Insert/..."
-        fixture_name = parts[0].replace("Fixture", "")
-        bench_name = parts[1]
-        parts[0] = f"{fixture_name}_{bench_name}"
-        parts.pop(1)  # Remove the benchmark name since it's now in parts[0]
+    if len(parts) >= 2:
+        if "Fixture" in parts[0]:
+            # Convert "CFFixture/Insert/..." to "CF_Insert/..."
+            fixture_name = parts[0].replace("Fixture", "")
+            bench_name = parts[1]
+            parts[0] = f"{fixture_name}_{bench_name}"
+            parts.pop(1)  # Remove the benchmark name since it's now in parts[0]
+        else:
+            # Convert "CF/InsertUnsorted/..." to "InsertUnsorted/..."
+            # Strip short fixture prefixes like "CF"
+            if len(parts[0]) <= 3 and parts[0].isupper():
+                parts[0] = parts[1]
+                parts.pop(1)
     return "/".join(parts)
 
 
@@ -47,7 +54,7 @@ def main(
     """
     Generate throughput comparison plots from benchmark CSV results.
 
-    Plots throughput (MOPS) vs input size for various benchmarks.
+    Plots throughput [M ops/s] vs input size for various benchmarks.
 
     Examples:
         cat results.csv | plot_throughput.py
@@ -84,8 +91,12 @@ def main(
         base_name = parts[0]
         size_str = parts[1]
 
+        # Strip CF_ prefix for sorted/unsorted insertion benchmarks
+        if base_name in ("CF_InsertSorted", "CF_InsertUnsorted"):
+            base_name = base_name[3:]
+
         suffix = base_name.rsplit("_", 1)[-1]
-        if not re.fullmatch(r"(?:Query|Insert|Delete)(?:AddSub)?(<\d+>)?", suffix):
+        if not re.fullmatch(r"(?:Query|Insert|Delete|)(?:Sorted|Unsorted)(?:AddSub)?(<\d+>)?", suffix):
             continue
 
         try:
@@ -123,19 +134,19 @@ def main(
     for bench_name in benchmark_names:
         sizes = sorted(benchmark_data[bench_name].keys())
         throughput = [benchmark_data[bench_name][size] for size in sizes]
-        ax.plot(sizes, throughput, "o-", label=bench_name, linewidth=2, markersize=6)
+        ax.plot(sizes, throughput, "o-", label=bench_name, linewidth=2.5, markersize=8)
 
-    ax.set_xlabel("Input Size", fontsize=12)
-    ax.set_ylabel("Throughput (MOPS)", fontsize=12)
+    ax.set_xlabel("Input Size", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
     ax.set_xscale("log", base=2)
     # ax.set_yscale("log")
-    ax.legend(fontsize=10, loc="best", ncol=2)
-    ax.grid(True, which="both", ls="--", alpha=0.5)
-    ax.set_title("Throughput Comparison", fontsize=14)
+    ax.legend(fontsize=10, loc="best", ncol=2, framealpha=0)
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+    ax.set_title("Throughput Comparison", fontsize=16, fontweight="bold")
     plt.tight_layout()
 
     output_file = output_dir / "benchmark_throughput.png"
-    plt.savefig(output_file, dpi=150)
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
     typer.secho(f"Throughput plot saved to {output_file}", fg=typer.colors.GREEN)
 
 

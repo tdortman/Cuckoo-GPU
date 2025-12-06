@@ -133,15 +133,15 @@ def main(
             sizes = sorted(memory_data[bench_name].keys())
             memory = [memory_data[bench_name][size] for size in sizes]
 
-            ax1.plot(sizes, memory, "o-", label=bench_name, linewidth=2, markersize=6)
+            ax1.plot(sizes, memory, "o-", label=bench_name, linewidth=2.5, markersize=8)
 
-        ax1.set_xlabel("Input Size", fontsize=12)
-        ax1.set_ylabel("Memory Usage (MiB)", fontsize=12)
+        ax1.set_xlabel("Input Size", fontsize=14, fontweight="bold")
+        ax1.set_ylabel("Memory Usage (MiB)", fontsize=14, fontweight="bold")
         ax1.set_xscale("log", base=2)
         ax1.set_yscale("log")
-        ax1.legend(fontsize=10, loc="best")
-        ax1.grid(True, which="both", ls="--", alpha=0.5)
-        ax1.set_title("Total Memory Usage", fontsize=14)
+        ax1.legend(fontsize=10, loc="best", framealpha=0)
+        ax1.grid(True, which="both", ls="--", alpha=0.3)
+        ax1.set_title("Total Memory Usage", fontsize=16, fontweight="bold")
 
     if bits_per_item_data:
 
@@ -158,19 +158,19 @@ def main(
             sizes = sorted(bits_per_item_data[bench_name].keys())
             bpi = [bits_per_item_data[bench_name][size] for size in sizes]
 
-            ax2.plot(sizes, bpi, "o-", label=bench_name, linewidth=2, markersize=6)
+            ax2.plot(sizes, bpi, "o-", label=bench_name, linewidth=2.5, markersize=8)
 
-        ax2.set_xlabel("Input Size", fontsize=12)
-        ax2.set_ylabel("Bits Per Item", fontsize=12)
+        ax2.set_xlabel("Input Size", fontsize=14, fontweight="bold")
+        ax2.set_ylabel("Bits Per Item", fontsize=14, fontweight="bold")
         ax2.set_xscale("log", base=2)
-        ax2.legend(fontsize=10, loc="best")
-        ax2.grid(True, which="both", ls="--", alpha=0.5)
-        ax2.set_title("Memory Efficiency (Bits Per Item)", fontsize=14)
+        ax2.legend(fontsize=10, loc="best", framealpha=0)
+        ax2.grid(True, which="both", ls="--", alpha=0.3)
+        ax2.set_title("Memory Efficiency (Bits Per Item)", fontsize=16, fontweight="bold")
 
     plt.tight_layout()
 
     output_file = output_dir / "benchmark_memory.png"
-    plt.savefig(output_file, dpi=150)
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
     typer.secho(f"Memory plot saved to {output_file}", fg=typer.colors.GREEN)
 
 

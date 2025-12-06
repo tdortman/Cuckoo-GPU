@@ -138,6 +138,15 @@ if get_option('BUILD_BENCHMARKS') == true
     )
 
     executable(
+        'benchmark-cuckoo-sorted-vs-unsorted',
+        './benchmark/cuckoo_sorted_vs_unsorted.cu',
+        dependencies: bench_deps,
+        include_directories: includes,
+        cuda_args: cuda_args,
+        install: false,
+    )
+
+    executable(
         'benchmark-cuckoo-ipc-overhead',
         './benchmark/cuckoo_ipc_overhead.cu',
         dependencies: bench_deps,

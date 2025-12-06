@@ -106,20 +106,20 @@ def main(
     benchmark_names = sorted(benchmark_data.keys(), key=get_last_value, reverse=True)
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    fig.suptitle("Runtime Comparison", fontsize=16)
+    fig.suptitle("Runtime Comparison", fontsize=16, fontweight="bold")
 
     for bench_name in benchmark_names:
         sizes = sorted(benchmark_data[bench_name].keys())
         times = [benchmark_data[bench_name][size] for size in sizes]
 
-        ax.plot(sizes, times, "o-", label=bench_name, linewidth=2, markersize=6)
+        ax.plot(sizes, times, "o-", label=bench_name, linewidth=2.5, markersize=8)
 
-    ax.set_xlabel("Input Size", fontsize=12)
-    ax.set_ylabel("Runtime (ms)", fontsize=12)
+    ax.set_xlabel("Input Size", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Runtime (ms)", fontsize=14, fontweight="bold")
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.legend(fontsize=10, loc="best")
-    ax.grid(True, which="both", ls="--", alpha=0.5)
+    ax.legend(fontsize=10, loc="best", framealpha=0)
+    ax.grid(True, which="both", ls="--", alpha=0.3)
 
     plt.tight_layout()
 
@@ -131,7 +131,7 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_file = output_dir / "benchmark_runtime.png"
-    plt.savefig(output_file, dpi=150)
+    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
     typer.secho(f"Plot saved to {output_file}", fg=typer.colors.GREEN)
 
 
