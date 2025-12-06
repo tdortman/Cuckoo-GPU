@@ -14,7 +14,7 @@ namespace bm = benchmark;
 using BFSConfig = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy, EvictionPolicy::BFS>;
 using DFSConfig = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy, EvictionPolicy::DFS>;
 
-static constexpr double PREFILL_LOAD_FACTOR = 0.75;
+static constexpr double PREFILL_FRACTION = 0.75;
 
 static constexpr double LOAD_FACTORS[] = {
     0.76,
@@ -49,8 +49,8 @@ class EvictionBenchmarkFixture : public benchmark::Fixture {
         loadFactor = LOAD_FACTORS[state.range(1)];
 
         auto totalKeys = static_cast<size_t>(capacity * loadFactor);
-        nPrefill = static_cast<size_t>(capacity * PREFILL_LOAD_FACTOR);
-        nMeasured = totalKeys > nPrefill ? totalKeys - nPrefill : 0;
+        nPrefill = static_cast<size_t>(totalKeys * PREFILL_FRACTION);
+        nMeasured = totalKeys - nPrefill;
 
         d_keysPrefill.resize(nPrefill);
         d_keysMeasured.resize(nMeasured);
@@ -73,7 +73,7 @@ class EvictionBenchmarkFixture : public benchmark::Fixture {
 
     void setCounters(benchmark::State& state, size_t evictions, size_t inserted) {
         state.counters["load_factor"] = bm::Counter(loadFactor * 100);
-        state.counters["prefill_load_factor"] = bm::Counter(PREFILL_LOAD_FACTOR * 100);
+        state.counters["prefill_fraction"] = bm::Counter(PREFILL_FRACTION * 100);
         state.counters["evictions"] = bm::Counter(static_cast<double>(evictions));
         state.counters["inserted"] = bm::Counter(static_cast<double>(inserted));
         state.counters["evictions_per_insert"] = bm::Counter(
@@ -103,7 +103,7 @@ using DFSFixture = EvictionBenchmarkFixture<DFSConfig>;
 
 BENCHMARK_DEFINE_F(BFSFixture, Evictions)(bm::State& state) {
     size_t totalEvictions = 0;
-    size_t totalInserted = 0;
+    size_t numIterations = 0;
 
     for (auto _ : state) {
         filter->clear();
@@ -121,16 +121,17 @@ BENCHMARK_DEFINE_F(BFSFixture, Evictions)(bm::State& state) {
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
 
-        totalEvictions = evictions;
-        totalInserted = nMeasured;
+        totalEvictions += evictions;
+        numIterations++;
     }
 
-    setCounters(state, totalEvictions, totalInserted);
+    size_t avgEvictions = numIterations > 0 ? totalEvictions / numIterations : 0;
+    setCounters(state, avgEvictions, nMeasured);
 }
 
 BENCHMARK_DEFINE_F(DFSFixture, Evictions)(bm::State& state) {
     size_t totalEvictions = 0;
-    size_t totalInserted = 0;
+    size_t numIterations = 0;
 
     for (auto _ : state) {
         filter->clear();
@@ -148,18 +149,19 @@ BENCHMARK_DEFINE_F(DFSFixture, Evictions)(bm::State& state) {
         state.SetIterationTime(elapsed);
         bm::DoNotOptimize(inserted);
 
-        totalEvictions = evictions;
-        totalInserted = nMeasured;
+        totalEvictions += evictions;
+        numIterations++;
     }
 
-    setCounters(state, totalEvictions, totalInserted);
+    size_t avgEvictions = numIterations > 0 ? totalEvictions / numIterations : 0;
+    setCounters(state, avgEvictions, nMeasured);
 }
 
 #define EVICTION_BENCHMARK_CONFIG                                                       \
-    ->ArgsProduct({{1 << 24}, benchmark::CreateDenseRange(0, NUM_LOAD_FACTORS - 1, 1)}) \
+    ->ArgsProduct({{1 << 28}, benchmark::CreateDenseRange(0, NUM_LOAD_FACTORS - 1, 1)}) \
         ->Unit(benchmark::kMillisecond)                                                 \
         ->UseManualTime()                                                               \
-        ->Iterations(20)                                                                \
+        ->Iterations(10)                                                                \
         ->Repetitions(5)                                                                \
         ->ReportAggregatesOnly(true)
 

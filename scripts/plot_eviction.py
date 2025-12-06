@@ -7,6 +7,8 @@
 #   "typer",
 # ]
 # ///
+import math
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -24,6 +26,14 @@ def extract_eviction_policy(name: str) -> Optional[str]:
         return "BFS"
     elif name.startswith("DFSFixture"):
         return "DFS"
+    return None
+
+
+def extract_capacity(name: str) -> Optional[int]:
+    """Extract capacity from benchmark name like BFSFixture/Evictions/16777216/..."""
+    match = re.search(r"/Evictions/(\d+)/", name)
+    if match:
+        return int(match.group(1))
     return None
 
 
@@ -77,15 +87,21 @@ def main(
     eviction_data = defaultdict(dict)
     total_evictions_data = defaultdict(dict)
     throughput_data = defaultdict(dict)
+    capacity = None
 
     for _, row in df.iterrows():
         name = row["name"]
 
         policy = extract_eviction_policy(name)
         load_factor = extract_load_factor(row)
+        row_capacity = extract_capacity(name)
 
         if policy is None or load_factor is None:
             continue
+
+        # Track capacity (assumes all rows have the same capacity)
+        if row_capacity is not None and capacity is None:
+            capacity = row_capacity
 
         evictions_per_insert = row.get("evictions_per_insert")
         evictions = row.get("evictions")
@@ -118,6 +134,13 @@ def main(
         "DFS": {"color": "#A23B72", "marker": "s", "linestyle": "--"},
     }
 
+    # Format capacity for title
+    def format_capacity_title(base_title: str) -> str:
+        if capacity is not None:
+            power = int(math.log2(capacity))
+            return f"{base_title} $\\left(n=2^{{{power}}}\\right)$"
+        return base_title
+
     # Plot 1: Evictions per insert vs load factor
     fig, ax = plt.subplots(figsize=(12, 8))
 
@@ -142,7 +165,7 @@ def main(
     ax.set_yscale("log")
     ax.grid(True, which="both", ls="--", alpha=0.3)
     ax.legend(fontsize=12, loc="upper left", framealpha=0)
-    ax.set_title("Evictions per Insert vs Load Factor", fontsize=16, fontweight="bold")
+    ax.set_title(format_capacity_title("Evictions per Insert"), fontsize=16, fontweight="bold")
 
     plt.tight_layout()
 
@@ -176,7 +199,7 @@ def main(
         ax.set_yscale("log")
         ax.grid(True, which="both", ls="--", alpha=0.3)
         ax.legend(fontsize=12, loc="upper left", framealpha=0)
-        ax.set_title("Total Evictions vs Load Factor", fontsize=16, fontweight="bold")
+        ax.set_title(format_capacity_title("Total Evictions"), fontsize=16, fontweight="bold")
 
         plt.tight_layout()
 
@@ -209,7 +232,7 @@ def main(
         ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
         ax.grid(True, which="both", ls="--", alpha=0.3)
         ax.legend(fontsize=12, loc="upper right", framealpha=0)
-        ax.set_title("Insert Throughput vs Load Factor (75% Pre-filled)", fontsize=16, fontweight="bold")
+        ax.set_title(format_capacity_title("Insert Throughput"), fontsize=16, fontweight="bold")
 
         plt.tight_layout()
 
