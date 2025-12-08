@@ -173,9 +173,9 @@ def create_fastest_filter_heatmap(df: pd.DataFrame, output_path: Path):
 
     ax2.set_xlabel("Bits per item")
     ax2.set_ylabel("False positive rate (f)")
-    ax2.set_title("Query Throughput (Mops/s)")
+    ax2.set_title("Query Throughput (MOPS)")
 
-    plt.colorbar(im2, ax=ax2, label="Mops/s")
+    plt.colorbar(im2, ax=ax2, label="MOPS")
 
     # Plot 3: FPR vs bits_per_item scatter
     ax3 = axes[1, 0]
@@ -220,7 +220,7 @@ def create_fastest_filter_heatmap(df: pd.DataFrame, output_path: Path):
             )
 
     ax4.set_xlabel("Bits per item")
-    ax4.set_ylabel("Throughput (Mops/s)")
+    ax4.set_ylabel("Throughput (MOPS)")
     ax4.set_title("Throughput vs Space Trade-off")
     ax4.legend(fontsize=8)
     ax4.grid(True, alpha=0.3)
