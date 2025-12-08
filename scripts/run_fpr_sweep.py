@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-"""
-Wrapper script to run all FPR sweep benchmark variants and combine results.
-
-This script runs the FPR sweep benchmark with different GQF configurations
-(8-bit, 16-bit, and 32-bit) and combines all results into a single CSV file.
-"""
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "typer",
+# ]
+# ///
 
 import subprocess
 import tempfile
