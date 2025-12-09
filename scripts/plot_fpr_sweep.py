@@ -56,6 +56,8 @@ def parse_benchmark_name(name: str) -> dict:
         result["operation"] = "insert"
     elif "_PositiveQuery_Sweep" in name:
         result["operation"] = "positive_query"
+    elif "_Delete_Sweep" in name:
+        result["operation"] = "delete"
 
     for prefix, filter_name in FILTER_TYPES.items():
         if name.startswith(prefix):
@@ -135,17 +137,30 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     else:
         neg_query_df["insert_throughput"] = np.nan
 
+    # Map delete throughput
+    delete_df = df[df["operation"] == "delete"].copy()
+    if len(delete_df) > 0:
+        delete_df["config_key"] = delete_df.apply(make_config_key, axis=1)
+        delete_lookup = delete_df.set_index("config_key")["throughput_mops"].to_dict()
+        neg_query_df["delete_throughput"] = neg_query_df["config_key"].map(
+            delete_lookup
+        )
+    else:
+        neg_query_df["delete_throughput"] = np.nan
+
     has_insert_data = neg_query_df["insert_throughput"].notna().any()
     has_positive_data = neg_query_df["positive_query_throughput"].notna().any()
+    has_delete_data = neg_query_df["delete_throughput"].notna().any()
 
-    fig, ax = plt.subplots(figsize=(14, 8))
+    fig, ax = plt.subplots(figsize=(16, 8))
 
     n_fpr_targets = len(FPR_TARGETS)
     n_filters = len(filter_names)
 
-    # Each FPR target has n_filters groups, each group has 2 bars (query + insert)
-    bar_width = 0.35
-    group_width = bar_width * 2 + 0.1
+    # Calculate bar widths based on available data (query + insert + delete)
+    n_bars = 1 + (1 if has_insert_data else 0) + (1 if has_delete_data else 0)
+    bar_width = 0.25
+    group_width = bar_width * n_bars + 0.1
     target_width = n_filters * group_width + 0.5
 
     for target_idx, (fpr_target, fpr_label) in enumerate(FPR_TARGETS):
@@ -174,28 +189,51 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
                 else 0
             )
 
+            delete_qualifying = qualifying[qualifying["delete_throughput"].notna()]
+            delete_tp = (
+                delete_qualifying["delete_throughput"].max()
+                if len(delete_qualifying) > 0
+                else 0
+            )
+
             x_base = target_offset + filter_idx * group_width
+            bar_offset = 0
 
             # Query bar (solid)
             ax.bar(
                 x_base,
-                query_tp if query_tp > 0 else 0.1,
+                query_tp,
                 bar_width,
                 color=FILTER_COLORS[filter_name],
                 edgecolor="white",
                 linewidth=0.5,
             )
+            bar_offset += bar_width
 
-            # Insert bar (hatched)
+            # Insert bar (diagonal hatch)
             if has_insert_data:
                 ax.bar(
-                    x_base + bar_width,
-                    insert_tp if insert_tp > 0 else 0.1,
+                    x_base + bar_offset,
+                    insert_tp,
                     bar_width,
                     color=FILTER_COLORS[filter_name],
                     edgecolor="white",
                     linewidth=0.5,
                     hatch="//",
+                    alpha=0.7,
+                )
+                bar_offset += bar_width
+
+            # Delete bar (horizontal hatch)
+            if has_delete_data:
+                ax.bar(
+                    x_base + bar_offset,
+                    delete_tp,
+                    bar_width,
+                    color=FILTER_COLORS[filter_name],
+                    edgecolor="white",
+                    linewidth=0.5,
+                    hatch="--",
                     alpha=0.7,
                 )
 
@@ -211,7 +249,7 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     ax.set_ylabel("Throughput (MOPS)")
     hit_pct = int(hit_rate * 100)
     ax.set_title(rf"Best Throughput by Target FPR ({hit_pct}% hit rate)")
-    # ax.set_yscale("log")
+    ax.set_yscale("log")
     ax.grid(True, alpha=0.3, axis="y")
 
     legend_elements = [
@@ -220,6 +258,9 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     legend_elements.append(Patch(facecolor="gray", label="Query"))
     legend_elements.append(
         Patch(facecolor="gray", hatch="//", alpha=0.7, label="Insert")
+    )
+    legend_elements.append(
+        Patch(facecolor="gray", hatch="--", alpha=0.7, label="Delete")
     )
     ax.legend(handles=legend_elements, loc="upper right", fontsize=8, ncol=2)
 
