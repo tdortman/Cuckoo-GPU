@@ -265,8 +265,14 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     ax.legend(handles=legend_elements, loc="upper right", fontsize=8, ncol=2)
 
     plt.tight_layout()
-    output_path = output_dir / "fpr_sweep_throughput.png"
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    output_path = output_dir / "fpr_sweep_throughput.pdf"
+    plt.savefig(
+        output_path,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     plt.close(fig)
     typer.secho(f"Saved throughput comparison to {output_path}", fg=typer.colors.GREEN)
 

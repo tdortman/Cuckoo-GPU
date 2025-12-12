@@ -136,8 +136,8 @@ def main(
 
             plt.tight_layout()
 
-            output_file = output_dir / f"sol_{filter_type}_{operation}.png"
-            plt.savefig(output_file, dpi=150, bbox_inches="tight")
+            output_file = output_dir / f"sol_{filter_type}_{operation}.pdf"
+            plt.savefig(output_file, bbox_inches="tight")
             typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
             plt.close()
 
@@ -189,8 +189,14 @@ def main(
 
             plt.tight_layout()
 
-            output_file = output_dir / f"sol_compare_{metric_col}_{operation}.png"
-            plt.savefig(output_file, dpi=150, bbox_inches="tight")
+            output_file = output_dir / f"sol_compare_{metric_col}_{operation}.pdf"
+            plt.savefig(
+                output_file,
+                bbox_inches="tight",
+                transparent=True,
+                format="pdf",
+                dpi=600,
+            )
             typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
             plt.close()
 
@@ -259,8 +265,14 @@ def main(
 
         plt.tight_layout()
 
-        output_file = output_dir / f"sol_grid_{metric_col}.png"
-        plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+        output_file = output_dir / f"sol_grid_{metric_col}.pdf"
+        plt.savefig(
+            output_file,
+            bbox_inches="tight",
+            transparent=True,
+            format="pdf",
+            dpi=600,
+        )
         typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
         plt.close()
 

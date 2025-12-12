@@ -130,8 +130,14 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_file = output_dir / "benchmark_runtime.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "benchmark_runtime.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(f"Plot saved to {output_file}", fg=typer.colors.GREEN)
 
 

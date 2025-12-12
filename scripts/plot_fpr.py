@@ -129,8 +129,14 @@ def main(
 
     plt.tight_layout()
 
-    output_file = output_dir / "fpr_vs_memory.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "fpr_vs_memory.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(
         f"FPR vs memory plot saved to {output_file}",
         fg=typer.colors.GREEN,
@@ -168,8 +174,14 @@ def main(
 
     plt.tight_layout()
 
-    output_file = output_dir / "bits_per_item_vs_memory.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "bits_per_item_vs_memory.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(
         f"Bits per item plot saved to {output_file}",
         fg=typer.colors.GREEN,

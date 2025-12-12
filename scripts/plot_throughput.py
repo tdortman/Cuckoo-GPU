@@ -96,7 +96,9 @@ def main(
             base_name = base_name[3:]
 
         suffix = base_name.rsplit("_", 1)[-1]
-        if not re.fullmatch(r"(?:Query|Insert|Delete|)(?:Sorted|Unsorted)(?:AddSub)?(<\d+>)?", suffix):
+        if not re.fullmatch(
+            r"(?:Query|Insert|Delete|)(?:Sorted|Unsorted)(?:AddSub)?(<\d+>)?", suffix
+        ):
             continue
 
         try:
@@ -145,8 +147,14 @@ def main(
     ax.set_title("Throughput Comparison", fontsize=16, fontweight="bold")
     plt.tight_layout()
 
-    output_file = output_dir / "benchmark_throughput.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "benchmark_throughput.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(f"Throughput plot saved to {output_file}", fg=typer.colors.GREEN)
 
 

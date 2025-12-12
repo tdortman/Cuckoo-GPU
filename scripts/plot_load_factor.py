@@ -174,10 +174,16 @@ def plot_operation_on_axis(
     num_elements_per_operation: dict,
     filter_styles: dict,
     show_ylabel: bool = True,
-    show_legend: bool = True,
     title_suffix: Optional[str] = None,
-):
-    """Plot a single operation's data on the given axis."""
+) -> tuple[list, list]:
+    """Plot a single operation's data on the given axis.
+
+    Returns:
+        A tuple of (handles, labels) for use in creating a combined legend.
+    """
+    handles = []
+    labels = []
+
     for filter_type in sorted(benchmark_data[operation].keys()):
         load_factors = sorted(benchmark_data[operation][filter_type].keys())
         throughputs = [
@@ -185,7 +191,7 @@ def plot_operation_on_axis(
         ]
 
         style = filter_styles.get(filter_type, {"marker": "o", "linestyle": "-"})
-        ax.plot(
+        (line,) = ax.plot(
             load_factors,
             throughputs,
             label=filter_type,
@@ -195,14 +201,14 @@ def plot_operation_on_axis(
             marker=style.get("marker", "o"),
             linestyle=style.get("linestyle", "-"),
         )
+        handles.append(line)
+        labels.append(filter_type)
 
     ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
     if show_ylabel:
         ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
     ax.set_xlim(0.0, 1.0)
     ax.grid(True, which="both", ls="--", alpha=0.3)
-    if show_legend:
-        ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=0)
 
     # Build title with element count and optional suffix
     title = f"{operation} Performance"
@@ -221,6 +227,8 @@ def plot_operation_on_axis(
     )
 
     ax.set_yscale("log")
+
+    return handles, labels
 
 
 @app.command()
@@ -310,18 +318,23 @@ def main(
 
         fig, axes = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
 
+        # Collect handles and labels from both plots for combined legend
+        all_handles = []
+        all_labels = []
+
         # Left plot
         if has_left:
-            plot_operation_on_axis(
+            handles_left, labels_left = plot_operation_on_axis(
                 axes[0],
                 operation,
                 benchmark_data_left,
                 num_elements_left,
                 filter_styles,
                 show_ylabel=True,
-                show_legend=False,
                 title_suffix=label_left,
             )
+            all_handles.extend(handles_left)
+            all_labels.extend(labels_left)
         else:
             axes[0].set_title(f"{operation} (No data)", fontsize=16, fontweight="bold")
             axes[0].text(
@@ -335,16 +348,20 @@ def main(
 
         # Right plot
         if has_right:
-            plot_operation_on_axis(
+            handles_right, labels_right = plot_operation_on_axis(
                 axes[1],
                 operation,
                 benchmark_data_right,
                 num_elements_right,
                 filter_styles,
                 show_ylabel=False,
-                show_legend=True,
                 title_suffix=label_right,
             )
+            # Only add handles/labels that aren't already in the combined list
+            for handle, label in zip(handles_right, labels_right):
+                if label not in all_labels:
+                    all_handles.append(handle)
+                    all_labels.append(label)
         else:
             axes[1].set_title(f"{operation} (No data)", fontsize=16, fontweight="bold")
             axes[1].text(
@@ -356,12 +373,29 @@ def main(
                 transform=axes[1].transAxes,
             )
 
+        # Create combined legend on the right side of the figure
+        if all_handles:
+            fig.legend(
+                all_handles,
+                all_labels,
+                fontsize=10,
+                loc="center right",
+                bbox_to_anchor=(1.0, 0.5),
+                framealpha=0,
+            )
+
         plt.tight_layout()
 
         output_file = (
-            output_dir / f"load_factor_{operation.lower().replace(' ', '_')}.png"
+            output_dir / f"load_factor_{operation.lower().replace(' ', '_')}.pdf"
         )
-        plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+        plt.savefig(
+            output_file,
+            bbox_inches="tight",
+            transparent=True,
+            format="pdf",
+            dpi=600,
+        )
         typer.secho(
             f"{operation} throughput comparison plot saved to {output_file}",
             fg=typer.colors.GREEN,

@@ -135,8 +135,8 @@ def main(
 
             plt.tight_layout()
 
-            output_file = output_dir / f"cache_{cache_level.lower()}_{operation}.png"
-            plt.savefig(output_file, dpi=150, bbox_inches="tight")
+            output_file = output_dir / f"cache_{cache_level.lower()}_{operation}.pdf"
+            plt.savefig(output_file, bbox_inches="tight")
             typer.secho(
                 f"{cache_level} {operation} plot saved to {output_file}",
                 fg=typer.colors.GREEN,
@@ -190,8 +190,8 @@ def main(
         )
         plt.tight_layout()
 
-        output_file = output_dir / f"cache_{filter_type}_combined.png"
-        plt.savefig(output_file, dpi=150, bbox_inches="tight")
+        output_file = output_dir / f"cache_{filter_type}_combined.pdf"
+        plt.savefig(output_file, bbox_inches="tight")
         typer.secho(
             f"{get_filter_display_name(filter_type)} combined plot saved to {output_file}",
             fg=typer.colors.GREEN,
@@ -269,8 +269,14 @@ def main(
     )
     plt.tight_layout()
 
-    output_file = output_dir / "cache_overview.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "cache_overview.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(
         f"Overview plot saved to {output_file}",
         fg=typer.colors.GREEN,

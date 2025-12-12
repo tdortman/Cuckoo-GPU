@@ -165,12 +165,20 @@ def main(
         ax2.set_xscale("log", base=2)
         ax2.legend(fontsize=10, loc="best", framealpha=0)
         ax2.grid(True, which="both", ls="--", alpha=0.3)
-        ax2.set_title("Memory Efficiency (Bits Per Item)", fontsize=16, fontweight="bold")
+        ax2.set_title(
+            "Memory Efficiency (Bits Per Item)", fontsize=16, fontweight="bold"
+        )
 
     plt.tight_layout()
 
-    output_file = output_dir / "benchmark_memory.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+    output_file = output_dir / "benchmark_memory.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
     typer.secho(f"Memory plot saved to {output_file}", fg=typer.colors.GREEN)
 
 

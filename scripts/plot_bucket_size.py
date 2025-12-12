@@ -145,15 +145,16 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_file = output_dir / "benchmark_bucket_size.png"
+    output_file = output_dir / "benchmark_bucket_size.pdf"
 
     plt.tight_layout()
     plt.savefig(
         output_file,
-        dpi=150,
         bbox_inches="tight",
         edgecolor="none",
         transparent=True,
+        format="pdf",
+        dpi=600,
     )
 
     typer.secho(

@@ -165,13 +165,23 @@ def main(
     ax.set_yscale("log")
     ax.grid(True, which="both", ls="--", alpha=0.3)
     ax.legend(fontsize=12, loc="upper left", framealpha=0)
-    ax.set_title(format_capacity_title("Evictions per Insert"), fontsize=16, fontweight="bold")
+    ax.set_title(
+        format_capacity_title("Evictions per Insert"), fontsize=16, fontweight="bold"
+    )
 
     plt.tight_layout()
 
-    output_file = output_dir / "eviction_per_insert.png"
-    plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
-    typer.secho(f"Evictions per insert plot saved to {output_file}", fg=typer.colors.GREEN)
+    output_file = output_dir / "eviction_per_insert.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
+    typer.secho(
+        f"Evictions per insert plot saved to {output_file}", fg=typer.colors.GREEN
+    )
     plt.close()
 
     # Plot 2: Total evictions vs load factor
@@ -199,13 +209,23 @@ def main(
         ax.set_yscale("log")
         ax.grid(True, which="both", ls="--", alpha=0.3)
         ax.legend(fontsize=12, loc="upper left", framealpha=0)
-        ax.set_title(format_capacity_title("Total Evictions"), fontsize=16, fontweight="bold")
+        ax.set_title(
+            format_capacity_title("Total Evictions"), fontsize=16, fontweight="bold"
+        )
 
         plt.tight_layout()
 
-        output_file = output_dir / "eviction_total.png"
-        plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
-        typer.secho(f"Total evictions plot saved to {output_file}", fg=typer.colors.GREEN)
+        output_file = output_dir / "eviction_total.pdf"
+        plt.savefig(
+            output_file,
+            bbox_inches="tight",
+            transparent=True,
+            format="pdf",
+            dpi=600,
+        )
+        typer.secho(
+            f"Total evictions plot saved to {output_file}", fg=typer.colors.GREEN
+        )
         plt.close()
 
     # Plot 3: Throughput (items per second) vs load factor
@@ -214,7 +234,9 @@ def main(
 
         for policy in sorted(throughput_data.keys()):
             load_factors = sorted(throughput_data[policy].keys())
-            throughputs = [throughput_data[policy][lf] / 1e6 for lf in load_factors]  # Convert to millions
+            throughputs = [
+                throughput_data[policy][lf] / 1e6 for lf in load_factors
+            ]  # Convert to millions
 
             style = policy_styles.get(policy, {"marker": "o", "linestyle": "-"})
             ax.plot(
@@ -232,12 +254,20 @@ def main(
         ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
         ax.grid(True, which="both", ls="--", alpha=0.3)
         ax.legend(fontsize=12, loc="upper right", framealpha=0)
-        ax.set_title(format_capacity_title("Insert Throughput"), fontsize=16, fontweight="bold")
+        ax.set_title(
+            format_capacity_title("Insert Throughput"), fontsize=16, fontweight="bold"
+        )
 
         plt.tight_layout()
 
-        output_file = output_dir / "eviction_throughput.png"
-        plt.savefig(output_file, dpi=150, bbox_inches="tight", transparent=True)
+        output_file = output_dir / "eviction_throughput.pdf"
+        plt.savefig(
+            output_file,
+            bbox_inches="tight",
+            transparent=True,
+            format="pdf",
+            dpi=600,
+        )
         typer.secho(f"Throughput plot saved to {output_file}", fg=typer.colors.GREEN)
         plt.close()
 
