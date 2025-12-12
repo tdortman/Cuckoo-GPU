@@ -139,8 +139,10 @@ struct CuckooFilter {
 
     static constexpr size_t maxEvictions = Config::maxEvictions;
     static constexpr size_t blockSize = Config::blockSize;
-    static_assert(bitsPerTag <= 32, "The tag cannot be larger than 32 bits");
-    static_assert(bitsPerTag >= 1, "The tag must be at least 1 bit");
+    static_assert(
+        bitsPerTag == 8 || bitsPerTag == 16 || bitsPerTag == 32,
+        "The tag must be 8, 16 or 32 bits"
+    );
     static_assert(
         bitsPerTag <= 8 * sizeof(T),
         "The tag cannot be larger than the size of the type"

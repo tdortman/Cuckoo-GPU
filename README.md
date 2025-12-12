@@ -69,7 +69,7 @@ The `CuckooConfig` template accepts the following parameters:
 | Parameter         | Description                              | Default              |
 | ----------------- | ---------------------------------------- | -------------------- |
 | `T`               | Key type                                 | -                    |
-| `bitsPerTag`      | Fingerprint size in bits (1-32)          | -                    |
+| `bitsPerTag`      | Fingerprint size in bits (8, 16, 32)     | -                    |
 | `maxEvictions`    | Maximum eviction attempts before failure | 500                  |
 | `blockSize`       | CUDA block size                          | 256                  |
 | `bucketSize`      | Slots per bucket (must be power of 2)    | 16                   |
