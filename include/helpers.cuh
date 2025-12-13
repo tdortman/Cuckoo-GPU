@@ -63,6 +63,63 @@ size_t countOnes(T* data, size_t n) {
 }
 
 /**
+ * @brief Returns a bitmask indicating which slots in a packed word are zero.
+ *
+ * Uses SWAR (SIMD Within A Register) to check multiple items in parallel.
+ * See https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord
+ *
+ * The high bit of each slot that is zero will be set in the result.
+ *
+ * @tparam T The type of the individual items (uint8_t, uint16_t, or uint32_t)
+ * @param v The packed 64-bit integer
+ * @return A bitmask with the high bit of each zero slot set
+ */
+template <typename T>
+__host__ __device__ __forceinline__ constexpr uint64_t getZeroMask(uint64_t v) {
+    if constexpr (sizeof(T) == 1) {
+        return (v - 0x0101010101010101ULL) & ~v & 0x8080808080808080ULL;
+    } else if constexpr (sizeof(T) == 2) {
+        return (v - 0x0001000100010001ULL) & ~v & 0x8000800080008000ULL;
+    } else if constexpr (sizeof(T) == 4) {
+        return (v - 0x0000000100000001ULL) & ~v & 0x8000000080000000ULL;
+    } else {
+        return 0;
+    }
+}
+
+/**
+ * @brief Checks if a packed word contains a zero byte/word.
+ *
+ * @tparam T The type of the individual items (uint8_t, uint16_t, or uint32_t)
+ * @param v The packed 64-bit integer
+ * @return true if any of the items in v are zero
+ */
+template <typename T>
+__host__ __device__ __forceinline__ constexpr bool hasZero(uint64_t v) {
+    return getZeroMask<T>(v) != 0;
+}
+
+/**
+ * @brief Replicates a tag value across all slots in a 64-bit word.
+ *
+ * @tparam T The type of the tag (uint8_t, uint16_t, or uint32_t)
+ * @param tag The tag value to replicate
+ * @return A 64-bit word with the tag replicated in every slot
+ */
+template <typename T>
+__host__ __device__ __forceinline__ constexpr uint64_t replicateTag(T tag) {
+    if constexpr (sizeof(T) == 1) {
+        return static_cast<uint64_t>(tag) * 0x0101010101010101ULL;
+    } else if constexpr (sizeof(T) == 2) {
+        return static_cast<uint64_t>(tag) * 0x0001000100010001ULL;
+    } else if constexpr (sizeof(T) == 4) {
+        return static_cast<uint64_t>(tag) * 0x0000000100000001ULL;
+    } else {
+        return tag;
+    }
+}
+
+/**
  * @brief Integer division with rounding up (ceiling).
  */
 #define SDIV(x, y) (((x) + (y) - 1) / (y))

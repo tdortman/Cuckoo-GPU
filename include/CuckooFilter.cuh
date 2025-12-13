@@ -257,6 +257,7 @@ struct CuckooFilter {
             if constexpr (wordCount >= 2) {
                 // round down to the nearest even number
                 const size_t startPairIdx = startAtomicIdx & ~1;
+                const uint64_t replicatedTag = replicateTag(tag);
 
                 for (size_t i = 0; i < wordCount / 2; i++) {
                     const size_t pairIdx = (startPairIdx + i * 2) & (wordCount - 1);
@@ -267,21 +268,18 @@ struct CuckooFilter {
 
                     _Pragma("unroll")
                     for (auto packed : loaded) {
-                        for (size_t j = 0; j < tagsPerWord; ++j) {
-                            if (extractTag(packed, j) == tag) {
-                                return true;
-                            }
+                        if (hasZero<TagType>(packed ^ replicatedTag)) {
+                            return true;
                         }
                     }
                 }
             } else {
                 // just check the single atomic
-                const auto packed = packedTags[0];
-                _Pragma("unroll")
-                for (size_t j = 0; j < tagsPerWord; ++j) {
-                    if (extractTag(packed, j) == tag) {
-                        return true;
-                    }
+                const auto packed = reinterpret_cast<const uint64_t&>(packedTags[0]);
+                const uint64_t replicatedTag = replicateTag(tag);
+
+                if (hasZero<TagType>(packed ^ replicatedTag)) {
+                    return true;
                 }
             }
 
@@ -725,34 +723,33 @@ struct CuckooFilter {
         const uint32_t startSlot = tag & (bucketSize - 1);
         const size_t startWord = startSlot / Bucket::tagsPerWord;
 
+        const uint64_t replicatedTag = replicateTag(tag);
+
         for (size_t i = 0; i < Bucket::wordCount; ++i) {
             const size_t currIdx = (startWord + i) & (Bucket::wordCount - 1);
 
             while (true) {
                 uint64_t expected = bucket.packedTags[currIdx].load(cuda::memory_order_relaxed);
 
-                bool anyMatch = false;
-                for (size_t tagIdx = 0; tagIdx < Bucket::tagsPerWord; ++tagIdx) {
-                    if (bucket.extractTag(expected, tagIdx) == tag) {
-                        anyMatch = true;
+                uint64_t matchMask = getZeroMask<TagType>(expected ^ replicatedTag);
 
-                        uint64_t desired = bucket.replaceTag(expected, tagIdx, EMPTY);
-
-                        if (bucket.packedTags[currIdx].compare_exchange_weak(
-                                expected,
-                                desired,
-                                cuda::memory_order_relaxed,
-                                cuda::memory_order_relaxed
-                            )) {
-                            return true;
-                        }
-                        break;
-                    }
-                }
-
-                if (!anyMatch) {
+                if (matchMask == 0) {
+                    // No matching tags in this word
                     break;
                 }
+
+                // Find position of first matching tag
+                int bitPos = __ffsll(static_cast<long long>(matchMask)) - 1;
+                size_t tagIdx = bitPos / bitsPerTag;
+
+                uint64_t desired = bucket.replaceTag(expected, tagIdx, EMPTY);
+
+                if (bucket.packedTags[currIdx].compare_exchange_weak(
+                        expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
+                    )) {
+                    return true;
+                }
+                // CAS failed, retry with updated expected value
             }
         }
 
@@ -781,22 +778,27 @@ struct CuckooFilter {
             do {
                 retryWord = false;
 
-                for (size_t j = 0; j < Bucket::tagsPerWord; ++j) {
-                    if (bucket.extractTag(expected, j) == EMPTY) {
-                        auto desired = bucket.replaceTag(expected, j, tag);
+                // check for any empty slot in this word
+                uint64_t zeroMask = getZeroMask<TagType>(expected);
 
-                        if (bucket.packedTags[currWord].compare_exchange_strong(
-                                expected,
-                                desired,
-                                cuda::memory_order_relaxed,
-                                cuda::memory_order_relaxed
-                            )) {
-                            return true;
-                        } else {
-                            retryWord = true;
-                            break;
-                        }
-                    }
+                if (zeroMask == 0) {
+                    // No empty slots in this word, move to next
+                    break;
+                }
+
+                // Find position of first empty slot (returns 1-indexed bit position)
+                int bitPos = __ffsll(static_cast<long long>(zeroMask)) - 1;
+                size_t j = bitPos / bitsPerTag;
+
+                auto desired = bucket.replaceTag(expected, j, tag);
+
+                if (bucket.packedTags[currWord].compare_exchange_strong(
+                        expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
+                    )) {
+                    return true;
+                } else {
+                    // CAS failed, expected is updated, retry with new value
+                    retryWord = true;
                 }
             } while (retryWord);
         }
