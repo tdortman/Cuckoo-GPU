@@ -230,11 +230,12 @@ struct CuckooFilter {
 
         cuda::std::atomic<uint64_t> packedTags[wordCount];
 
-        __host__ __device__ TagType extractTag(uint64_t packed, size_t tagIdx) const {
+        __host__ __device__ __forceinline__ TagType
+        extractTag(uint64_t packed, size_t tagIdx) const {
             return static_cast<TagType>((packed >> (tagIdx * bitsPerTag)) & fpMask);
         }
 
-        __host__ __device__ uint64_t
+        __host__ __device__ __forceinline__ uint64_t
         replaceTag(uint64_t packed, size_t tagIdx, TagType newTag) const {
             size_t shift = tagIdx * bitsPerTag;
             uint64_t cleared = packed & ~(static_cast<uint64_t>(fpMask) << shift);
@@ -242,14 +243,14 @@ struct CuckooFilter {
         }
 
         /**
-         * @brief Finds the index of a tag in the bucket. Because we can guarantee that no threads
+         * @brief Checks if a tag is present in the bucket. Because we can guarantee that no threads
          * will try to insert into the bucket while doing so, we can make use of non-atomic
          * vectorised loads to speed up the search.
          *
          * @param tag Tag to search for
-         * @return Index of the tag in the bucket, or -1 if not found
+         * @return true if the tag is present in the bucket, false otherwise
          */
-        __forceinline__ __device__ int32_t findSlot(TagType tag) {
+        __device__ bool contains(TagType tag) {
             const uint32_t startSlot = tag & (bucketSize - 1);
             const size_t startAtomicIdx = startSlot / tagsPerWord;
 
@@ -265,32 +266,26 @@ struct CuckooFilter {
                     const uint64_t loaded[2] = {vec.x, vec.y};
 
                     _Pragma("unroll")
-                    for (size_t k = 0; k < 2; ++k) {
-                        const size_t currentAtomicIdx = pairIdx + k;
-                        const auto packed = loaded[k];
-
+                    for (auto packed : loaded) {
                         for (size_t j = 0; j < tagsPerWord; ++j) {
                             if (extractTag(packed, j) == tag) {
-                                return static_cast<int32_t>(currentAtomicIdx * tagsPerWord + j);
+                                return true;
                             }
                         }
                     }
                 }
             } else {
                 // just check the single atomic
-                const auto packed = reinterpret_cast<const uint64_t&>(packedTags[0]);
+                const auto packed = packedTags[0];
+                _Pragma("unroll")
                 for (size_t j = 0; j < tagsPerWord; ++j) {
                     if (extractTag(packed, j) == tag) {
-                        return static_cast<int32_t>(j);
+                        return true;
                     }
                 }
             }
 
-            return -1;
-        }
-
-        __device__ bool contains(TagType tag) {
-            return findSlot(tag) != -1;
+            return false;
         }
     };
 
