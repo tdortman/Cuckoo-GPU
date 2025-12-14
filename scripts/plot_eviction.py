@@ -45,39 +45,15 @@ def extract_load_factor(row: pd.Series) -> Optional[float]:
     return None
 
 
-@app.command()
-def main(
-    csv_file: Path = typer.Argument(
-        "-",
-        help="Path to CSV file, or '-' to read from stdin (default: stdin)",
-    ),
-    output_dir: Optional[Path] = typer.Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Output directory for plots (default: build/)",
-    ),
-):
-    """
-    Generate eviction count plots from benchmark CSV results.
+def load_csv_data(csv_path: Path) -> tuple[dict, dict, dict, Optional[int]]:
+    """Load and parse benchmark data from a CSV file.
 
-    Creates plots showing evictions vs load factor for BFS and DFS policies.
-
-    Examples:
-        cat results.csv | plot_eviction.py
-        plot_eviction.py < results.csv
-        plot_eviction.py results.csv
-        plot_eviction.py results.csv -o custom/dir
+    Returns a tuple of (eviction_data, total_evictions_data, throughput_data, capacity)
     """
     try:
-        if str(csv_file) == "-":
-            import sys
-
-            df = pd.read_csv(sys.stdin)
-        else:
-            df = pd.read_csv(csv_file)
+        df = pd.read_csv(csv_path)
     except Exception as e:
-        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
+        typer.secho(f"Error parsing CSV {csv_path}: {e}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     # Filter for median records only
@@ -114,13 +90,85 @@ def main(
         if pd.notna(items_per_second):
             throughput_data[policy][load_factor] = items_per_second
 
-    if not eviction_data:
-        typer.secho("No eviction data found in CSV", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+    return eviction_data, total_evictions_data, throughput_data, capacity
 
-    if not throughput_data:
-        typer.secho("No throughput data found in CSV", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+
+def format_capacity_title(base_title: str, capacity: Optional[int]) -> str:
+    """Format title with capacity as power of 2."""
+    if capacity is not None:
+        power = int(math.log2(capacity))
+        return f"{base_title} $\\left(n=2^{{{power}}}\\right)$"
+    return base_title
+
+
+@app.command()
+def main(
+    csv_file_top: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for top plot",
+    ),
+    csv_file_middle: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for middle plot",
+    ),
+    csv_file_bottom: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for bottom plot",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory for plots (default: build/)",
+    ),
+    label_top: Optional[str] = typer.Option(
+        None,
+        "--label-top",
+        "-lt",
+        help="Label to append to top plot title",
+    ),
+    label_middle: Optional[str] = typer.Option(
+        None,
+        "--label-middle",
+        "-lm",
+        help="Label to append to middle plot title",
+    ),
+    label_bottom: Optional[str] = typer.Option(
+        None,
+        "--label-bottom",
+        "-lb",
+        help="Label to append to bottom plot title",
+    ),
+):
+    """
+    Generate eviction throughput plots from three benchmark CSV files.
+
+    Creates a single figure with three vertically stacked throughput plots.
+
+    Examples:
+        plot_eviction.py small.csv medium.csv large.csv
+        plot_eviction.py small.csv medium.csv large.csv -o custom/dir
+    """
+    # Load data from all three CSV files
+    csv_files = [
+        (csv_file_top, "top", label_top),
+        (csv_file_middle, "middle", label_middle),
+        (csv_file_bottom, "bottom", label_bottom),
+    ]
+
+    data_list = []
+    for csv_file, position, label in csv_files:
+        eviction_data, total_evictions_data, throughput_data, capacity = load_csv_data(
+            csv_file
+        )
+        if not throughput_data:
+            typer.secho(
+                f"No throughput data found in {csv_file} ({position})",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+        data_list.append((throughput_data, capacity, label))
 
     # Determine output directory
     if output_dir is None:
@@ -134,104 +182,15 @@ def main(
         "DFS": {"color": "#A23B72", "marker": "s", "linestyle": "--"},
     }
 
-    # Format capacity for title
-    def format_capacity_title(base_title: str) -> str:
-        if capacity is not None:
-            power = int(math.log2(capacity))
-            return f"{base_title} $\\left(n=2^{{{power}}}\\right)$"
-        return base_title
+    # Create figure with 3 vertically stacked subplots
+    fig, axes = plt.subplots(3, 1, figsize=(12, 16), sharex=True)
 
-    # Plot 1: Evictions per insert vs load factor
-    fig, ax = plt.subplots(figsize=(12, 8))
+    all_handles = []
+    all_labels = []
 
-    for policy in sorted(eviction_data.keys()):
-        load_factors = sorted(eviction_data[policy].keys())
-        evictions = [eviction_data[policy][lf] for lf in load_factors]
-
-        style = policy_styles.get(policy, {"marker": "o", "linestyle": "-"})
-        ax.plot(
-            load_factors,
-            evictions,
-            label=policy,
-            linewidth=2.5,
-            markersize=8,
-            color=style.get("color"),
-            marker=style.get("marker", "o"),
-            linestyle=style.get("linestyle", "-"),
-        )
-
-    ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Evictions per Insert", fontsize=14, fontweight="bold")
-    ax.set_yscale("log")
-    ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(fontsize=12, loc="upper left", framealpha=0)
-    ax.set_title(
-        format_capacity_title("Evictions per Insert"), fontsize=16, fontweight="bold"
-    )
-
-    plt.tight_layout()
-
-    output_file = output_dir / "eviction_per_insert.pdf"
-    plt.savefig(
-        output_file,
-        bbox_inches="tight",
-        transparent=True,
-        format="pdf",
-        dpi=600,
-    )
-    typer.secho(
-        f"Evictions per insert plot saved to {output_file}", fg=typer.colors.GREEN
-    )
-    plt.close()
-
-    # Plot 2: Total evictions vs load factor
-    if total_evictions_data:
-        fig, ax = plt.subplots(figsize=(12, 8))
-
-        for policy in sorted(total_evictions_data.keys()):
-            load_factors = sorted(total_evictions_data[policy].keys())
-            evictions = [total_evictions_data[policy][lf] for lf in load_factors]
-
-            style = policy_styles.get(policy, {"marker": "o", "linestyle": "-"})
-            ax.plot(
-                load_factors,
-                evictions,
-                label=policy,
-                linewidth=2.5,
-                markersize=8,
-                color=style.get("color"),
-                marker=style.get("marker", "o"),
-                linestyle=style.get("linestyle", "-"),
-            )
-
-        ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
-        ax.set_ylabel("Total Evictions", fontsize=14, fontweight="bold")
-        ax.set_yscale("log")
-        ax.grid(True, which="both", ls="--", alpha=0.3)
-        ax.legend(fontsize=12, loc="upper left", framealpha=0)
-        ax.set_title(
-            format_capacity_title("Total Evictions"), fontsize=16, fontweight="bold"
-        )
-
-        plt.tight_layout()
-
-        output_file = output_dir / "eviction_total.pdf"
-        plt.savefig(
-            output_file,
-            bbox_inches="tight",
-            transparent=True,
-            format="pdf",
-            dpi=600,
-        )
-        typer.secho(
-            f"Total evictions plot saved to {output_file}", fg=typer.colors.GREEN
-        )
-        plt.close()
-
-    # Plot 3: Throughput (items per second) vs load factor
-    if throughput_data:
-        fig, ax = plt.subplots(figsize=(12, 8))
-
+    for idx, (ax, (throughput_data, capacity, label)) in enumerate(
+        zip(axes, data_list)
+    ):
         for policy in sorted(throughput_data.keys()):
             load_factors = sorted(throughput_data[policy].keys())
             throughputs = [
@@ -239,7 +198,7 @@ def main(
             ]  # Convert to millions
 
             style = policy_styles.get(policy, {"marker": "o", "linestyle": "-"})
-            ax.plot(
+            (line,) = ax.plot(
                 load_factors,
                 throughputs,
                 label=policy,
@@ -250,26 +209,47 @@ def main(
                 linestyle=style.get("linestyle", "-"),
             )
 
-        ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
+            # Collect handles/labels from first plot only
+            if idx == 0 and policy not in all_labels:
+                all_handles.append(line)
+                all_labels.append(policy)
+
+        # Only show x-label on bottom plot
+        if idx == 2:
+            ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
+
         ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
         ax.grid(True, which="both", ls="--", alpha=0.3)
-        ax.legend(fontsize=12, loc="upper right", framealpha=0)
-        ax.set_title(
-            format_capacity_title("Insert Throughput"), fontsize=16, fontweight="bold"
+
+        # Build title
+        title = format_capacity_title("Insert Throughput", capacity)
+        if label:
+            title += f" ({label})"
+        ax.set_title(title, fontsize=16, fontweight="bold")
+
+    plt.tight_layout()
+
+    # Create combined legend outside on the right
+    if all_handles:
+        fig.legend(
+            all_handles,
+            all_labels,
+            fontsize=10,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            framealpha=0,
         )
 
-        plt.tight_layout()
-
-        output_file = output_dir / "eviction_throughput.pdf"
-        plt.savefig(
-            output_file,
-            bbox_inches="tight",
-            transparent=True,
-            format="pdf",
-            dpi=600,
-        )
-        typer.secho(f"Throughput plot saved to {output_file}", fg=typer.colors.GREEN)
-        plt.close()
+    output_file = output_dir / "eviction_throughput.pdf"
+    plt.savefig(
+        output_file,
+        bbox_inches="tight",
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
+    typer.secho(f"Throughput plot saved to {output_file}", fg=typer.colors.GREEN)
+    plt.close()
 
 
 if __name__ == "__main__":

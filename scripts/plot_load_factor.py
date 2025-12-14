@@ -233,13 +233,21 @@ def plot_operation_on_axis(
 
 @app.command()
 def main(
-    csv_file_left: Path = typer.Argument(
+    csv_top_left: Path = typer.Argument(
         ...,
-        help="Path to first CSV file (left plot)",
+        help="Path to CSV file for top-left plot",
     ),
-    csv_file_right: Path = typer.Argument(
+    csv_top_right: Path = typer.Argument(
         ...,
-        help="Path to second CSV file (right plot)",
+        help="Path to CSV file for top-right plot",
+    ),
+    csv_bottom_left: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for bottom-left plot",
+    ),
+    csv_bottom_right: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for bottom-right plot",
     ),
     output_dir: Optional[Path] = typer.Option(
         None,
@@ -247,48 +255,60 @@ def main(
         "-o",
         help="Output directory for plots (default: build/)",
     ),
-    label_left: Optional[str] = typer.Option(
+    label_top_left: Optional[str] = typer.Option(
         None,
-        "--label-left",
-        "-ll",
-        help="Label to append to left plot titles (e.g., 'HBM3')",
+        "--label-tl",
+        help="Label to append to top-left plot title",
     ),
-    label_right: Optional[str] = typer.Option(
+    label_top_right: Optional[str] = typer.Option(
         None,
-        "--label-right",
-        "-lr",
-        help="Label to append to right plot titles (e.g., 'GDDR7')",
+        "--label-tr",
+        help="Label to append to top-right plot title",
+    ),
+    label_bottom_left: Optional[str] = typer.Option(
+        None,
+        "--label-bl",
+        help="Label to append to bottom-left plot title",
+    ),
+    label_bottom_right: Optional[str] = typer.Option(
+        None,
+        "--label-br",
+        help="Label to append to bottom-right plot title",
     ),
 ):
     """
-    Generate throughput vs load factor comparison plots from two benchmark CSV files.
+    Generate throughput vs load factor comparison plots from four benchmark CSV files.
 
-    Creates side-by-side plots for each operation (insert, query, delete) with data
-    from the first CSV on the left and second CSV on the right.
+    Creates a 2x2 grid of plots for each operation (insert, query, delete) with data
+    from each CSV file in the corresponding position.
 
     Examples:
-        plot_load_factor.py results1.csv results2.csv
-        plot_load_factor.py results1.csv results2.csv -o custom/dir
+        plot_load_factor.py tl.csv tr.csv bl.csv br.csv
+        plot_load_factor.py tl.csv tr.csv bl.csv br.csv -o custom/dir
     """
-    # Load data from both CSV files
-    benchmark_data_left, num_elements_left = load_csv_data(csv_file_left)
-    benchmark_data_right, num_elements_right = load_csv_data(csv_file_right)
+    # Load data from all four CSV files
+    csv_files = [
+        (csv_top_left, "top-left"),
+        (csv_top_right, "top-right"),
+        (csv_bottom_left, "bottom-left"),
+        (csv_bottom_right, "bottom-right"),
+    ]
+    labels = [label_top_left, label_top_right, label_bottom_left, label_bottom_right]
 
-    if not benchmark_data_left:
-        typer.secho(
-            f"No throughput data found in {csv_file_left}",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(1)
+    benchmark_data_list = []
+    num_elements_list = []
 
-    if not benchmark_data_right:
-        typer.secho(
-            f"No throughput data found in {csv_file_right}",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(1)
+    for csv_file, position in csv_files:
+        data, num_elements = load_csv_data(csv_file)
+        if not data:
+            typer.secho(
+                f"No throughput data found in {csv_file} ({position})",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+        benchmark_data_list.append(data)
+        num_elements_list.append(num_elements)
 
     # Determine output directory
     if output_dir is None:
@@ -299,92 +319,68 @@ def main(
 
     filter_styles = get_filter_styles()
 
-    # Get all operations from both datasets
-    all_operations = set(benchmark_data_left.keys()) | set(benchmark_data_right.keys())
+    # Get all operations from all datasets
+    all_operations = set()
+    for data in benchmark_data_list:
+        all_operations.update(data.keys())
+
+    # Grid positions: (row, col)
+    positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
     for operation in sorted(all_operations):
-        has_left = operation in benchmark_data_left and benchmark_data_left[operation]
-        has_right = (
-            operation in benchmark_data_right and benchmark_data_right[operation]
-        )
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12), sharey=True)
 
-        if not has_left and not has_right:
-            typer.secho(
-                f"No data for {operation} operation in either file",
-                fg=typer.colors.YELLOW,
-                err=True,
-            )
-            continue
-
-        fig, axes = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
-
-        # Collect handles and labels from both plots for combined legend
+        # Collect handles and labels for combined legend
         all_handles = []
         all_labels = []
 
-        # Left plot
-        if has_left:
-            handles_left, labels_left = plot_operation_on_axis(
-                axes[0],
-                operation,
-                benchmark_data_left,
-                num_elements_left,
-                filter_styles,
-                show_ylabel=True,
-                title_suffix=label_left,
-            )
-            all_handles.extend(handles_left)
-            all_labels.extend(labels_left)
-        else:
-            axes[0].set_title(f"{operation} (No data)", fontsize=16, fontweight="bold")
-            axes[0].text(
-                0.5,
-                0.5,
-                "No data available",
-                ha="center",
-                va="center",
-                transform=axes[0].transAxes,
-            )
+        for idx, (data, num_elements, label, (row, col)) in enumerate(
+            zip(benchmark_data_list, num_elements_list, labels, positions)
+        ):
+            ax = axes[row, col]
+            has_data = operation in data and data[operation]
 
-        # Right plot
-        if has_right:
-            handles_right, labels_right = plot_operation_on_axis(
-                axes[1],
-                operation,
-                benchmark_data_right,
-                num_elements_right,
-                filter_styles,
-                show_ylabel=False,
-                title_suffix=label_right,
-            )
-            # Only add handles/labels that aren't already in the combined list
-            for handle, label in zip(handles_right, labels_right):
-                if label not in all_labels:
-                    all_handles.append(handle)
-                    all_labels.append(label)
-        else:
-            axes[1].set_title(f"{operation} (No data)", fontsize=16, fontweight="bold")
-            axes[1].text(
-                0.5,
-                0.5,
-                "No data available",
-                ha="center",
-                va="center",
-                transform=axes[1].transAxes,
-            )
+            # Show ylabel only on left column
+            show_ylabel = col == 0
 
-        # Create combined legend on the right side of the figure
+            if has_data:
+                handles, plot_labels = plot_operation_on_axis(
+                    ax,
+                    operation,
+                    data,
+                    num_elements,
+                    filter_styles,
+                    show_ylabel=show_ylabel,
+                    title_suffix=label,
+                )
+                # Only add handles/labels that aren't already in the combined list
+                for handle, lbl in zip(handles, plot_labels):
+                    if lbl not in all_labels:
+                        all_handles.append(handle)
+                        all_labels.append(lbl)
+            else:
+                ax.set_title(f"{operation} (No data)", fontsize=16, fontweight="bold")
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No data available",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+
+        plt.tight_layout()
+
+        # Create combined legend outside on the right
         if all_handles:
             fig.legend(
                 all_handles,
                 all_labels,
                 fontsize=10,
-                loc="center right",
+                loc="center left",
                 bbox_to_anchor=(1.0, 0.5),
                 framealpha=0,
             )
-
-        plt.tight_layout()
 
         output_file = (
             output_dir / f"load_factor_{operation.lower().replace(' ', '_')}.pdf"

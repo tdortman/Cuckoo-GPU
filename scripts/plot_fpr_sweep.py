@@ -9,7 +9,6 @@
 # ]
 # ///
 
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -88,8 +87,34 @@ def parse_benchmark_name(name: str) -> dict:
     return result
 
 
-def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: float):
-    """Create grouped bar chart with insert & query bars side by side for each filter."""
+def load_and_parse_csv(csv_path: Path) -> pd.DataFrame:
+    """Load and parse benchmark data from a CSV file."""
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        typer.secho(f"Error parsing CSV {csv_path}: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    df = df[df["name"].str.contains("_median", na=False)]
+
+    parsed = df["name"].apply(parse_benchmark_name)
+    df["filter"] = parsed.apply(lambda x: x["filter"])
+    df["fingerprint_bits"] = parsed.apply(lambda x: x["fingerprint_bits"])
+    df["load_factor"] = parsed.apply(lambda x: x["load_factor"])
+    df["operation"] = parsed.apply(lambda x: x["operation"])
+    df["throughput_mops"] = df["items_per_second"] / 1e6
+
+    return df
+
+
+def plot_fpr_comparison_on_axis(
+    ax: plt.Axes,
+    df: pd.DataFrame,
+    hit_rate: float,
+    exponent: Optional[int] = None,
+    show_xlabel: bool = True,
+) -> list:
+    """Plot FPR comparison on a single axis. Returns legend elements."""
 
     # Separate by operation type
     neg_query_df = df[df["operation"] == "negative_query"].copy()
@@ -151,8 +176,6 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     has_insert_data = neg_query_df["insert_throughput"].notna().any()
     has_positive_data = neg_query_df["positive_query_throughput"].notna().any()
     has_delete_data = neg_query_df["delete_throughput"].notna().any()
-
-    fig, ax = plt.subplots(figsize=(16, 8))
 
     n_fpr_targets = len(FPR_TARGETS)
     n_filters = len(filter_names)
@@ -243,28 +266,139 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
         for i in range(n_fpr_targets)
     ]
     ax.set_xticks(target_centers)
-    ax.set_xticklabels([label for _, label in FPR_TARGETS])
+    ax.set_xticklabels([label for _, label in FPR_TARGETS], fontsize=12)
 
-    ax.set_xlabel("Target FPR")
-    ax.set_ylabel("Throughput (MOPS)")
+    if show_xlabel:
+        ax.set_xlabel("Target FPR", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
+
     hit_pct = int(hit_rate * 100)
-    ax.set_title(rf"Best Throughput by Target FPR ({hit_pct}% hit rate)")
-    ax.set_yscale("log")
-    ax.grid(True, alpha=0.3, axis="y")
+    title = rf"Best Throughput by Target FPR ({hit_pct}% hit rate)"
+    if exponent is not None:
+        title += f" $\\left(n=2^{{{exponent}}}\\right)$"
+    ax.set_title(title, fontsize=16, fontweight="bold")
 
+    ax.set_yscale("log")
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+
+    # Build legend elements
     legend_elements = [
         Patch(facecolor=FILTER_COLORS[name], label=name) for name in filter_names
     ]
     legend_elements.append(Patch(facecolor="gray", label="Query"))
-    legend_elements.append(
-        Patch(facecolor="gray", hatch="//", alpha=0.7, label="Insert")
-    )
-    legend_elements.append(
-        Patch(facecolor="gray", hatch="--", alpha=0.7, label="Delete")
-    )
-    ax.legend(handles=legend_elements, loc="upper right", fontsize=8, ncol=2)
+    if has_insert_data:
+        legend_elements.append(
+            Patch(facecolor="gray", hatch="//", alpha=0.7, label="Insert")
+        )
+    if has_delete_data:
+        legend_elements.append(
+            Patch(facecolor="gray", hatch="--", alpha=0.7, label="Delete")
+        )
+
+    return legend_elements, filter_names
+
+
+@app.command()
+def main(
+    csv_file_top: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for top plot",
+    ),
+    csv_file_bottom: Path = typer.Argument(
+        ...,
+        help="Path to CSV file for bottom plot",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory for plots (default: build/)",
+    ),
+    exponent_top: Optional[int] = typer.Option(
+        None,
+        "--exponent-top",
+        "-et",
+        help="Exponent for n (as power of 2) to display in top plot title",
+    ),
+    exponent_bottom: Optional[int] = typer.Option(
+        None,
+        "--exponent-bottom",
+        "-eb",
+        help="Exponent for n (as power of 2) to display in bottom plot title",
+    ),
+    hit_rate: float = typer.Option(
+        50.0,
+        "--hit-rate",
+        "-h",
+        help="Expected percentage of positive queries (0-100, default: 50)",
+    ),
+):
+    """
+    Generate FPR sweep throughput plots from two benchmark CSV files.
+
+    Creates a single figure with two vertically stacked plots.
+
+    Examples:
+        plot_fpr_sweep.py small.csv large.csv
+        plot_fpr_sweep.py small.csv large.csv --exponent-top 22 --exponent-bottom 26
+    """
+    # Load data from both CSV files
+    csv_files = [
+        (csv_file_top, exponent_top),
+        (csv_file_bottom, exponent_bottom),
+    ]
+
+    data_list = []
+    for csv_file, exponent in csv_files:
+        if not csv_file.exists():
+            typer.secho(
+                f"Error: File not found: {csv_file}", fg=typer.colors.RED, err=True
+            )
+            raise typer.Exit(1)
+        df = load_and_parse_csv(csv_file)
+        data_list.append((df, exponent))
+
+    if output_dir is None:
+        script_dir = Path(__file__).parent
+        output_dir = script_dir.parent / "build"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create figure with 2 vertically stacked subplots
+    fig, axes = plt.subplots(2, 1, figsize=(16, 14))
+
+    all_legend_elements = []
+    seen_labels = set()
+
+    for idx, (ax, (df, exponent)) in enumerate(zip(axes, data_list)):
+        show_xlabel = idx == 1  # Only show x-label on bottom plot
+
+        legend_elements, filter_names = plot_fpr_comparison_on_axis(
+            ax,
+            df,
+            hit_rate / 100.0,
+            exponent=exponent,
+            show_xlabel=show_xlabel,
+        )
+
+        # Collect unique legend elements
+        for elem in legend_elements:
+            if elem.get_label() not in seen_labels:
+                all_legend_elements.append(elem)
+                seen_labels.add(elem.get_label())
 
     plt.tight_layout()
+
+    # Create combined legend outside on the right
+    if all_legend_elements:
+        fig.legend(
+            handles=all_legend_elements,
+            fontsize=10,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            framealpha=0,
+        )
+
     output_path = output_dir / "fpr_sweep_throughput.pdf"
     plt.savefig(
         output_path,
@@ -275,58 +409,6 @@ def create_fpr_target_comparison(df: pd.DataFrame, output_dir: Path, hit_rate: f
     )
     plt.close(fig)
     typer.secho(f"Saved throughput comparison to {output_path}", fg=typer.colors.GREEN)
-
-
-@app.command()
-def main(
-    csv_file: Path = typer.Argument(
-        "-",
-        help="Path to benchmark CSV file, or '-' to read from stdin (default: stdin)",
-    ),
-    output_dir: Optional[Path] = typer.Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Output directory for plots (default: build/)",
-    ),
-    hit_rate: float = typer.Option(
-        50.0,
-        "--hit-rate",
-        "-h",
-        help="Expected percentage of positive queries (0-100, default: 50)",
-    ),
-):
-    try:
-        if str(csv_file) == "-":
-            df = pd.read_csv(sys.stdin)
-        elif not csv_file.exists():
-            typer.secho(
-                f"Error: File not found: {csv_file}", fg=typer.colors.RED, err=True
-            )
-            raise typer.Exit(1)
-        else:
-            df = pd.read_csv(csv_file)
-    except Exception as e:
-        typer.secho(f"Error parsing CSV: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-
-    df = df[df["name"].str.contains("_median", na=False)]
-
-    parsed = df["name"].apply(parse_benchmark_name)
-    df["filter"] = parsed.apply(lambda x: x["filter"])
-    df["fingerprint_bits"] = parsed.apply(lambda x: x["fingerprint_bits"])
-    df["load_factor"] = parsed.apply(lambda x: x["load_factor"])
-    df["operation"] = parsed.apply(lambda x: x["operation"])
-
-    df["throughput_mops"] = df["items_per_second"] / 1e6
-
-    if output_dir is None:
-        script_dir = Path(__file__).parent
-        output_dir = script_dir.parent / "build"
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    create_fpr_target_comparison(df, output_dir, hit_rate / 100.0)
 
 
 if __name__ == "__main__":
