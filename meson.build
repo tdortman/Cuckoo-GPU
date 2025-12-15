@@ -15,6 +15,7 @@ cuda_args = [
     '--expt-relaxed-constexpr',
     '--generate-line-info',
     '-gencode=arch=compute_120,code=sm_120',
+    '-gencode=arch=compute_80,code=sm_80',
     '-gencode=arch=compute_75,code=compute_75',
 ]
 
