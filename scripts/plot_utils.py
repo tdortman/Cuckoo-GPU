@@ -4,6 +4,8 @@ This module provides common constants, styles, and helper functions used across
 multiple plotting scripts to reduce code duplication and ensure visual consistency.
 """
 
+import sys
+
 import math
 from pathlib import Path
 from typing import Optional
@@ -23,14 +25,14 @@ FILTER_STYLES = {
 }
 
 FILTER_COLORS = {
-    "GPU Cuckoo": "#2E86AB",
-    "Cuckoo": "#2E86AB",
-    "Cuckoo Filter": "#2E86AB",
-    "CPU Cuckoo": "#00B4D8",
-    "Blocked Bloom": "#A23B72",
-    "TCF": "#C73E1D",
-    "GQF": "#F18F01",
-    "Partitioned Cuckoo": "#6A994E",
+    "GPU Cuckoo": FILTER_STYLES["cuckoo"]["color"],
+    "Cuckoo": FILTER_STYLES["cuckoo"]["color"],
+    "Cuckoo Filter": FILTER_STYLES["cuckoo"]["color"],
+    "CPU Cuckoo": FILTER_STYLES["cpu_cuckoo"]["color"],
+    "Blocked Bloom": FILTER_STYLES["bloom"]["color"],
+    "TCF": FILTER_STYLES["tcf"]["color"],
+    "GQF": FILTER_STYLES["gqf"]["color"],
+    "Partitioned Cuckoo": FILTER_STYLES["partitioned"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
@@ -59,9 +61,9 @@ FILTER_DISPLAY_NAMES = {
 }
 
 OPERATION_COLORS = {
-    "Insert": "#2E86AB",
-    "Query": "#A23B72",
-    "Delete": "#F18F01",
+    "Insert": FILTER_COLORS["GPU Cuckoo"],
+    "Query": FILTER_COLORS["Blocked Bloom"],
+    "Delete": FILTER_COLORS["GQF"],
 }
 
 
@@ -128,7 +130,10 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     Raises:
         typer.Exit: If CSV cannot be read
     """
+
     try:
+        if csv_path == "-":
+            return pd.read_csv(sys.stdin)
         return pd.read_csv(csv_path)
     except Exception as e:
         typer.secho(f"Error reading CSV {csv_path}: {e}", fg=typer.colors.RED, err=True)
