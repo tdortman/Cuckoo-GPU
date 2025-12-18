@@ -153,12 +153,7 @@ struct CuckooFilter {
         bitsPerTag == 8 || bitsPerTag == 16 || bitsPerTag == 32,
         "The tag must be 8, 16 or 32 bits"
     );
-    static_assert(
-        bitsPerTag <= 8 * sizeof(T),
-        "The tag cannot be larger than the size of the type"
-    );
 
-    static_assert(bucketSize > 0, "Bucket size must be greater than 0");
     static_assert(powerOfTwo(bucketSize), "Bucket size must be a power of 2");
 
     using PackedTagType = typename std::conditional<bitsPerTag <= 8, uint32_t, uint64_t>::type;
