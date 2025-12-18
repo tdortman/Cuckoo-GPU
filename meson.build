@@ -52,18 +52,25 @@ executable(
     install: true,
 )
 
-nccl_dep = dependency('nccl', required: false)
+gossip_dep = subproject('gossip').get_variable('gossip_dep')
 
-if nccl_dep.found()
-    executable(
-        'cuckoo-filter-multi-gpu',
-        './src/multi_gpu_main.cu',
-        include_directories: includes,
-        dependencies: deps + [nccl_dep],
-        cuda_args: cuda_args,
-        install: true,
-    )
-endif
+executable(
+    'gossip-test',
+    './src/gossip_test.cu',
+    include_directories: includes,
+    dependencies: deps + [gossip_dep],
+    cuda_args: cuda_args,
+    install: true,
+)
+
+executable(
+    'cuckoo-filter-multi-gpu',
+    './src/multi_gpu_main.cu',
+    include_directories: includes,
+    dependencies: deps + [gossip_dep],
+    cuda_args: cuda_args,
+    install: true,
+)
 
 if get_option('BUILD_BENCHMARKS') == true
     benchmark_dep = subproject('google-benchmark').get_variable('google_benchmark_dep')
@@ -200,7 +207,8 @@ if get_option('BUILD_BENCHMARKS') == true
     executable(
         'benchmark-load-factor',
         './benchmark/load_factor_benchmark.cu',
-        dependencies: bench_deps + [cuco_dep, tcf_dep, partitioned_dep, cpu_cuckoo_dep, gqf_dep],
+        dependencies: bench_deps
+        + [cuco_dep, tcf_dep, partitioned_dep, cpu_cuckoo_dep, gqf_dep],
         include_directories: includes,
         cuda_args: cuda_args + ['-w'],
         install: false,
@@ -209,7 +217,8 @@ if get_option('BUILD_BENCHMARKS') == true
     executable(
         'benchmark-fpr',
         './benchmark/fpr_benchmark.cu',
-        dependencies: bench_deps + [cuco_dep, tcf_dep, partitioned_dep, cpu_cuckoo_dep, gqf_dep],
+        dependencies: bench_deps
+        + [cuco_dep, tcf_dep, partitioned_dep, cpu_cuckoo_dep, gqf_dep],
         include_directories: includes,
         cuda_args: cuda_args + ['-w'],
         install: false,
@@ -279,26 +288,23 @@ if get_option('BUILD_BENCHMARKS') == true
         install: false,
     )
 
+    executable(
+        'benchmark-cuckoo-single-vs-multi-gpu',
+        './benchmark/cuckoo_single_vs_multi_gpu.cu',
+        dependencies: bench_deps + [gossip_dep],
+        include_directories: includes,
+        cuda_args: cuda_args,
+        install: false,
+    )
 
-    if nccl_dep.found()
-        executable(
-            'benchmark-cuckoo-single-vs-multi-gpu',
-            './benchmark/cuckoo_single_vs_multi_gpu.cu',
-            dependencies: bench_deps + [nccl_dep],
-            include_directories: includes,
-            cuda_args: cuda_args,
-            install: false,
-        )
-
-        executable(
-            'benchmark-multi-gpu-scaling',
-            './benchmark/multi_gpu_scaling_benchmark.cu',
-            dependencies: bench_deps + [nccl_dep],
-            include_directories: includes,
-            cuda_args: cuda_args,
-            install: false,
-        )
-    endif
+    executable(
+        'benchmark-multi-gpu-scaling',
+        './benchmark/multi_gpu_scaling_benchmark.cu',
+        dependencies: bench_deps + [gossip_dep],
+        include_directories: includes,
+        cuda_args: cuda_args,
+        install: false,
+    )
 endif
 
 if get_option('BUILD_TESTS') == true

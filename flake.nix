@@ -32,12 +32,9 @@
       buildInputs = with cudaPkgs; [
         cudatoolkit
         cuda_cudart
-        cuda_cccl
         pkgs.stdenv.cc.cc.lib
         pkgs.openssl.dev
         pkgs.openssl.out
-        nccl.dev
-        nccl.out
       ];
 
       nativeBuildInputs = with pkgs; [
@@ -77,8 +74,8 @@
               - -I$(pwd)/include
               - -I$(pwd)/subprojects/cuco/include
               - -I$(pwd)/subprojects/googletest-1.17.0/googletest/include
-              - -I${cudaPkgs.nccl.dev}/include
-              - -I${pkgs.openssl.dev}/include
+              - -I$(pwd)/subprojects/openssl-3.0.8/include
+              - -I$(pwd)/subprojects/gossip/include
               - -D__LIBCUDAXX__STD_VER=${cuda.version.major}
               - -D__CUDACC_VER_MAJOR__=${cuda.version.major}
               - -D__CUDACC_VER_MINOR__=${cuda.version.minor}

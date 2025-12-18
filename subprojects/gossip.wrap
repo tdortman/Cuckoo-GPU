@@ -1,0 +1,8 @@
+[wrap-git]
+url = https://github.com/Funatiq/gossip.git
+revision = dca28648a77eb58507d3b5c7ccbbb14005113e55
+depth = 1
+patch_directory = gossip
+
+[provide]
+dependency_names = gossip_dep

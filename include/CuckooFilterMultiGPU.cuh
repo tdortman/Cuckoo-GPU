@@ -3,14 +3,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/execution_policy.h>
 #include <thrust/host_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
-#include <thrust/reduce.h>
-#include <thrust/scan.h>
 #include <thrust/scatter.h>
 #include <thrust/sequence.h>
-#include <thrust/sort.h>
-#include <thrust/tuple.h>
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -23,24 +17,17 @@
 #include <vector>
 #include "CuckooFilter.cuh"
 #include "helpers.cuh"
+#include "subprojects/gossip/include/gossip/config.h"
 
-#include <nccl.h>
-
-#define NCCL_CALL(cmd)                                                                    \
-    do {                                                                                  \
-        ncclResult_t r = cmd;                                                             \
-        if (r != ncclSuccess) {                                                           \
-            printf("NCCL error %s:%d '%s'\n", __FILE__, __LINE__, ncclGetErrorString(r)); \
-            exit(EXIT_FAILURE);                                                           \
-        }                                                                                 \
-    } while (0)
+#include <gossip.cuh>
+#include <plan_parser.hpp>
 
 /**
  * @brief A multi-GPU implementation of the Cuckoo Filter.
  *
- * This class partitions keys across multiple GPUs.
- * It handles data distribution, communication between GPUs using NCCL, and
- * aggregates results.
+ * This class partitions keys across multiple GPUs using the gossip library
+ * for efficient multi-GPU communication. It handles data distribution using
+ * gossip's multisplit and all-to-all primitives, and aggregates results.
  *
  * @tparam Config The configuration structure for the Cuckoo Filter.
  */
@@ -53,13 +40,14 @@ class CuckooFilterMultiGPU {
      * @brief Functor for partitioning keys across GPUs.
      *
      * Uses a hash function to assign each key to a specific GPU index.
+     * Compatible with gossip's multisplit which requires __host__ __device__ functor.
      */
     struct Partitioner {
         size_t numGPUs;
 
-        __host__ __device__ size_t operator()(const T& key) const {
+        __host__ __device__ gossip::gpu_id_t operator()(const T& key) const {
             uint64_t hash = CuckooFilter<Config>::hash64(key);
-            return hash % numGPUs;
+            return static_cast<gossip::gpu_id_t>(hash % numGPUs);
         }
     };
 
@@ -67,8 +55,15 @@ class CuckooFilterMultiGPU {
     size_t numGPUs;
     size_t capacityPerGPU;
     std::vector<CuckooFilter<Config>*> filters;
-    std::vector<cudaStream_t> streams;
-    std::vector<ncclComm_t> comms;
+
+    gossip::context_t gossipContext;
+    gossip::multisplit_t multisplit;
+    gossip::all2all_t all2all;
+
+    // Pre-allocated per-GPU buffers for gossip operations
+    std::vector<T*> srcBuffers;
+    std::vector<T*> dstBuffers;
+    std::vector<size_t> bufferCapacities;
 
     /**
      * @brief Gets the available free memory for each GPU.
@@ -85,86 +80,61 @@ class CuckooFilterMultiGPU {
     }
 
     /**
-     * @brief Partitions keys (and optionally an index array) by their target GPU. This function
-     * sorts the keys in place.
+     * @brief Ensures per-GPU buffers have sufficient capacity.
+     * @param requiredPerGPU Required capacity for each GPU's buffer.
      */
-    void partitionByGPU(
-        thrust::device_vector<T>& d_keys,
-        thrust::device_vector<size_t>& d_counts,
-        thrust::device_vector<size_t>& d_offsets,
-        thrust::device_vector<size_t>* d_indices = nullptr
-    ) {
-        size_t n = d_keys.size();
-        if (n == 0) {
-            d_counts.assign(numGPUs, 0);
-            d_offsets.assign(numGPUs, 0);
-            return;
+    void ensureBufferCapacity(size_t requiredPerGPU) {
+        for (size_t gpu = 0; gpu < numGPUs; ++gpu) {
+            if (bufferCapacities[gpu] < requiredPerGPU) {
+                cudaSetDevice(gossipContext.get_device_id(gpu));
+                if (srcBuffers[gpu]) {
+                    cudaFree(srcBuffers[gpu]);
+                }
+                if (dstBuffers[gpu]) {
+                    cudaFree(dstBuffers[gpu]);
+                }
+
+                CUDA_CALL(cudaMalloc(&srcBuffers[gpu], requiredPerGPU * sizeof(T)));
+                CUDA_CALL(cudaMalloc(&dstBuffers[gpu], requiredPerGPU * sizeof(T)));
+                bufferCapacities[gpu] = requiredPerGPU;
+            }
         }
-
-        thrust::device_vector<size_t> d_gpuIndices(n);
-        Partitioner partitioner{numGPUs};
-        thrust::transform(
-            thrust::device, d_keys.begin(), d_keys.end(), d_gpuIndices.begin(), partitioner
-        );
-
-        // Sort keys and optionally indices based on the target GPU index
-        if (d_indices) {
-            thrust::sort_by_key(
-                thrust::device,
-                d_gpuIndices.begin(),
-                d_gpuIndices.end(),
-                thrust::make_zip_iterator(thrust::make_tuple(d_keys.begin(), d_indices->begin()))
-            );
-        } else {
-            thrust::sort_by_key(
-                thrust::device, d_gpuIndices.begin(), d_gpuIndices.end(), d_keys.begin()
-            );
-        }
-
-        d_counts.assign(numGPUs, 0);
-        d_offsets.assign(numGPUs, 0);
-
-        // Count the number of keys destined for each GPU
-        thrust::device_vector<size_t> d_uniqueGPUIds(numGPUs);
-        auto end = thrust::reduce_by_key(
-            thrust::device,
-            d_gpuIndices.begin(),
-            d_gpuIndices.end(),
-            thrust::make_constant_iterator<size_t>(1),
-            d_uniqueGPUIds.begin(),
-            d_counts.begin()
-        );
-
-        // Scatter the counts to their correct positions in the final counts vector
-        size_t numFoundGPUs = thrust::distance(d_uniqueGPUIds.begin(), end.first);
-        thrust::device_vector<size_t> d_finalCounts(numGPUs, 0);
-        thrust::scatter(
-            thrust::device,
-            d_counts.begin(),
-            d_counts.begin() + numFoundGPUs,
-            d_uniqueGPUIds.begin(),
-            d_finalCounts.begin()
-        );
-        d_counts = d_finalCounts;
-
-        // Calculate offsets for data shuffling
-        thrust::exclusive_scan(
-            thrust::device, d_counts.begin(), d_counts.end(), d_offsets.begin(), 0
-        );
     }
 
     /**
-     * @brief Generic function for processing keys and optionally reordering results.
-     * Processes keys in chunks dynamically sized based on available GPU VRAM. This function
-     * is the common backend for insertMany, containsMany, and deleteMany.
+     * @brief Free all pre-allocated buffers.
+     */
+    void freeBuffers() {
+        for (size_t gpu = 0; gpu < numGPUs; ++gpu) {
+            cudaSetDevice(gossipContext.get_device_id(gpu));
+            if (srcBuffers[gpu]) {
+                cudaFree(srcBuffers[gpu]);
+                srcBuffers[gpu] = nullptr;
+            }
+            if (dstBuffers[gpu]) {
+                cudaFree(dstBuffers[gpu]);
+                dstBuffers[gpu] = nullptr;
+            }
+            bufferCapacities[gpu] = 0;
+        }
+    }
+
+    /**
+     * @brief Generic function for processing keys using gossip primitives.
+     *
+     * The workflow is:
+     * 1. Distribute input keys to GPUs
+     * 2. Use gossip multisplit to partition keys by target GPU
+     * 3. Use gossip all2all to shuffle keys to correct GPUs
+     * 4. Execute filter operation locally
+     * 5. Use gossip all2all to return results (if hasOutput)
+     * 6. Reorder results to match original input order
      *
      * @param h_keys Host vector of keys to process.
-     * @param h_output Optional host vector to store the boolean results. If nullptr, no results are
-     * returned.
+     * @param h_output Optional host vector to store the boolean results.
      * @param filterOp The specific CuckooFilter operation to execute.
-     * @tparam returnOccupied If true, the function returns the total number of occupied slots after
-     * the operation.
-     * @tparam hasOutput If true, the function expects an output buffer to store the results.
+     * @tparam returnOccupied If true, returns total occupied slots after operation.
+     * @tparam hasOutput If true, expects an output buffer for results.
      * @return Total occupied slots if returnOccupied is true, otherwise 0.
      */
     template <bool returnOccupied, bool hasOutput, typename FilterFunc>
@@ -183,263 +153,249 @@ class CuckooFilterMultiGPU {
             return returnOccupied ? totalOccupiedSlots() : 0;
         }
 
-        size_t processedCount = 0;
-        while (processedCount < n) {
-            std::vector<size_t> freeMem = getGpuMemoryInfo();
+        // Calculate per-GPU allocation with safety margin for gossip transfers
+        const float memoryFactor = 1.5f;  // gossip recommends this for random distributions
+        const size_t perGPUCapacity =
+            static_cast<size_t>(std::ceil(static_cast<double>(n) / numGPUs * memoryFactor));
 
-            // Estimate memory needed per item, including overhead.
-            // If reordering is needed, we also need to store the original index.
-            const size_t memPerItem = sizeof(T) + sizeof(size_t) + (hasOutput ? sizeof(size_t) : 0);
+        ensureBufferCapacity(perGPUCapacity);
 
-            // Thrust likes to use A LOT of temporary memory
-            const float safetyFactor = 3.0f;
-            const auto requiredMemPerItem = static_cast<size_t>(memPerItem * safetyFactor);
+        // Distribute input keys evenly across GPUs initially
+        std::vector<size_t> inputLens(numGPUs);
+        std::vector<size_t> inputOffsets(numGPUs + 1, 0);
+        size_t keysPerGPU = n / numGPUs;
+        size_t remainder = n % numGPUs;
 
-            std::vector<size_t> chunkSizes(numGPUs);
-            size_t totalChunkSize = 0;
-            size_t remainingKeys = n - processedCount;
-
-            // Determine how many keys each GPU can handle in this chunk
-            for (size_t i = 0; i < numGPUs; ++i) {
-                size_t maxItemsForGPU = freeMem[i] / requiredMemPerItem;
-                chunkSizes[i] = maxItemsForGPU;
-                totalChunkSize += chunkSizes[i];
-            }
-
-            totalChunkSize = std::min(totalChunkSize, remainingKeys);
-
-            const size_t totalCapacityInChunk =
-                std::accumulate(chunkSizes.begin(), chunkSizes.end(), size_t(0));
-
-            std::vector<size_t> chunkOffsets(numGPUs + 1, 0);
-
-            // Proportionally resize chunk sizes to match the total we can process
-            for (size_t i = 0; i < numGPUs; ++i) {
-                auto keysForGPU = static_cast<size_t>(
-                    static_cast<double>(chunkSizes[i]) / static_cast<double>(totalCapacityInChunk) *
-                    totalChunkSize
-                );
-                chunkOffsets[i + 1] = chunkOffsets[i] + keysForGPU;
-            }
-
-            // Ensure the last offset covers the entire chunk due to potential rounding
-            chunkOffsets[numGPUs] = totalChunkSize;
-
-            parallelForGPUs([&](size_t gpuId) {
-                size_t localChunkStart = chunkOffsets[gpuId];
-                size_t localChunkEnd = chunkOffsets[gpuId + 1];
-                size_t localChunkSize = localChunkEnd - localChunkStart;
-
-                if (localChunkSize == 0) {
-                    return;
-                }
-
-                thrust::device_vector<T> d_localKeys(
-                    h_keys.begin() + processedCount + localChunkStart,
-                    h_keys.begin() + processedCount + localChunkEnd
-                );
-
-                thrust::device_vector<size_t> d_localIndices;
-                if constexpr (hasOutput) {
-                    d_localIndices.resize(localChunkSize);
-                    thrust::sequence(
-                        thrust::device, d_localIndices.begin(), d_localIndices.end(), 0
-                    );
-                }
-
-                thrust::device_vector<size_t> d_sendCounts(numGPUs);
-                thrust::device_vector<size_t> d_sendOffsets(numGPUs);
-                partitionByGPU(
-                    d_localKeys, d_sendCounts, d_sendOffsets, hasOutput ? &d_localIndices : nullptr
-                );
-
-                thrust::device_vector<size_t> d_recvCounts(numGPUs);
-                exchangeCounts(gpuId, d_sendCounts, d_recvCounts);
-
-                thrust::device_vector<size_t> d_recvOffsets(numGPUs);
-                thrust::exclusive_scan(
-                    thrust::device,
-                    d_recvCounts.begin(),
-                    d_recvCounts.end(),
-                    d_recvOffsets.begin(),
-                    0
-                );
-
-                size_t totalToReceive = thrust::reduce(
-                    thrust::device, d_recvCounts.begin(), d_recvCounts.end(), size_t(0)
-                );
-
-                if (totalToReceive == 0) {
-                    return;
-                }
-
-                // Shuffle keys between GPUs (All-to-All)
-                thrust::device_vector<T> d_receivedKeys(totalToReceive);
-                NCCL_CALL(ncclGroupStart());
-                for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
-                    if (d_sendCounts[peerId] > 0) {
-                        NCCL_CALL(ncclSend(
-                            d_localKeys.data().get() + d_sendOffsets[peerId],
-                            d_sendCounts[peerId] * sizeof(T),
-                            ncclChar,
-                            peerId,
-                            comms[gpuId],
-                            streams[gpuId]
-                        ));
-                    }
-                    if (d_recvCounts[peerId] > 0) {
-                        NCCL_CALL(ncclRecv(
-                            d_receivedKeys.data().get() + d_recvOffsets[peerId],
-                            d_recvCounts[peerId] * sizeof(T),
-                            ncclChar,
-                            peerId,
-                            comms[gpuId],
-                            streams[gpuId]
-                        ));
-                    }
-                }
-                NCCL_CALL(ncclGroupEnd());
-
-                // Perform the filter operation on the received keys
-                thrust::device_vector<bool> d_localResults;
-                if constexpr (hasOutput) {
-                    d_localResults.resize(totalToReceive);
-                }
-                filterOp(filters[gpuId], d_receivedKeys, d_localResults, streams[gpuId]);
-
-                // If no output is required, we are done for this GPU
-                if constexpr (!hasOutput) {
-                    return;
-                }
-
-                // Shuffle results back to the original GPUs
-                thrust::device_vector<bool> d_resultsToSendBack(localChunkSize);
-                NCCL_CALL(ncclGroupStart());
-                for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
-                    if (d_recvCounts[peerId] > 0) {
-                        NCCL_CALL(ncclSend(
-                            d_localResults.data().get() + d_recvOffsets[peerId],
-                            d_recvCounts[peerId] * sizeof(bool),
-                            ncclChar,
-                            peerId,
-                            comms[gpuId],
-                            streams[gpuId]
-                        ));
-                    }
-                    if (d_sendCounts[peerId] > 0) {
-                        NCCL_CALL(ncclRecv(
-                            d_resultsToSendBack.data().get() + d_sendOffsets[peerId],
-                            d_sendCounts[peerId] * sizeof(bool),
-                            ncclChar,
-                            peerId,
-                            comms[gpuId],
-                            streams[gpuId]
-                        ));
-                    }
-                }
-                NCCL_CALL(ncclGroupEnd());
-
-                // Unsort the results to match the original input order for this chunk
-                thrust::device_vector<bool> d_finalChunkOutput(localChunkSize);
-                thrust::scatter(
-                    thrust::device,
-                    d_resultsToSendBack.begin(),
-                    d_resultsToSendBack.end(),
-                    d_localIndices.begin(),
-                    d_finalChunkOutput.begin()
-                );
-
-                // Copy the chunk's results back to the correct position
-                // in the final host output vector
-                thrust::copy(
-                    d_finalChunkOutput.begin(),
-                    d_finalChunkOutput.end(),
-                    h_output->begin() + processedCount + localChunkStart
-                );
-            });
-
-            synchronizeAllGPUs();
-            processedCount += totalChunkSize;
+        for (size_t gpu = 0; gpu < numGPUs; ++gpu) {
+            inputLens[gpu] = keysPerGPU + (gpu < remainder ? 1 : 0);
+            inputOffsets[gpu + 1] = inputOffsets[gpu] + inputLens[gpu];
         }
+
+        // Copy input data to source buffers on each GPU
+        parallelForGPUs([&](size_t gpuId) {
+            if (inputLens[gpuId] > 0) {
+                CUDA_CALL(cudaMemcpy(
+                    srcBuffers[gpuId],
+                    h_keys.data() + inputOffsets[gpuId],
+                    inputLens[gpuId] * sizeof(T),
+                    cudaMemcpyHostToDevice
+                ));
+            }
+        });
+        gossipContext.sync_hard();
+
+        // Phase 1: Multisplit - partition keys by target GPU
+        std::vector<std::vector<size_t>> partitionTable(numGPUs, std::vector<size_t>(numGPUs));
+        std::vector<size_t> dstLens(numGPUs, perGPUCapacity);
+
+        Partitioner partitioner{numGPUs};
+        multisplit.execAsync(
+            srcBuffers,      // source pointers (per GPU)
+            inputLens,       // source lengths (per GPU)
+            dstBuffers,      // destination pointers (per GPU)
+            dstLens,         // destination capacities (per GPU)
+            partitionTable,  // output: partition counts [src][dst]
+            partitioner
+        );
+        multisplit.sync();
+
+        // Phase 2: Swap buffers - now dstBuffers contain partitioned data
+        std::swap(srcBuffers, dstBuffers);
+
+        // Calculate how many keys each GPU will receive after all2all
+        std::vector<size_t> recvCounts(numGPUs, 0);
+        for (size_t dst = 0; dst < numGPUs; ++dst) {
+            for (size_t src = 0; src < numGPUs; ++src) {
+                recvCounts[dst] += partitionTable[src][dst];
+            }
+        }
+
+        // Phase 3: All-to-all transfer - shuffle partitioned keys to correct GPUs
+        all2all.execAsync(
+            srcBuffers,     // partitioned source data
+            dstLens,        // source buffer capacities
+            dstBuffers,     // destination for received data
+            dstLens,        // destination buffer capacities
+            partitionTable  // partition counts from multisplit
+        );
+        all2all.sync();
+
+        // Phase 4: Execute filter operations locally on each GPU
+        // Each GPU now has all keys that hash to it
+        std::vector<thrust::device_vector<bool>> d_results(numGPUs);
+
+        parallelForGPUs([&](size_t gpuId) {
+            size_t localCount = recvCounts[gpuId];
+            if (localCount == 0)
+                return;
+
+            // Wrap raw pointer in thrust device vector for filter operation
+            thrust::device_vector<T> d_localKeys(dstBuffers[gpuId], dstBuffers[gpuId] + localCount);
+
+            if constexpr (hasOutput) {
+                d_results[gpuId].resize(localCount);
+            }
+
+            auto stream = gossipContext.get_streams(gpuId)[0];
+            filterOp(filters[gpuId], d_localKeys, d_results[gpuId], stream);
+        });
+        gossipContext.sync_all_streams();
+
+        // If no output is required, we're done
+        if constexpr (!hasOutput) {
+            return returnOccupied ? totalOccupiedSlots() : 0;
+        }
+
+        // Phase 5: Reverse all-to-all to send results back
+        // We need to transpose the partition table for the reverse direction
+        std::vector<std::vector<size_t>> reverseTable(numGPUs, std::vector<size_t>(numGPUs));
+        for (size_t src = 0; src < numGPUs; ++src) {
+            for (size_t dst = 0; dst < numGPUs; ++dst) {
+                reverseTable[dst][src] = partitionTable[src][dst];
+            }
+        }
+
+        // Allocate bool buffers for result transfer
+        std::vector<bool*> resultSrcPtrs(numGPUs);
+        std::vector<bool*> resultDstPtrs(numGPUs);
+
+        parallelForGPUs([&](size_t gpuId) {
+            size_t localCount = recvCounts[gpuId];
+            CUDA_CALL(
+                cudaMalloc(&resultSrcPtrs[gpuId], std::max(localCount, size_t(1)) * sizeof(bool))
+            );
+            CUDA_CALL(cudaMalloc(&resultDstPtrs[gpuId], perGPUCapacity * sizeof(bool)));
+
+            if (localCount > 0) {
+                CUDA_CALL(cudaMemcpy(
+                    resultSrcPtrs[gpuId],
+                    thrust::raw_pointer_cast(d_results[gpuId].data()),
+                    localCount * sizeof(bool),
+                    cudaMemcpyDeviceToDevice
+                ));
+            }
+        });
+        gossipContext.sync_hard();
+
+        // Use a second all2all instance for bool results (reuse context)
+        gossip::all2all_t all2all_results(gossipContext, gossip::all2all::default_plan(numGPUs));
+
+        all2all_results.execAsync(resultSrcPtrs, recvCounts, resultDstPtrs, dstLens, reverseTable);
+        all2all_results.sync();
+
+        // Phase 6: Copy results back to host and reorder
+        // Calculate how many results each GPU will receive back
+        std::vector<size_t> returnCounts(numGPUs);
+        for (size_t gpu = 0; gpu < numGPUs; ++gpu) {
+            returnCounts[gpu] = 0;
+            for (size_t src = 0; src < numGPUs; ++src) {
+                returnCounts[gpu] += reverseTable[src][gpu];
+            }
+        }
+
+        parallelForGPUs([&](size_t gpuId) {
+            size_t localCount = returnCounts[gpuId];
+            if (localCount == 0)
+                return;
+
+            std::vector<uint8_t> h_localResults(localCount);
+            CUDA_CALL(cudaMemcpy(
+                h_localResults.data(),
+                resultDstPtrs[gpuId],
+                localCount * sizeof(bool),
+                cudaMemcpyDeviceToHost
+            ));
+
+            // Copy to output (results are already in original input order after reverse all2all)
+            for (size_t i = 0; i < localCount; ++i) {
+                (*h_output)[inputOffsets[gpuId] + i] = static_cast<bool>(h_localResults[i]);
+            }
+        });
+        gossipContext.sync_hard();
+
+        // Cleanup temporary result buffers
+        parallelForGPUs([&](size_t gpuId) {
+            cudaFree(resultSrcPtrs[gpuId]);
+            cudaFree(resultDstPtrs[gpuId]);
+        });
 
         return returnOccupied ? totalOccupiedSlots() : 0;
     }
 
-    /**
-     * @brief Exchanges the send and receive counts between GPUs.
-     * This is expected to be called once for each GPU.
-     * @param gpuId Current GPU Id
-     * @param d_sendCounts The send counts to exchange
-     * @param d_recvCounts The receive counts to exchange
-     */
-    void exchangeCounts(
-        size_t gpuId,
-        thrust::device_vector<size_t>& d_sendCounts,
-        thrust::device_vector<size_t>& d_recvCounts
-    ) {
-        NCCL_CALL(ncclGroupStart());
-        for (size_t peerId = 0; peerId < numGPUs; ++peerId) {
-            NCCL_CALL(ncclSend(
-                d_sendCounts.data().get() + peerId,
-                1,
-                ncclUint64,
-                peerId,
-                comms[gpuId],
-                streams[gpuId]
-            ));
-            NCCL_CALL(ncclRecv(
-                d_recvCounts.data().get() + peerId,
-                1,
-                ncclUint64,
-                peerId,
-                comms[gpuId],
-                streams[gpuId]
-            ));
-        }
-        NCCL_CALL(ncclGroupEnd());
-    }
-
    public:
     /**
-     * @brief Constructs a new CuckooFilterMultiGPU.
+     * @brief Constructs a new CuckooFilterMultiGPU with default transfer plan.
      *
-     * Initializes NCCL communicators, CUDA streams, and CuckooFilter instances
+     * Initializes gossip context, multisplit, all-to-all primitives, and CuckooFilter instances
      * on each available GPU.
      *
      * @param numGPUs Number of GPUs to use.
      * @param capacity Total capacity of the distributed filter.
      */
     CuckooFilterMultiGPU(size_t numGPUs, size_t capacity)
-        : numGPUs(numGPUs), capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * 1.02)) {
+        : numGPUs(numGPUs),
+          capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * 1.02)),
+          gossipContext(numGPUs),
+          multisplit(gossipContext),
+          all2all(gossipContext, gossip::all2all::default_plan(numGPUs)),
+          srcBuffers(numGPUs, nullptr),
+          dstBuffers(numGPUs, nullptr),
+          bufferCapacities(numGPUs, 0) {
         assert(numGPUs > 0 && "Number of GPUs must be at least 1");
 
-        streams.resize(numGPUs);
-        comms.resize(numGPUs);
         filters.resize(numGPUs);
-
-        ncclUniqueId ncclUid;
-        NCCL_CALL(ncclGetUniqueId(&ncclUid));
 
         parallelForGPUs([&](size_t i) {
             CUDA_CALL(cudaSetDevice(i));
-            NCCL_CALL(ncclCommInitRank(&comms[i], numGPUs, ncclUid, i));
-            CUDA_CALL(cudaStreamCreate(&streams[i]));
             filters[i] = new CuckooFilter<Config>(capacityPerGPU);
         });
-        synchronizeAllGPUs();
+        gossipContext.sync_hard();
+    }
+
+    /**
+     * @brief Constructs a new CuckooFilterMultiGPU with custom transfer plan.
+     *
+     * Initializes gossip context, multisplit, all-to-all primitives with provided
+     * transfer plan, and CuckooFilter instances on each available GPU.
+     *
+     * @param numGPUs Number of GPUs to use.
+     * @param capacity Total capacity of the distributed filter.
+     * @param transferPlan Custom gossip transfer plan for optimized topology-aware transfers.
+     */
+    CuckooFilterMultiGPU(
+        size_t numGPUs,
+        size_t capacity,
+        const gossip::transfer_plan_t& transferPlan
+    )
+        : numGPUs(numGPUs),
+          capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * 1.02)),
+          gossipContext(numGPUs),
+          multisplit(gossipContext),
+          all2all(gossipContext, transferPlan),
+          srcBuffers(numGPUs, nullptr),
+          dstBuffers(numGPUs, nullptr),
+          bufferCapacities(numGPUs, 0) {
+        assert(numGPUs > 0 && "Number of GPUs must be at least 1");
+
+        filters.resize(numGPUs);
+
+        parallelForGPUs([&](size_t i) {
+            CUDA_CALL(cudaSetDevice(i));
+            filters[i] = new CuckooFilter<Config>(capacityPerGPU);
+        });
+        gossipContext.sync_hard();
     }
 
     /**
      * @brief Destroys the CuckooFilterMultiGPU.
      *
-     * Cleans up NCCL communicators, streams, and filter instances.
+     * Cleans up filter instances and pre-allocated buffers.
      */
     ~CuckooFilterMultiGPU() {
+        freeBuffers();
         parallelForGPUs([&](size_t i) {
             CUDA_CALL(cudaSetDevice(i));
             delete filters[i];
-            NCCL_CALL(ncclCommDestroy(comms[i]));
-            CUDA_CALL(cudaStreamDestroy(streams[i]));
         });
     }
 
@@ -448,7 +404,7 @@ class CuckooFilterMultiGPU {
 
     /**
      * @brief Inserts a batch of keys into the distributed filter.
-     * Processes keys in chunks dynamically sized based on available GPU VRAM to prevent OOM errors.
+     * Uses gossip primitives for efficient multi-GPU data distribution.
      * @param h_keys The keys to insert.
      * @return The total number of occupied slots across all GPUs after insertion.
      */
@@ -531,7 +487,7 @@ class CuckooFilterMultiGPU {
      * @brief Synchronizes all GPU streams used by this filter.
      */
     void synchronizeAllGPUs() {
-        parallelForGPUs([&](size_t i) { CUDA_CALL(cudaStreamSynchronize(streams[i])); });
+        gossipContext.sync_all_streams();
     }
 
     /**
