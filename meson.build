@@ -11,6 +11,7 @@ project(
 )
 
 cuda_args = [
+    '-std=c++20',
     '--expt-extended-lambda',
     '--expt-relaxed-constexpr',
     '--generate-line-info',
