@@ -201,7 +201,6 @@ def plot_scaling_on_axis(
     ax.set_title(title, fontsize=16, fontweight="bold")
     ax.grid(True, which="both", ls="--", alpha=0.3, axis="y")
 
-    # Build legend elements
     legend_elements = [
         Patch(facecolor=pu.OPERATION_COLORS["Query"], label="Query"),
         Patch(
