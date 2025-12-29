@@ -71,12 +71,12 @@ fi
 
 # Full Human Genome
 echo "[6/7] Downloading Full Human Genome..."
-if [ -f "$GENOME_DIR/human_grch38.fna" ]; then
+if [ -f "$GENOME_DIR/human_t2t-chm13v2.0.fna" ]; then
     echo "Already exists, skipping"
 else
-    wget -O "$GENOME_DIR/human_grch38.fna.gz" \
-        "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.fna.gz"
-    gunzip "$GENOME_DIR/human_grch38.fna.gz"
+    wget -O "$GENOME_DIR/human_t2t-chm13v2.0.fna.gz" \
+        "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/009/914/755/GCF_009914755.1_T2T-CHM13v2.0/GCF_009914755.1_T2T-CHM13v2.0_genomic.fna.gz"
+    gunzip "$GENOME_DIR/human_t2t-chm13v2.0.fna.gz"
     echo "Downloaded and extracted"
 fi
 

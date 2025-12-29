@@ -160,12 +160,12 @@ else
 fi
 
 # Extract k-mers for full human genome
-if [ -f "$GENOME_DIR/human_grch38.fna" ]; then
+if [ -f "$GENOME_DIR/human_t2t-chm13v2.0.fna" ]; then
     echo ""
-    echo "Full Human Genome (GRCh38)"
+    echo "Full Human Genome (T2T-CHM13v2.0)"
     echo ""
     for k in "${K_VALUES[@]}"; do
-        extract_kmers "$GENOME_DIR/human_grch38.fna" "human" "$k"
+        extract_kmers "$GENOME_DIR/human_t2t-chm13v2.0.fna" "human" "$k"
     done
     echo ""
 else
