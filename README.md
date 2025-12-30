@@ -83,7 +83,7 @@ For workloads that exceed single GPU capacity:
 ```cpp
 #include <CuckooFilterMultiGPU.cuh>
 
-CuckooFilterMultiGPU<Config> filter(numGPUs, capacityPerGPU);
+CuckooFilterMultiGPU<Config> filter(numGPUs, totalCapacity);
 filter.insertMany(h_keys, numKeys);
 filter.containsMany(h_keys, h_results, numKeys);
 ```
