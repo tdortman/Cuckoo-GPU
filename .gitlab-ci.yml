@@ -14,7 +14,7 @@ docs:
     - doxygen Doxyfile
   artifacts:
     paths:
-      - docs/html
+      - doxygen/html
     expire_in: 1 week
   only:
     - main
@@ -25,7 +25,7 @@ pages:
   stage: deploy
   image: alpine:latest
   script:
-    - mv docs/html public
+    - mv doxygen/html public
   artifacts:
     paths:
       - public

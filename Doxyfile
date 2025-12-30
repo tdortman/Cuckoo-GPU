@@ -1,6 +1,6 @@
 # Project info
 PROJECT_NAME           = "GPU-Accelerated Cuckoo Filter"
-OUTPUT_DIRECTORY       = docs
+OUTPUT_DIRECTORY       = doxygen
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 FULL_PATH_NAMES        = NO

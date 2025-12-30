@@ -23,6 +23,6 @@ benchmark_results_new.csv
 benchmark*.json
 benchmark*.csv
 .venv
-docs
+doxygen
 __pycache__
 data
