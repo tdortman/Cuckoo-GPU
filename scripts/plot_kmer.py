@@ -90,58 +90,31 @@ def main(
     filters = [f for f in filter_order if f in df["filter"].values]
     operations = ["Query", "Insert", "Delete"]
 
-    fig, ax = pu.setup_figure(figsize=(10, 6))
-
-    n_operations = len(operations)
-    bar_width = 0.25
-    x_positions = range(len(filters))
-
-    for i, operation in enumerate(operations):
-        throughputs = []
-        for filter_name in filters:
+    # Reshape data: {filter: {operation: throughput}}
+    data: dict[str, dict[str, float]] = {}
+    for filter_name in filters:
+        data[filter_name] = {}
+        for operation in operations:
             subset = df[(df["filter"] == filter_name) & (df["operation"] == operation)]
             if not subset.empty:
-                throughputs.append(subset["throughput"].values[0])
-            else:
-                # Bloom doesn't support Delete, so use 0
-                throughputs.append(0)
+                data[filter_name][operation] = subset["throughput"].values[0]
 
-        # Center the bars around each x position
-        offset = (i - (n_operations - 1) / 2) * bar_width
+    colors = {
+        f: pu.FILTER_COLORS.get(pu.get_filter_display_name(f), "#333333")
+        for f in filters
+    }
 
-        hatch = None
-        alpha = 1.0
-        if operation == "Insert":
-            hatch = "//"
-            alpha = 0.8
-        elif operation == "Delete":
-            hatch = "--"
-            alpha = 0.8
+    fig, ax = pu.setup_figure(figsize=(10, 6))
 
-        bars = ax.bar(
-            [x + offset for x in x_positions],
-            throughputs,
-            bar_width,
-            label=operation,
-            color=pu.OPERATION_COLORS.get(operation, "#333333"),
-            edgecolor="black",
-            linewidth=0.5,
-            hatch=hatch,
-            alpha=alpha,
-        )
-
-        # Add value labels on bars
-        for bar, val in zip(bars, throughputs):
-            if val > 0:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height(),
-                    f"{val:.0f}",
-                    ha="center",
-                    va="bottom",
-                    fontsize=pu.LEGEND_FONT_SIZE,
-                    fontweight="bold",
-                )
+    pu.clustered_bar_chart(
+        ax,  # ty:ignore[invalid-argument-type]
+        categories=operations,
+        groups=filters,
+        data=data,
+        colors=colors,
+        bar_width=0.18,
+        labels={f: pu.get_filter_display_name(f) for f in filters},
+    )
 
     title = "K-mer Benchmark"
     if dataset_name and k:
@@ -151,19 +124,13 @@ def main(
     elif k:
         title += f"\n(k={k})"
 
-    # Get display names for filters
-    filter_labels = [pu.get_filter_display_name(f) for f in filters]
-
     pu.format_axis(
         ax,  # ty:ignore[invalid-argument-type]
-        "Filter",
+        "Operation",
         "Throughput [M ops/s]",
         title=title,
         xscale=None,
-        grid=True,
     )
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(filter_labels, fontsize=pu.DEFAULT_FONT_SIZE)
     pu.create_legend(
         ax,  # ty:ignore[invalid-argument-type]
         loc="upper right",

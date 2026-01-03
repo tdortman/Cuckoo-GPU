@@ -316,6 +316,15 @@ if get_option('BUILD_BENCHMARKS') == true
         cuda_args: cuda_args + ['-w'],
         install: false,
     )
+
+    executable(
+        'benchmark-bucket-policy',
+        './benchmark/bucket_policy_benchmark.cu',
+        dependencies: bench_deps,
+        include_directories: includes,
+        cuda_args: cuda_args,
+        install: false,
+    )
 endif
 
 if get_option('BUILD_TESTS') == true

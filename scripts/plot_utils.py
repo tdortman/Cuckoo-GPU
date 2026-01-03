@@ -4,9 +4,8 @@ This module provides common constants, styles, and helper functions used across
 multiple plotting scripts to reduce code duplication and ensure visual consistency.
 """
 
-import sys
-
 import math
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -344,3 +343,87 @@ def normalize_benchmark_name(name: str) -> str:
         return base.lower()
 
     return name.lower()
+
+
+POLICY_COLORS = {
+    "Xor": FILTER_STYLES["cuckoo"]["color"],
+    "AddSub": FILTER_STYLES["tcf"]["color"],
+    "Offset": FILTER_STYLES["gqf"]["color"],
+}
+
+POLICY_DISPLAY_NAMES = {
+    "xor": "XOR",
+    "addsub": "Add/Sub",
+    "offset": "Offset",
+}
+
+
+def get_policy_display_name(policy: str) -> str:
+    """Get display name for a bucket policy."""
+    return POLICY_DISPLAY_NAMES.get(policy.lower(), policy)
+
+
+def clustered_bar_chart(
+    ax: plt.Axes,
+    categories: list[str],
+    groups: list[str],
+    data: dict[str, dict[str, float]],
+    colors: dict[str, str],
+    bar_width: float = 0.25,
+    show_values: bool = True,
+    hatches: Optional[dict[str, str]] = None,
+    alphas: Optional[dict[str, float]] = None,
+    labels: Optional[dict[str, str]] = None,
+) -> None:
+    """Create a clustered bar chart.
+
+    Args:
+        ax: Matplotlib axis to plot on
+        categories: List of category labels (x-axis, e.g., operations)
+        groups: List of group labels (bar clusters, e.g., policies)
+        data: Nested dict {group: {category: value}}
+        colors: Dict mapping group names to colors
+        bar_width: Width of each bar
+        show_values: Whether to show values on top of bars
+        hatches: Optional dict mapping group names to hatch patterns
+        alphas: Optional dict mapping group names to alpha values
+        labels: Optional dict mapping group names to display labels for legend
+    """
+    n_groups = len(groups)
+    x_positions = range(len(categories))
+
+    for i, group in enumerate(groups):
+        values = [data.get(group, {}).get(cat, 0) for cat in categories]
+        offset = (i - (n_groups - 1) / 2) * bar_width
+
+        hatch = hatches.get(group) if hatches else None
+        alpha = alphas.get(group, 1.0) if alphas else 1.0
+        label = labels.get(group, group) if labels else group
+
+        bars = ax.bar(
+            [x + offset for x in x_positions],
+            values,
+            bar_width,
+            label=label,
+            color=colors.get(group, "#333333"),
+            edgecolor="black",
+            linewidth=0.5,
+            hatch=hatch,
+            alpha=alpha,
+        )
+
+        if show_values:
+            for bar, val in zip(bars, values):
+                if val > 0:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        f"{val:.0f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=LEGEND_FONT_SIZE,
+                        fontweight="bold",
+                    )
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(categories, fontsize=DEFAULT_FONT_SIZE)

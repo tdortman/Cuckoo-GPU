@@ -176,3 +176,112 @@ struct AddSubAltBucketPolicy {
         return static_cast<size_t>(requiredBuckets);
     }
 };
+
+/**
+ * @brief Offset-based alternate bucket policy from "Smaller and More Flexible Cuckoo Filters"
+ * by Schmitz, Zentgraf, and Rahmann.
+ *
+ * Uses a symmetric offset computation: b' = (b + offset(fp)) mod numBuckets
+ * where offset is guaranteed to be non-zero, ensuring b' ≠ b.
+ */
+template <typename KeyType, typename TagType, size_t bitsPerTag, size_t bucketSize>
+struct OffsetAltBucketPolicy {
+    static constexpr size_t fpMask = (1ULL << bitsPerTag) - 1;
+
+    static constexpr char name[] = "OffsetAltBucketPolicy";
+
+    /**
+     * @brief Computes a 64-bit hash of the key.
+     * @tparam H Type of the key.
+     * @param key The key to hash.
+     * @return uint64_t The 64-bit hash value.
+     */
+    template <typename H>
+    static __host__ __device__ uint64_t hash64(const H& key) {
+        return xxhash::xxhash64(key);
+    }
+
+    /**
+     * @brief Computes a non-zero offset from a fingerprint.
+     *
+     * The offset is in the range [1, numBuckets-1], ensuring that
+     * the alternate bucket is always different from the primary bucket.
+     *
+     * @param fp Fingerprint value
+     * @param numBuckets Total number of buckets
+     * @return Non-zero offset value
+     */
+    static __host__ __device__ size_t computeOffset(TagType fp, size_t numBuckets) {
+        const uint64_t fpHash = hash64(fp);
+        const size_t offset = fpHash % (numBuckets - 1);
+        return offset == 0 ? offset + 1 : offset;
+    }
+
+    /**
+     * @brief Performs partial-key cuckoo hashing to find the fingerprint and both
+     * bucket indices for a given key.
+     *
+     * @param key Key to hash
+     * @param numBuckets Number of buckets in the filter
+     * @return A tuple of (bucket1, bucket2, fingerprint)
+     */
+    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
+    getCandidateBuckets(const KeyType& key, size_t numBuckets) {
+        const uint64_t h = hash64(key);
+
+        // Upper 32 bits for the fingerprint
+        const uint32_t h_fp = h >> 32;
+        const uint32_t masked = h_fp & fpMask;
+        const auto fp = TagType(masked == 0 ? 1 : masked);
+
+        // Lower 32 bits for the bucket index
+        const uint32_t h_bucket = h & 0xFFFFFFFF;
+        const size_t i1 = h_bucket % numBuckets;
+        const size_t i2 = getAlternateBucket(i1, fp, numBuckets);
+
+        return {i1, i2, fp};
+    }
+
+    /**
+     * @brief Computes the alternate bucket index using a symmetric offset.
+     *
+     * For symmetry (so that alt(alt(b)) = b), we pair buckets deterministically:
+     * - If bucket < offset, we add (bucket is the "first" of the pair)
+     * - If bucket >= offset, we check if subtracting would give a smaller index
+     *
+     * This creates a bijection.
+     *
+     * @param bucket Current bucket index.
+     * @param fp Fingerprint.
+     * @param numBuckets Total number of buckets.
+     * @return size_t Alternate bucket index.
+     */
+    static __host__ __device__ size_t
+    getAlternateBucket(size_t bucket, TagType fp, size_t numBuckets) {
+        const size_t offset = computeOffset(fp, numBuckets);
+
+        // For offset d, buckets pair as: (0,d), (1,d+1), ..., (m-d-1, m-1)
+        // Bucket b is the "smaller" of its pair if b < (b + d) mod m
+        const size_t altAdd = (bucket + offset) % numBuckets;
+
+        if (altAdd > bucket) {
+            // bucket is smaller in its pair -> use addition
+            return altAdd;
+        } else {
+            // bucket is larger in its pair -> use subtraction
+            return (bucket + numBuckets - offset) % numBuckets;
+        }
+    }
+
+    /**
+     * @brief Calculates number of buckets without requiring power of two.
+     *
+     * Simply rounds up to the nearest integer. For better performance,
+     * numBuckets should ideally be a prime or at least odd to avoid
+     * clustering with the offset computation.
+     */
+    static size_t calculateNumBuckets(size_t capacity) {
+        auto requiredBuckets = std::ceil(static_cast<double>(capacity) / bucketSize);
+        return static_cast<size_t>(requiredBuckets);
+    }
+};
