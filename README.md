@@ -1,6 +1,6 @@
 # GPU-Accelerated Cuckoo Filter
 
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tiltedtoast.github.io/cuckoo-filter/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tdortman.github.io/cuckoo-filter/)
 
 A high-performance CUDA implementation of the Cuckoo Filter data structure, developed as part of the thesis "Design and Evaluation of a GPU-Accelerated Cuckoo Filter".
 
