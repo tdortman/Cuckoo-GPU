@@ -60,27 +60,48 @@ def main(
 
     benchmark_data = defaultdict(dict)
     for _, row in df.iterrows():
-        name = pu.normalize_benchmark_name(row["name"])
+        name = row["name"]
         if "/" not in name:
             continue
 
-        # Remove _median suffix and extract base_name and size
-        # Format: "CF_Insert/65536/min_time:0.500/repeats:10_median"
+        # Handle both formats:
+        # Old: "CF_Insert/65536/min_time:0.500/repeats:10_median"
+        # New: "CFFixture/Insert/65536/iterations:10/repeats:5/manual_time_median"
         parts = name.split("/")
         if len(parts) < 2:
             continue
 
-        base_name = parts[0]
-        size_str = parts[1]
+        first_part = parts[0].strip('"')  # Handle quoted names
 
-        # Strip CF_ prefix for sorted/unsorted insertion benchmarks
-        if base_name in ("CF_InsertSorted", "CF_InsertUnsorted"):
-            base_name = base_name[3:]
+        # Check if we have the new Fixture format (e.g., "CFFixture/Insert/size/...")
+        if first_part.endswith("Fixture") and len(parts) >= 3:
+            # New format: fixture name is separate from operation
+            fixture_name = first_part[:-7]  # Remove "Fixture" suffix -> "CF" or "GQF"
+            operation = parts[1]  # Insert, Query, Delete
+            size_str = parts[2]
+            base_name = f"{fixture_name}_{operation}"
+        else:
+            # Old format: operation is part of first component (e.g., "CF_Insert/size/...")
+            base_name = (
+                first_part.split("_")[0] + "_" + parts[0].split("_")[-1]
+                if "_" in first_part
+                else first_part
+            )
+            size_str = parts[1]
 
-        suffix = base_name.rsplit("_", 1)[-1]
+            # Strip CF_ prefix for sorted/unsorted insertion benchmarks
+            if base_name in ("CF_InsertSorted", "CF_InsertUnsorted"):
+                base_name = base_name[3:]
+
+        # Only process median records
+        if "_median" not in name:
+            continue
+
+        # Validate operation type
+        operation = base_name.rsplit("_", 1)[-1] if "_" in base_name else ""
         if not re.fullmatch(
             r"(?:Query|Insert|Delete)(?:Sorted|Unsorted)?(?:AddSub)?(<\d+>)?",
-            suffix,
+            operation,
         ):
             continue
 
