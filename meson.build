@@ -38,7 +38,7 @@ deps = [cli11_dep]
 
 executable(
     'cuckoo-filter-ipc',
-    './src/ipc_main.cu',
+    'examples/ipc_main.cu',
     include_directories: includes,
     dependencies: deps,
     cuda_args: cuda_args,
@@ -47,7 +47,7 @@ executable(
 
 executable(
     'cuckoo-filter-ipc-server',
-    './src/ipc_server_main.cu',
+    'examples/ipc_server_main.cu',
     include_directories: includes,
     dependencies: deps,
     cuda_args: cuda_args,
@@ -56,7 +56,7 @@ executable(
 
 executable(
     'cuckoo-filter-cuda',
-    './src/main.cu',
+    'examples/main.cu',
     include_directories: includes,
     dependencies: deps,
     cuda_args: cuda_args,
@@ -67,7 +67,7 @@ gossip_dep = subproject('gossip').get_variable('gossip_dep')
 
 executable(
     'cuckoo-filter-multi-gpu',
-    './src/multi_gpu_main.cu',
+    'examples/multi_gpu_main.cu',
     include_directories: includes,
     dependencies: deps + [gossip_dep],
     cuda_args: cuda_args,
