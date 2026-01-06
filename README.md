@@ -18,6 +18,36 @@ This library provides a GPU-accelerated Cuckoo Filter implementation optimized f
 -   IPC support for cross-process filter sharing
 -   Header-only library design
 
+## Performance
+
+Benchmarks at 80% load factor on an NVIDIA GH200 (H100 HBM3, 3.4 TB/s). The GPU Cuckoo Filter is compared against:
+
+-   [CPU Cuckoo Filter](https://github.com/tdortman/cuckoo-filter)
+-   [Bulk Two-Choice Filter (TCF)](https://github.com/saltsystemslab/gpu-filters/tree/main/bulk-tcf)
+-   [GPU Counting Quotient Filter (GQF)](https://github.com/saltsystemslab/gpu-filters/tree/main/gqf)
+-   [GPU Blocked Bloom Filter](https://github.com/NVIDIA/cuCollections)
+
+### L2-Resident (4M items, ~8 MiB)
+
+| Comparison        | Insert        | Query       | Delete      |
+| ----------------- | ------------- | ----------- | ----------- |
+| GPU vs CPU Cuckoo | 360× faster   | 973× faster | N/A         |
+| Cuckoo vs TCF     | 6× faster     | 42× faster  | 100× faster |
+| Cuckoo vs GQF     | 585× faster   | 6× faster   | 273× faster |
+| Cuckoo vs Bloom   | 0.6× (slower) | 1.4× faster | N/A         |
+
+### DRAM-Resident (268M items, ~512 MiB)
+
+| Comparison        | Insert        | Query        | Delete       |
+| ----------------- | ------------- | ------------ | ------------ |
+| GPU vs CPU Cuckoo | 583× faster   | 1504× faster | N/A          |
+| Cuckoo vs TCF     | 1.9× faster   | 11.3× faster | 35.3× faster |
+| Cuckoo vs GQF     | 9.6× faster   | 2.6× faster  | 3.8× faster  |
+| Cuckoo vs Bloom   | 0.7× (slower) | 1.0× (equal) | N/A          |
+
+> [!NOTE]
+> For a more comprehensive evaluation including additional systems and analysis, see the accompanying [thesis](docs/thesis.pdf).
+
 ## Requirements
 
 -   CUDA Toolkit (>= 12.9)
