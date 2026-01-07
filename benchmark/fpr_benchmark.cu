@@ -5,6 +5,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
+#include <bucket_policies.cuh>
 #include <bulk_tcf_host.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -14,7 +15,6 @@
 #include <filter.hpp>
 #include <gqf.cuh>
 #include <gqf_int.cuh>
-#include <bucket_policies.cuh>
 #include <helpers.cuh>
 #include <random>
 #include <thread>
@@ -54,7 +54,7 @@ using CPUOptimParam = filters::parameter::PowerOfTwoMurmurScalar64PartitionedMT;
 using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
 
-constexpr double LOAD_FACTOR = 0.95;
+constexpr double LOAD_FACTOR = 0.8;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 constexpr size_t FPR_TEST_SIZE = 1'000'000;
 
@@ -282,13 +282,12 @@ static void PartitionedCF_FPR(bm::State& state) {
     setFPRCounters(state, filterMemory, n, fpr, falsePositives, FPR_TEST_SIZE);
 }
 
-#define FPR_CONFIG                \
-    ->RangeMultiplier(2)          \
-        ->Range(1 << 15, 1 << 30) \
-        ->Unit(bm::kMillisecond)  \
-        ->UseManualTime()         \
-        ->MinTime(0.5)            \
-        ->Repetitions(3)          \
+#define FPR_CONFIG               \
+    ->Arg(1 << 28)               \
+        ->Unit(bm::kMillisecond) \
+        ->UseManualTime()        \
+        ->Iterations(10)         \
+        ->Repetitions(5)         \
         ->ReportAggregatesOnly(true);
 
 static void GQF_FPR(bm::State& state) {
