@@ -301,14 +301,14 @@ struct CuckooFilter {
 
 #if __CUDA_ARCH__ >= 1000 && !defined(CUCKOO_FILTER_DISABLE_256BIT_LOADS)
             // 256-bit load path
-            constexpr size_t wordsPerLoad = (sizeof(WordType) == 4) ? 8 : 4;
-            if constexpr (wordCount >= wordsPerLoad) {
-                constexpr size_t alignMask = wordsPerLoad - 1;
+            constexpr size_t wordsPerLoad256 = (sizeof(WordType) == 4) ? 8 : 4;
+            if constexpr (wordCount >= wordsPerLoad256) {
+                constexpr size_t alignMask = wordsPerLoad256 - 1;
                 const size_t startAlignedIdx = startWordIdx & ~alignMask;
 
-                for (size_t i = 0; i < wordCount / wordsPerLoad; i++) {
-                    const size_t idx = (startAlignedIdx + i * wordsPerLoad) & (wordCount - 1);
-                    WordType loaded[wordsPerLoad];
+                WordType loaded[wordsPerLoad256];
+                for (size_t i = 0; i < wordCount / wordsPerLoad256; i++) {
+                    const size_t idx = (startAlignedIdx + i * wordsPerLoad256) & (wordCount - 1);
                     load256BitGlobalNC(reinterpret_cast<const WordType*>(&packedTags[idx]), loaded);
                     if (checkWords(loaded, replicatedTag)) {
                         return true;
@@ -318,22 +318,14 @@ struct CuckooFilter {
             }
 #endif
             // 128-bit load path
-            if constexpr (sizeof(WordType) == 4 && wordCount >= 4) {
-                const size_t startQuadIdx = startWordIdx & ~3;
-                for (size_t i = 0; i < wordCount / 4; i++) {
-                    const size_t idx = (startQuadIdx + i * 4) & (wordCount - 1);
-                    WordType loaded[4];
-                    load128Bit(idx, loaded);
-                    if (checkWords(loaded, replicatedTag)) {
-                        return true;
-                    }
-                }
-                return false;
-            } else if constexpr (wordCount >= 2) {
-                const size_t startPairIdx = startWordIdx & ~1;
-                for (size_t i = 0; i < wordCount / 2; i++) {
-                    const size_t idx = (startPairIdx + i * 2) & (wordCount - 1);
-                    WordType loaded[2];
+            constexpr size_t wordsPerLoad128 = (sizeof(WordType) == 4) ? 4 : 2;
+            if constexpr (wordCount >= wordsPerLoad128) {
+                constexpr size_t alignMask = wordsPerLoad128 - 1;
+                const size_t startAlignedIdx = startWordIdx & ~alignMask;
+
+                WordType loaded[wordsPerLoad128];
+                for (size_t i = 0; i < wordCount / wordsPerLoad128; i++) {
+                    const size_t idx = (startAlignedIdx + i * wordsPerLoad128) & (wordCount - 1);
                     load128Bit(idx, loaded);
                     if (checkWords(loaded, replicatedTag)) {
                         return true;
