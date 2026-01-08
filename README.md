@@ -31,7 +31,7 @@ The GPU Cuckoo Filter is compared against:
 
 ### L2-Resident (4M items, ~8 MiB)
 
-| Comparison        | Insert        | Query       | Delete      | FPR (Cuckoo vs Other) |
+| Comparison        | Insert        | Query       | Delete      | FPR |
 | ----------------- | ------------- | ----------- | ----------- | --------------------- |
 | GPU vs CPU Cuckoo | 360× faster   | 973× faster | N/A         | 0.041% vs 0.005%      |
 | Cuckoo vs TCF     | 6× faster     | 42× faster  | 100× faster | 0.041% vs 0.305%      |
@@ -40,7 +40,7 @@ The GPU Cuckoo Filter is compared against:
 
 ### DRAM-Resident (268M items, ~512 MiB)
 
-| Comparison        | Insert        | Query        | Delete       | FPR (Cuckoo vs Other) |
+| Comparison        | Insert        | Query        | Delete       | FPR |
 | ----------------- | ------------- | ------------ | ------------ | --------------------- |
 | GPU vs CPU Cuckoo | 583× faster   | 1504× faster | N/A          | 0.039% vs 0.004%      |
 | Cuckoo vs TCF     | 1.9× faster   | 11.3× faster | 35.3× faster | 0.039% vs 0.394%      |
