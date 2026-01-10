@@ -150,7 +150,7 @@ __host__ __device__ static inline int popcnt(uint64_t val) {
 #else
 
     #ifndef __x86_64
-    val = __builtin_popcount(val);
+    val = __builtin_popcountll(val);
 
     #else
 
