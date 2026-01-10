@@ -957,7 +957,7 @@ struct CuckooFilter {
      * @return true if the insertion was successful, false otherwise
      */
     __device__ bool insertWithEvictionBFS(TagType fp, size_t startBucket) {
-        constexpr size_t numCandidates = std::min(8UL, bucketSize / 2);
+        constexpr size_t numCandidates = std::max(1UL, bucketSize / 2);
 
         Bucket& bucket = d_buckets[startBucket];
 
