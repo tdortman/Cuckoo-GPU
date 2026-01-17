@@ -30,6 +30,37 @@ def get_build_dir(script_path: Optional[Path] = None) -> Path:
     return Path(script_path).parent.parent / "build"
 
 
+def get_benchmark_dir(script_path: Optional[Path] = None) -> Path:
+    """Get the benchmark build directory relative to script location.
+
+    Args:
+        script_path: Path to the calling script (typically __file__)
+                    If None, assumes current directory's parent has build/
+
+    Returns:
+        Path to the build/benchmark directory
+    """
+    return get_build_dir(script_path) / "benchmark"
+
+
+def get_examples_dir(script_path: Optional[Path] = None) -> Path:
+    """Get the examples build directory relative to script location.
+
+    Returns:
+        Path to the build/examples directory
+    """
+    return get_build_dir(script_path) / "examples"
+
+
+def get_tests_dir(script_path: Optional[Path] = None) -> Path:
+    """Get the tests build directory relative to script location.
+
+    Returns:
+        Path to the build/tests directory
+    """
+    return get_build_dir(script_path) / "tests"
+
+
 def validate_executable(executable: Path) -> None:
     """Validate that a benchmark executable exists.
 

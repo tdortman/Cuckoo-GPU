@@ -24,15 +24,15 @@ def main(
     ),
 ):
     """Run all FPR sweep benchmarks and combine results into a single CSV."""
-    build_dir = bu.get_build_dir(Path(__file__))
+    benchmark_dir = bu.get_benchmark_dir(Path(__file__))
 
     benchmark_names = [
-        "benchmark-fpr-sweep-gqf8",
-        "benchmark-fpr-sweep-gqf16",
-        "benchmark-fpr-sweep-gqf32",
+        "fpr-sweep-gqf8",
+        "fpr-sweep-gqf16",
+        "fpr-sweep-gqf32",
     ]
 
-    benchmarks = [(build_dir / name, None, None) for name in benchmark_names]
+    benchmarks = [(benchmark_dir / name, None, None) for name in benchmark_names]
 
     bu.run_benchmarks_and_merge(benchmarks, output)
 

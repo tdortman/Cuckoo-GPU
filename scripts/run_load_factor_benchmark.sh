@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 
-BENCHMARK_EXE="$BUILD_DIR/benchmark-load-factor"
+BENCHMARK_EXE="$BUILD_DIR/benchmark/load-factor"
 OUTPUT_CSV="$BUILD_DIR/load_factor_benchmark.csv"
 
 if [ ! -f "$BENCHMARK_EXE" ]; then

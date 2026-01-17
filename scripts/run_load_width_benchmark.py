@@ -24,16 +24,16 @@ def main(
     ),
 ):
     """Run 128-bit and 256-bit load width benchmarks and combine results."""
-    build_dir = bu.get_build_dir(Path(__file__))
+    benchmark_dir = bu.get_benchmark_dir(Path(__file__))
 
     benchmark_configs = [
-        ("benchmark-load-width-256bit", "256bit"),
-        ("benchmark-load-width-128bit", "128bit"),
+        ("load-width-256bit", "256bit"),
+        ("load-width-128bit", "128bit"),
     ]
 
     benchmarks = [
         (
-            build_dir / name,
+            benchmark_dir / name,
             None,  # no custom environment
             lambda line, lbl=label: line.replace(
                 "LoadWidthFixture", lbl

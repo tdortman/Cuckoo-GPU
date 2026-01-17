@@ -35,8 +35,8 @@ def main(
     Uses CUDA_VISIBLE_DEVICES to control which GPUs are used for each run.
     Combines results into a single CSV file.
     """
-    build_dir = bu.get_build_dir(Path(__file__))
-    benchmark_exe = build_dir / "benchmark-multi-gpu-scaling"
+    benchmark_dir = bu.get_benchmark_dir(Path(__file__))
+    benchmark_exe = benchmark_dir / "multi-gpu-scaling"
 
     bu.validate_executable(benchmark_exe)
 
