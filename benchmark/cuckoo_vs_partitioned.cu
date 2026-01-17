@@ -8,16 +8,18 @@
 #include <string>
 #include <vector>
 
-#include <cuckoo/cuckoo_parameter.hpp>
-#include <filter.hpp>
-
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <CuckooFilter.cuh>
 #include <helpers.cuh>
 #include "benchmark_common.cuh"
-#include "parameter/parameter.hpp"
+
+#ifdef __x86_64__
+    #include <cuckoo/cuckoo_parameter.hpp>
+    #include <filter.hpp>
+    #include "parameter/parameter.hpp"
+#endif
 
 namespace bm = benchmark;
 
@@ -25,13 +27,16 @@ constexpr double TARGET_LOAD_FACTOR = 0.95;
 using Config = CuckooConfig<uint64_t, 16, 500, 128, 16>;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 
+#ifdef __x86_64__
 using CPUFilterParam = filters::cuckoo::Standard4<Config::bitsPerTag>;
 using CPUOptimParam = filters::parameter::PowerOfTwoMurmurScalar64PartitionedMT;
 using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
+#endif
 
 using GPUCFFixture = CuckooFilterFixture<Config>;
 
+#ifdef __x86_64__
 class PartitionedCFFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
     using benchmark::Fixture::TearDown;
@@ -80,6 +85,7 @@ class PartitionedCFFixture : public benchmark::Fixture {
     std::vector<uint64_t> keys;
     CPUTimer timer;
 };
+#endif  // __x86_64__
 
 static void GPUCF_FPR(bm::State& state) {
     GPUTimer timer;
@@ -129,6 +135,7 @@ static void GPUCF_FPR(bm::State& state) {
     );
 }
 
+#ifdef __x86_64__
 BENCHMARK_DEFINE_F(PartitionedCFFixture, Insert)(bm::State& state) {
     for (auto _ : state) {
         PartitionedCuckooFilter tempFilter(s, n_partitions, n_threads, n_tasks);
@@ -223,12 +230,15 @@ static void PartitionedCF_FPR(bm::State& state) {
         static_cast<double>(filterMemory), bm::Counter::kDefaults, bm::Counter::kIs1024
     );
 }
+#endif  // __x86_64__
 
 DEFINE_AND_REGISTER_INSERT_QUERY(GPUCFFixture)
 
+#ifdef __x86_64__
 REGISTER_INSERT_QUERY(PartitionedCFFixture)
+REGISTER_FUNCTION_BENCHMARK(PartitionedCF_FPR);
+#endif  // __x86_64__
 
 REGISTER_FUNCTION_BENCHMARK(GPUCF_FPR);
-REGISTER_FUNCTION_BENCHMARK(PartitionedCF_FPR);
 
 STANDARD_BENCHMARK_MAIN();

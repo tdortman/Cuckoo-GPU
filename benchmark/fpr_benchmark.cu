@@ -12,14 +12,18 @@
 #include <CuckooFilter.cuh>
 #include <cuco/bloom_filter.cuh>
 #include <cuda/std/cstdint>
-#include <filter.hpp>
 #include <gqf.cuh>
 #include <gqf_int.cuh>
 #include <helpers.cuh>
 #include <random>
 #include <thread>
 #include "benchmark_common.cuh"
-#include "parameter/parameter.hpp"
+
+#ifdef __x86_64__
+    #include <cuckoo/cuckoo_parameter.hpp>
+    #include <filter.hpp>
+    #include "parameter/parameter.hpp"
+#endif
 
 namespace bm = benchmark;
 
@@ -49,10 +53,12 @@ void convertGQFResults(thrust::device_vector<uint64_t>& d_results) {
     );
 }
 
+#ifdef __x86_64__
 using CPUFilterParam = filters::cuckoo::Standard4<Config::bitsPerTag>;
 using CPUOptimParam = filters::parameter::PowerOfTwoMurmurScalar64PartitionedMT;
 using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
+#endif
 
 constexpr double LOAD_FACTOR = 0.8;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
@@ -232,6 +238,7 @@ static void TCF_FPR(bm::State& state) {
     TCFType::host_free_tcf(filter);
 }
 
+#ifdef __x86_64__
 static void PartitionedCF_FPR(bm::State& state) {
     CPUTimer timer;
     size_t targetMemory = state.range(0);
@@ -281,6 +288,7 @@ static void PartitionedCF_FPR(bm::State& state) {
 
     setFPRCounters(state, filterMemory, n, fpr, falsePositives, FPR_TEST_SIZE);
 }
+#endif  // __x86_64__
 
 #define FPR_CONFIG               \
     ->Arg(1 << 28)               \
@@ -350,7 +358,11 @@ BENCHMARK(GPUCF_FPR) FPR_CONFIG;
 BENCHMARK(CPUCF_FPR) FPR_CONFIG;
 BENCHMARK(Bloom_FPR) FPR_CONFIG;
 BENCHMARK(TCF_FPR) FPR_CONFIG;
+
+#ifdef __x86_64__
 BENCHMARK(PartitionedCF_FPR) FPR_CONFIG;
+#endif
+
 BENCHMARK(GQF_FPR) FPR_CONFIG;
 
 BENCHMARK_MAIN();
