@@ -2,5 +2,5 @@
 url = https://github.com/saltsystemslab/gpu-filters.git
 revision = 4907f886363a4364e3b03b4fffc5338a2d5c5e29
 patch_directory = gpu-filters
-diff_files = gpu-filters/name-collision.patch,gpu-filters/params.patch
+diff_files = gpu-filters/bulk-tcf/name-collision.patch,gpu-filters/bulk-tcf/params.patch,gpu-filters/gqf/fix-qf-malloc-device.patch,gpu-filters/gqf/fix-popcnt.patch,gpu-filters/gqf/rename-hash-functions.patch
 depth = 1
