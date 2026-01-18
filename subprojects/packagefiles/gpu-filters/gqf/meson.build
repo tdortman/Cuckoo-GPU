@@ -27,9 +27,11 @@ foreach config : gqf_configs
     r_bits = config[1]
     suffix = config[2]
 
+    # Add suffix to function names to avoid symbol conflicts
     config_cuda_args = base_cuda_args + [
         '-D', 'QF_BITS_PER_SLOT=@0@'.format(bits_per_slot),
         '-D', 'R_BITS=@0@'.format(r_bits),
+        '-D', 'GQF_SUFFIX=_@0@'.format(suffix),
     ]
 
     lib_name = 'gqf_@0@'.format(suffix)
