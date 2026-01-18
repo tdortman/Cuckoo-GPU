@@ -5,11 +5,11 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
+#include <bucket_policies.cuh>
 #include <chrono>
 #include <cstdint>
 #include <CuckooFilter.cuh>
 #include <fstream>
-#include <bucket_policies.cuh>
 #include <limits>
 #include <random>
 #include <string>
@@ -37,23 +37,30 @@ class GPUTimer {
     GPUTimer() = default;
 
     ~GPUTimer() {
-        if (startEvent) cudaEventDestroy(startEvent);
-        if (stopEvent) cudaEventDestroy(stopEvent);
+        if (startEvent) {
+            cudaEventDestroy(startEvent);
+        }
+        if (stopEvent) {
+            cudaEventDestroy(stopEvent);
+        }
     }
 
     GPUTimer(const GPUTimer&) = delete;
     GPUTimer& operator=(const GPUTimer&) = delete;
 
-    GPUTimer(GPUTimer&& other) noexcept
-        : startEvent(other.startEvent), stopEvent(other.stopEvent) {
+    GPUTimer(GPUTimer&& other) noexcept : startEvent(other.startEvent), stopEvent(other.stopEvent) {
         other.startEvent = nullptr;
         other.stopEvent = nullptr;
     }
 
     GPUTimer& operator=(GPUTimer&& other) noexcept {
         if (this != &other) {
-            if (startEvent) cudaEventDestroy(startEvent);
-            if (stopEvent) cudaEventDestroy(stopEvent);
+            if (startEvent) {
+                cudaEventDestroy(startEvent);
+            }
+            if (stopEvent) {
+                cudaEventDestroy(stopEvent);
+            }
             startEvent = other.startEvent;
             stopEvent = other.stopEvent;
             other.startEvent = nullptr;
@@ -115,14 +122,7 @@ inline size_t adaptiveInsert(
     CuckooFilter<FilterConfig>& filter,
     thrust::device_vector<typename FilterConfig::KeyType>& d_keys
 ) {
-    // static size_t threshold = getGPUL2CacheSize() / (FilterConfig::bitsPerTag / CHAR_BIT);
-    static constexpr size_t threshold = 1 << 29;
-
-    if (d_keys.size() < threshold) {
-        return filter.insertMany(d_keys);
-    } else {
-        return filter.insertManySorted(d_keys);
-    }
+    return filter.insertMany(d_keys);
 }
 
 template <typename T>
