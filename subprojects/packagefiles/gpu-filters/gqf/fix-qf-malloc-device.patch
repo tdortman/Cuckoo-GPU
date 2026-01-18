@@ -1,0 +1,70 @@
+diff --git a/gqf/include/gqf.cuh b/gqf/include/gqf.cuh
+index fdd78bc..9336bfc 100644
+--- a/gqf/include/gqf.cuh
++++ b/gqf/include/gqf.cuh
+@@ -15,7 +15,10 @@
+ #include <inttypes.h>
+ #include <stdbool.h>
+ 
++typedef struct quotient_filter quotient_filter;
++typedef quotient_filter QF;
+ #ifdef __cplusplus
++__host__ void qf_malloc_device(QF** qf, int nbits, bool bulk_config);
+ extern "C" {
+ #endif
+ 
+diff --git a/gqf/include/gqf_int.cuh b/gqf/include/gqf_int.cuh
+index 05689f6..110f4bb 100644
+--- a/gqf/include/gqf_int.cuh
++++ b/gqf/include/gqf_int.cuh
+@@ -27,7 +27,13 @@ extern "C" {
+    8, 16, 32, or 64 (for optimized versions),
+    or other integer <= 56 (for compile-time-optimized bit-shifting-based versions)
+ */
+-#define QF_BITS_PER_SLOT 8
++#ifndef QF_BITS_PER_SLOT
++    #define QF_BITS_PER_SLOT 32
++#endif
++
++#ifndef R_BITS
++    #define R_BITS 16
++#endif
+ 
+ /* Must be >= 6.  6 seems fastest. */
+ #define QF_BLOCK_OFFSET_BITS (6)
+diff --git a/gqf/src/gqf.cu b/gqf/src/gqf.cu
+index d37e6d7..d5a404a 100644
+--- a/gqf/src/gqf.cu
++++ b/gqf/src/gqf.cu
+@@ -2885,6 +2885,10 @@ __host__ bool qf_free(QF *qf)
+ 
+ // }
+ 
++__host__ void qf_malloc_device(QF** qf, int nbits, bool bulk_config) {
++    return qf_malloc_device(qf, nbits, R_BITS, 0, bulk_config);
++}
++
+ //consolidate all of the device construction into one convenient func!
+ __host__ void qf_malloc_device(QF** qf, int nbits, int rbits, int vbits, bool bulk_config){
+ 
+@@ -2904,7 +2908,8 @@ __host__ void qf_malloc_device(QF** qf, int nbits, int rbits, int vbits, bool bu
+ 	qf_malloc(&host_qf, nslots, num_hash_bits, vbits, QF_HASH_INVERTIBLE, false, 0);
+ 	qf_set_auto_resize(&host_qf, false);
+ 
+-
++    void* host_metadata_buffer = (void*)host_qf.metadata;
++    qfruntime* host_runtimedata = host_qf.runtimedata;
+ 
+ 	qfruntime* _runtime;
+ 	qfmetadata* _metadata;
+@@ -2980,7 +2985,9 @@ __host__ void qf_malloc_device(QF** qf, int nbits, int rbits, int vbits, bool bu
+ 
+ 	*qf = temp_dev_ptr;
+ 
+-
++    // Free host memory that was allocated in qf_malloc and is no longer needed
++    free(host_runtimedata);
++    free(host_metadata_buffer);
+ 
+ }
+ 
