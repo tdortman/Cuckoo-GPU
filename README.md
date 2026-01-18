@@ -10,13 +10,13 @@ This library provides a GPU-accelerated Cuckoo Filter implementation optimized f
 
 ## Features
 
--   CUDA-accelerated batch insert, lookup, and delete operations
--   Configurable fingerprint size and bucket size
--   Multiple eviction policies (DFS, BFS)
--   Sorted insertion mode for improved memory coalescing
--   Multi-GPU support via [gossip](https://github.com/Funatiq/gossip)
--   IPC support for cross-process filter sharing
--   Header-only library design
+- CUDA-accelerated batch insert, lookup, and delete operations
+- Configurable fingerprint size and bucket size
+- Multiple eviction policies (DFS, BFS)
+- Sorted insertion mode for improved memory coalescing
+- Multi-GPU support via [gossip](https://github.com/Funatiq/gossip)
+- IPC support for cross-process filter sharing
+- Header-only library design
 
 ## Performance
 
@@ -24,37 +24,37 @@ Benchmarks at 80% load factor on an NVIDIA GH200 (H100 HBM3, 3.4 TB/s) with 16-b
 
 The GPU Cuckoo Filter is compared against:
 
--   [CPU Cuckoo Filter](https://github.com/tdortman/cuckoo-filter)
--   [Bulk Two-Choice Filter (TCF)](https://github.com/saltsystemslab/gpu-filters/tree/main/bulk-tcf)
--   [GPU Counting Quotient Filter (GQF)](https://github.com/saltsystemslab/gpu-filters/tree/main/gqf)
--   [GPU Blocked Bloom Filter](https://github.com/NVIDIA/cuCollections)
+- [CPU Cuckoo Filter](https://github.com/efficient/cuckoofilter)
+- [Bulk Two-Choice Filter (TCF)](https://github.com/saltsystemslab/gpu-filters/tree/main/bulk-tcf)
+- [GPU Counting Quotient Filter (GQF)](https://github.com/saltsystemslab/gpu-filters/tree/main/gqf)
+- [GPU Blocked Bloom Filter](https://github.com/NVIDIA/cuCollections)
 
 ### L2-Resident (4M items, ~8 MiB)
 
-| Comparison        | Insert        | Query       | Delete      | FPR |
-| ----------------- | ------------- | ----------- | ----------- | --------------------- |
-| GPU vs CPU Cuckoo | 360× faster   | 973× faster | N/A         | 0.041% vs 0.005%      |
-| Cuckoo vs TCF     | 6× faster     | 42× faster  | 100× faster | 0.041% vs 0.305%      |
-| Cuckoo vs GQF     | 585× faster   | 6× faster   | 273× faster | 0.041% vs 0.001%      |
-| Cuckoo vs Bloom   | 0.6× (slower) | 1.4× faster | N/A         | 0.041% vs 1.336%      |
+| Comparison        | Insert        | Query       | Delete      | FPR              |
+| ----------------- | ------------- | ----------- | ----------- | ---------------- |
+| GPU vs CPU Cuckoo | 360× faster   | 973× faster | N/A         | 0.041% vs 0.005% |
+| Cuckoo vs TCF     | 6× faster     | 42× faster  | 100× faster | 0.041% vs 0.305% |
+| Cuckoo vs GQF     | 585× faster   | 6× faster   | 273× faster | 0.041% vs 0.001% |
+| Cuckoo vs Bloom   | 0.6× (slower) | 1.4× faster | N/A         | 0.041% vs 1.336% |
 
 ### DRAM-Resident (268M items, ~512 MiB)
 
-| Comparison        | Insert        | Query        | Delete       | FPR |
-| ----------------- | ------------- | ------------ | ------------ | --------------------- |
-| GPU vs CPU Cuckoo | 583× faster   | 1504× faster | N/A          | 0.039% vs 0.004%      |
-| Cuckoo vs TCF     | 1.9× faster   | 11.3× faster | 35.3× faster | 0.039% vs 0.394%      |
-| Cuckoo vs GQF     | 9.6× faster   | 2.6× faster  | 3.8× faster  | 0.039% vs 0.001%      |
-| Cuckoo vs Bloom   | 0.7× (slower) | 1.0× (equal) | N/A          | 0.039% vs 4.083%      |
+| Comparison        | Insert        | Query        | Delete       | FPR              |
+| ----------------- | ------------- | ------------ | ------------ | ---------------- |
+| GPU vs CPU Cuckoo | 583× faster   | 1504× faster | N/A          | 0.039% vs 0.004% |
+| Cuckoo vs TCF     | 1.9× faster   | 11.3× faster | 35.3× faster | 0.039% vs 0.394% |
+| Cuckoo vs GQF     | 9.6× faster   | 2.6× faster  | 3.8× faster  | 0.039% vs 0.001% |
+| Cuckoo vs Bloom   | 0.7× (slower) | 1.0× (equal) | N/A          | 0.039% vs 4.083% |
 
 > [!NOTE]
 > For a much more comprehensive evaluation including additional systems and analysis, see the accompanying [thesis](docs/thesis.pdf).
 
 ## Requirements
 
--   CUDA Toolkit (>= 12.9)
--   C++20 compatible compiler
--   Meson build system (>= 1.3.0)
+- CUDA Toolkit (>= 12.9)
+- C++20 compatible compiler
+- Meson build system (>= 1.3.0)
 
 ## Building
 
