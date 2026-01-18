@@ -48,7 +48,7 @@ The GPU Cuckoo Filter is compared against:
 | Cuckoo vs Bloom   | 0.7× (slower) | 1.0× (equal) | N/A          | 0.039% vs 4.083% |
 
 > [!NOTE]
-> For a much more comprehensive evaluation including additional systems and analysis, see the accompanying [thesis](docs/thesis.pdf).
+> A much more comprehensive evaluation including additional systems and analysis can be found in the accompanying thesis, available upon request.
 
 ## Requirements
 
