@@ -2,14 +2,4 @@
 url = https://github.com/saltsystemslab/gpu-filters.git
 revision = 4907f886363a4364e3b03b4fffc5338a2d5c5e29
 patch_directory = gpu-filters
-diff_files = gpu-filters/bulk-tcf/name-collision.patch,gpu-filters/bulk-tcf/params.patch
 depth = 1
-
-; Would love to use diff files for the gqf patches too,
-; but they refuse to be applied on any system I've tried
-; Hence we have meson replace the relevant files in their
-; entirety, the actual diff files still live in the gqf
-; directory to make it easier to see what was changed
-;
-; Spoiler: Some broken code, redefined hash functions and
-; some helper code to support passing parameters as macros
