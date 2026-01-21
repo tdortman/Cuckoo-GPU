@@ -8,10 +8,17 @@ patch_files = [
     'gqf/rename-hash-functions.patch',
 ]
 
-foreach patch : patch_files
-    message('Applying patch ' + patch)
-    run_command('git', 'apply', '--ignore-whitespace', patch, check: true)
-endforeach
+fs = import('fs')
+
+if not fs.exists('.patched')
+    foreach patch : patch_files
+        message('Applying patch ' + patch)
+        run_command('git', 'apply', '--ignore-whitespace', patch, check: true)
+    endforeach
+    run_command('touch', '.patched', check: true)
+else
+    message('Skipping patching')
+endif
 
 subdir('bulk-tcf')
 subdir('gqf')
