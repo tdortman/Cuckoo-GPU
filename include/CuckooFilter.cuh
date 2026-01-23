@@ -88,7 +88,6 @@ insertKernel(const typename Config::KeyType* keys, size_t n, CuckooFilter<Config
  */
 template <typename Config>
 __global__ void insertKernelSorted(
-    const typename Config::KeyType* keys,
     const typename CuckooFilter<Config>::PackedTagType* packedTags,
     size_t n,
     CuckooFilter<Config>* filter
@@ -443,12 +442,19 @@ struct CuckooFilter {
      *
      * @param d_keys Pointer to device memory containing keys to insert.
      * @param n Number of keys to insert.
+     * @param d_output Optional pointer to an output array indicating the success of each key
+     * insertion.
      * @param stream CUDA stream to use for the operation.
      * @return size_t Total number of occupied slots after insertion.
      */
-    size_t insertMany(const T* d_keys, const size_t n, cudaStream_t stream = {}) {
+    size_t insertMany(
+        const T* d_keys,
+        const size_t n,
+        bool* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
         size_t numBlocks = SDIV(n, blockSize);
-        insertKernel<Config><<<numBlocks, blockSize, 0, stream>>>(d_keys, n, this);
+        insertKernel<Config><<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
 
@@ -461,10 +467,17 @@ struct CuckooFilter {
      *
      * @param d_keys Pointer to device memory array of keys to insert
      * @param n Number of keys to insert
+     * @param d_output Optional pointer to an output array indicating the success of each key
+     * insertion.
      * @param stream CUDA stream to use for the operation.
      * @return size_t Updated number of occupied slots in the filter
      */
-    size_t insertManySorted(const T* d_keys, const size_t n, cudaStream_t stream = {}) {
+    size_t insertManySorted(
+        const T* d_keys,
+        const size_t n,
+        bool* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
         PackedTagType* d_packedTags;
 
         CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
@@ -490,7 +503,7 @@ struct CuckooFilter {
         CUDA_CALL(cudaFree(d_tempStorage));
 
         insertKernelSorted<Config>
-            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_packedTags, n, this);
+            <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
 
@@ -543,21 +556,116 @@ struct CuckooFilter {
     /**
      * @brief Inserts keys from a Thrust device vector.
      * @param d_keys Vector of keys to insert.
+     * @param d_output Vector to store results (bool). Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertMany(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<bool>& d_output,
+        cudaStream_t stream = {}
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return insertMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_output.data()),
+            stream
+        );
+    }
+
+    /**
+     * @brief Inserts keys from a Thrust device vector (uint8_t output).
+     * @param d_keys Vector of keys to insert.
+     * @param d_output Vector to store results (uint8_t). Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertMany(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<uint8_t>& d_output,
+        cudaStream_t stream = {}
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return insertMany(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data())),
+            stream
+        );
+    }
+
+    /**
+     * @brief Inserts keys from a Thrust device vector without outputting results.
+     * @param d_keys Vector of keys to insert.
      * @param stream CUDA stream.
      * @return size_t Total number of occupied slots.
      */
     size_t insertMany(const thrust::device_vector<T>& d_keys, cudaStream_t stream = {}) {
-        return insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), stream);
+        return insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr, stream);
     }
 
     /**
      * @brief Inserts keys from a Thrust device vector, sorting them first.
      * @param d_keys Vector of keys to insert.
+     * @param d_output Vector to store results (bool). Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertManySorted(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<bool>& d_output,
+        cudaStream_t stream = {}
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return insertManySorted(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_output.data()),
+            stream
+        );
+    }
+
+    /**
+     * @brief Inserts keys from a Thrust device vector, sorting them first (uint8_t output).
+     * @param d_keys Vector of keys to insert.
+     * @param d_output Vector to store results (uint8_t). Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertManySorted(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<uint8_t>& d_output,
+        cudaStream_t stream = {}
+    ) {
+        if (d_output.size() != d_keys.size()) {
+            d_output.resize(d_keys.size());
+        }
+        return insertManySorted(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output.data())),
+            stream
+        );
+    }
+
+    /**
+     * @brief Inserts keys from a Thrust device vector, sorting them first, without outputting
+     * results.
+     * @param d_keys Vector of keys to insert.
      * @param stream CUDA stream.
      * @return size_t Total number of occupied slots.
      */
     size_t insertManySorted(const thrust::device_vector<T>& d_keys, cudaStream_t stream = {}) {
-        return insertManySorted(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), stream);
+        return insertManySorted(
+            thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr, stream
+        );
     }
 
     /**
@@ -1109,8 +1217,12 @@ struct CuckooFilter {
 };
 
 template <typename Config>
-__global__ void
-insertKernel(const typename Config::KeyType* keys, size_t n, CuckooFilter<Config>* filter) {
+__global__ void insertKernel(
+    const typename Config::KeyType* keys,
+    bool* output,
+    size_t n,
+    CuckooFilter<Config>* filter
+) {
     using BlockReduce = cub::BlockReduce<int32_t, Config::blockSize>;
     __shared__ typename BlockReduce::TempStorage tempStorage;
 
@@ -1120,6 +1232,10 @@ insertKernel(const typename Config::KeyType* keys, size_t n, CuckooFilter<Config
 
     if (idx < n) {
         success = filter->insert(keys[idx]);
+
+        if (output != nullptr) {
+            output[idx] = success;
+        }
     }
 
     int32_t blockSuccessSum = BlockReduce(tempStorage).Sum(success);
@@ -1200,8 +1316,8 @@ __global__ void computePackedTagsKernel(
 
 template <typename Config>
 __global__ void insertKernelSorted(
-    const typename Config::KeyType* keys,
     const typename CuckooFilter<Config>::PackedTagType* packedTags,
+    bool* output,
     size_t n,
     CuckooFilter<Config>* filter
 ) {
@@ -1247,6 +1363,10 @@ __global__ void insertKernelSorted(
                     );
                 }
             }
+        }
+
+        if (output != nullptr) {
+            output[idx] = success;
         }
     }
 

@@ -1,6 +1,7 @@
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <bucket_policies.cuh>
 #include <bulk_tcf_host.cuh>
 #include <CLI/CLI.hpp>
 #include <cstddef>
@@ -9,7 +10,6 @@
 #include <cuco/bloom_filter.cuh>
 #include <gqf.cuh>
 #include <gqf_int.cuh>
-#include <bucket_policies.cuh>
 #include <helpers.cuh>
 #include <iostream>
 #include <string>

@@ -447,6 +447,25 @@ class CuckooFilterMultiGPU {
      * @brief Inserts a batch of keys into the distributed filter.
      * Uses gossip primitives for efficient multi-GPU data distribution.
      * @param h_keys The keys to insert.
+     * @param h_output A host vector to store the results (true if a key was successfully inserted).
+     * @return The total number of occupied slots across all GPUs after insertion.
+     */
+    size_t insertMany(const thrust::host_vector<T>& h_keys, thrust::host_vector<bool>& h_output) {
+        return executeOperation<true, true>(
+            h_keys,
+            &h_output,
+            [](CuckooFilter<Config>* filter,
+               const T* keys,
+               bool* results,
+               size_t count,
+               cudaStream_t stream) { filter->insertMany(keys, count, results, stream); }
+        );
+    }
+
+    /**
+     * @brief Inserts a batch of keys into the distributed filter without returning per-key results.
+     * Uses gossip primitives for efficient multi-GPU data distribution.
+     * @param h_keys The keys to insert.
      * @return The total number of occupied slots across all GPUs after insertion.
      */
     size_t insertMany(const thrust::host_vector<T>& h_keys) {
@@ -457,7 +476,7 @@ class CuckooFilterMultiGPU {
                const T* keys,
                bool* /*unused_results*/,
                size_t count,
-               cudaStream_t stream) { filter->insertMany(keys, count, stream); }
+               cudaStream_t stream) { filter->insertMany(keys, count, nullptr, stream); }
         );
     }
 

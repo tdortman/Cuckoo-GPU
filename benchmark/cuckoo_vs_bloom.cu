@@ -4,12 +4,12 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
+#include <bucket_policies.cuh>
 #include <cstdint>
 #include <CuckooFilter.cuh>
 #include <cuco/bloom_filter.cuh>
 #include <cuco/utility/cuda_thread_scope.cuh>
 #include <cuda/std/cstdint>
-#include <bucket_policies.cuh>
 #include <helpers.cuh>
 #include <random>
 #include "benchmark_common.cuh"

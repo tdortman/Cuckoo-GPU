@@ -342,3 +342,88 @@ TEST_F(CuckooFilterTest, DeleteDuplicates) {
     size_t successfulDeletions = std::count(deleteOutput.begin(), deleteOutput.end(), true);
     EXPECT_GE(successfulDeletions, 1) << "At least one deletion should succeed";
 }
+
+TEST_F(CuckooFilterTest, InsertAndVerifyOutput) {
+    const size_t capacity = 10000;
+    CuckooFilter<Config> filter(capacity);
+
+    std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
+    thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
+    thrust::device_vector<uint8_t> d_insertOutput(keys.size());
+
+    size_t inserted = filter.insertMany(d_keys, d_insertOutput);
+    EXPECT_EQ(inserted, keys.size()) << "All keys should be inserted";
+
+    std::vector<uint8_t> insertOutput(keys.size());
+    thrust::copy(d_insertOutput.begin(), d_insertOutput.end(), insertOutput.begin());
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_TRUE(insertOutput[i]) << "Key " << keys[i] << " should be successfully inserted";
+    }
+
+    // Verify keys are actually in the filter
+    thrust::device_vector<uint8_t> d_containsOutput(keys.size());
+    filter.containsMany(d_keys, d_containsOutput);
+
+    std::vector<uint8_t> containsOutput(keys.size());
+    thrust::copy(d_containsOutput.begin(), d_containsOutput.end(), containsOutput.begin());
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_TRUE(containsOutput[i]) << "Key " << keys[i] << " should be found after insertion";
+    }
+}
+
+TEST_F(CuckooFilterTest, InsertFullFilterReportsFailures) {
+    // Use a small capacity to easily fill the filter
+    const size_t capacity = 100;
+    CuckooFilter<Config> filter(capacity);
+
+    // Generate more keys than the filter can hold
+    const size_t numKeys = capacity * 2;
+    auto keys = generateRandomKeys<uint32_t>(numKeys);
+    thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
+    thrust::device_vector<uint8_t> d_insertOutput(numKeys);
+
+    size_t inserted = filter.insertMany(d_keys, d_insertOutput);
+
+    std::vector<uint8_t> insertOutput(numKeys);
+    thrust::copy(d_insertOutput.begin(), d_insertOutput.end(), insertOutput.begin());
+
+    size_t successCount = std::count(insertOutput.begin(), insertOutput.end(), true);
+    size_t failureCount = std::count(insertOutput.begin(), insertOutput.end(), false);
+
+    // The output array should report the correct number of successes
+    EXPECT_EQ(successCount, inserted) << "Success count should match inserted count";
+    EXPECT_GT(failureCount, 0) << "Some insertions should fail when filter is full";
+    EXPECT_EQ(successCount + failureCount, numKeys) << "All keys should have a result";
+}
+
+TEST_F(CuckooFilterTest, InsertSortedAndVerifyOutput) {
+    const size_t capacity = 10000;
+    CuckooFilter<Config> filter(capacity);
+
+    std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
+    thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
+    thrust::device_vector<uint8_t> d_insertOutput(keys.size());
+
+    size_t inserted = filter.insertManySorted(d_keys, d_insertOutput);
+    EXPECT_EQ(inserted, keys.size()) << "All keys should be inserted";
+
+    std::vector<uint8_t> insertOutput(keys.size());
+    thrust::copy(d_insertOutput.begin(), d_insertOutput.end(), insertOutput.begin());
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_TRUE(insertOutput[i]) << "Key " << keys[i] << " should be successfully inserted";
+    }
+
+    // Verify keys are actually in the filter
+    thrust::device_vector<uint8_t> d_containsOutput(keys.size());
+    filter.containsMany(d_keys, d_containsOutput);
+
+    std::vector<uint8_t> containsOutput(keys.size());
+    thrust::copy(d_containsOutput.begin(), d_containsOutput.end(), containsOutput.begin());
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_TRUE(containsOutput[i]) << "Key " << keys[i] << " should be found after insertion";
+    }
+}
