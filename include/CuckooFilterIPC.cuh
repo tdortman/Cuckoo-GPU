@@ -573,7 +573,6 @@ class CuckooFilterIPCClient {
         }
     }
 
-#ifdef CUCKOO_FILTER_HAS_THRUST
     /**
      * @brief Inserts keys from a Thrust device vector.
      * @param d_keys Vector of keys to insert.
@@ -661,7 +660,6 @@ class CuckooFilterIPCClient {
     size_t deleteMany(const thrust::device_vector<T>& d_keys) {
         return deleteMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr);
     }
-#endif
 
    private:
     size_t submitRequest(RequestType type, const T* d_keys, size_t count, bool* d_output) {

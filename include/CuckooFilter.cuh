@@ -1,5 +1,6 @@
 #pragma once
 
+#include <thrust/device_vector.h>
 #include <cmath>
 #include <cstdint>
 #include <ctime>
@@ -20,11 +21,6 @@ enum class EvictionPolicy {
     BFS,  ///< Breadth-first search with DFS fallback (default)
     DFS   ///< Pure depth-first search
 };
-
-#if __has_include(<thrust/device_vector.h>)
-    #include <thrust/device_vector.h>
-    #define CUCKOO_FILTER_HAS_THRUST 1
-#endif
 
 /**
  * @brief Configuration structure for the Cuckoo Filter.
@@ -552,7 +548,6 @@ struct CuckooFilter {
         return occupiedSlots();
     }
 
-#ifdef CUCKOO_FILTER_HAS_THRUST
     /**
      * @brief Inserts keys from a Thrust device vector.
      * @param d_keys Vector of keys to insert.
@@ -767,7 +762,6 @@ struct CuckooFilter {
     size_t deleteMany(const thrust::device_vector<T>& d_keys, cudaStream_t stream = {}) {
         return deleteMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr, stream);
     }
-#endif  // CUCKOO_FILTER_HAS_THRUST
 
     /**
      * @brief Clears the filter, removing all items.
