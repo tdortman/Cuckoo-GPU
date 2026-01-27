@@ -43,7 +43,7 @@ FILTER_DISPLAY_NAMES = {
     "partitionedcuckoo": "Partitioned Cuckoo",
     "cpucuckoo": "CPU Cuckoo",
     # Legacy compatibility (for existing CSVs)
-    "cuckoo": "GPU Cuckoo",
+    "cuckoo": "Cuckoo",
     "bloom": "Blocked Bloom",
     "bbf": "Blocked Bloom",
     "cf": "GPU Cuckoo",
