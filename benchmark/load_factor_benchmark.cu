@@ -510,9 +510,27 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
+    BENCHMARK_DEFINE_F(CPUCuckoo_##ID, Delete)(bm::State & state) {                           \
+        for (auto _ : state) {                                                                \
+            cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> tempFilter(capacity);    \
+            for (const auto& key : keys) {                                                    \
+                tempFilter.Add(key);                                                          \
+            }                                                                                 \
+            timer.start();                                                                    \
+            for (const auto& key : keys) {                                                    \
+                auto status = tempFilter.Delete(key);                                         \
+                bm::DoNotOptimize(status);                                                    \
+            }                                                                                 \
+            state.SetIterationTime(timer.elapsed());                                          \
+        }                                                                                     \
+        size_t filterMemory =                                                                 \
+            cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag>(capacity).SizeInBytes(); \
+        setCounters(state, filterMemory);                                                     \
+    }                                                                                         \
     BENCHMARK_REGISTER_F(CPUCuckoo_##ID, Insert) BENCHMARK_CONFIG_LF;                         \
     BENCHMARK_REGISTER_F(CPUCuckoo_##ID, Query) BENCHMARK_CONFIG_LF;                          \
     BENCHMARK_REGISTER_F(CPUCuckoo_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                  \
+    BENCHMARK_REGISTER_F(CPUCuckoo_##ID, Delete) BENCHMARK_CONFIG_LF;                         \
                                                                                               \
     /* Bloom Filter */                                                                        \
     using BlockedBloom_##ID = BloomFilterFixture<(LF) * 0.01>;                                \
