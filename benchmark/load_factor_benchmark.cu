@@ -459,14 +459,11 @@ class GQFFixtureLF : public benchmark::Fixture {
         for (auto _ : state) {                                                                \
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> tempFilter(capacity);    \
             timer.start();                                                                    \
-            size_t inserted = 0;                                                              \
             for (const auto& key : keys) {                                                    \
-                if (tempFilter.Add(key) == cuckoofilter::Ok) {                                \
-                    inserted++;                                                               \
-                }                                                                             \
+                auto status = tempFilter.Add(key);                                            \
+                bm::DoNotOptimize(status);                                                    \
             }                                                                                 \
             state.SetIterationTime(timer.elapsed());                                          \
-            bm::DoNotOptimize(inserted);                                                      \
         }                                                                                     \
         size_t filterMemory =                                                                 \
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag>(capacity).SizeInBytes(); \
@@ -480,14 +477,11 @@ class GQFFixtureLF : public benchmark::Fixture {
         size_t filterMemory = filter.SizeInBytes();                                           \
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
-            size_t found = 0;                                                                 \
             for (const auto& key : keys) {                                                    \
-                if (filter.Contain(key) == cuckoofilter::Ok) {                                \
-                    found++;                                                                  \
-                }                                                                             \
+                auto status = filter.Contain(key);                                            \
+                bm::DoNotOptimize(status);                                                    \
             }                                                                                 \
             state.SetIterationTime(timer.elapsed());                                          \
-            bm::DoNotOptimize(found);                                                         \
         }                                                                                     \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
@@ -499,14 +493,11 @@ class GQFFixtureLF : public benchmark::Fixture {
         size_t filterMemory = filter.SizeInBytes();                                           \
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
-            size_t found = 0;                                                                 \
             for (const auto& key : keysNegative) {                                            \
-                if (filter.Contain(key) == cuckoofilter::Ok) {                                \
-                    found++;                                                                  \
-                }                                                                             \
+                auto status = filter.Contain(key);                                            \
+                bm::DoNotOptimize(status);                                                    \
             }                                                                                 \
             state.SetIterationTime(timer.elapsed());                                          \
-            bm::DoNotOptimize(found);                                                         \
         }                                                                                     \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
