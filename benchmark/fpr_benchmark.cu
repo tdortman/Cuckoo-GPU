@@ -60,7 +60,7 @@ using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
 #endif
 
-constexpr double LOAD_FACTOR = 0.8;
+constexpr double LOAD_FACTOR = 0.95;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 constexpr size_t FPR_TEST_SIZE = 1'000'000;
 
