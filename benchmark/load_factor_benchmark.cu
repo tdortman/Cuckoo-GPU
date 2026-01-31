@@ -349,8 +349,8 @@ class GQFFixtureLF : public benchmark::Fixture {
 #ifdef __x86_64__
     #define DEFINE_PARTITIONED_FOR_LOAD_FACTOR(ID, LF)                                           \
         /* Partitioned Cuckoo Filter */                                                          \
-        using PCF_##ID = PartitionedCFFixture<(LF) * 0.01>;                        \
-        BENCHMARK_DEFINE_F(PCF_##ID, Insert)(bm::State & state) {                  \
+        using PCF_##ID = PartitionedCFFixture<(LF) * 0.01>;                                      \
+        BENCHMARK_DEFINE_F(PCF_##ID, Insert)(bm::State & state) {                                \
             for (auto _ : state) {                                                               \
                 PartitionedCuckooFilter tempFilter(s, n_partitions, n_threads, n_tasks);         \
                 auto constructKeys = keys;                                                       \
@@ -364,7 +364,7 @@ class GQFFixtureLF : public benchmark::Fixture {
             size_t filterMemory = finalFilter.size();                                            \
             setCounters(state, filterMemory);                                                    \
         }                                                                                        \
-        BENCHMARK_DEFINE_F(PCF_##ID, Query)(bm::State & state) {                   \
+        BENCHMARK_DEFINE_F(PCF_##ID, Query)(bm::State & state) {                                 \
             PartitionedCuckooFilter filter(s, n_partitions, n_threads, n_tasks);                 \
             filter.construct(keys.data(), keys.size());                                          \
             size_t filterMemory = filter.size();                                                 \
@@ -376,7 +376,7 @@ class GQFFixtureLF : public benchmark::Fixture {
             }                                                                                    \
             setCounters(state, filterMemory);                                                    \
         }                                                                                        \
-        BENCHMARK_DEFINE_F(PCF_##ID, QueryNegative)(bm::State & state) {           \
+        BENCHMARK_DEFINE_F(PCF_##ID, QueryNegative)(bm::State & state) {                         \
             PartitionedCuckooFilter filter(s, n_partitions, n_threads, n_tasks);                 \
             filter.construct(keys.data(), keys.size());                                          \
             size_t filterMemory = filter.size();                                                 \
@@ -388,8 +388,8 @@ class GQFFixtureLF : public benchmark::Fixture {
             }                                                                                    \
             setCounters(state, filterMemory);                                                    \
         }                                                                                        \
-        BENCHMARK_REGISTER_F(PCF_##ID, Insert) BENCHMARK_CONFIG_LF;                \
-        BENCHMARK_REGISTER_F(PCF_##ID, Query) BENCHMARK_CONFIG_LF;                 \
+        BENCHMARK_REGISTER_F(PCF_##ID, Insert) BENCHMARK_CONFIG_LF;                              \
+        BENCHMARK_REGISTER_F(PCF_##ID, Query) BENCHMARK_CONFIG_LF;                               \
         BENCHMARK_REGISTER_F(PCF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;
 #else
     #define DEFINE_PARTITIONED_FOR_LOAD_FACTOR(ID, LF)
@@ -397,8 +397,8 @@ class GQFFixtureLF : public benchmark::Fixture {
 
 #define DEFINE_AND_REGISTER_ALL_FOR_LOAD_FACTOR(ID, LF)                                       \
     /* GPU Cuckoo Filter */                                                                   \
-    using CF_##ID = CFFixtureLF<(LF) * 0.01>;                                          \
-    BENCHMARK_DEFINE_F(CF_##ID, Insert)(bm::State & state) {                           \
+    using CF_##ID = CFFixtureLF<(LF) * 0.01>;                                                 \
+    BENCHMARK_DEFINE_F(CF_##ID, Insert)(bm::State & state) {                                  \
         for (auto _ : state) {                                                                \
             filter->clear();                                                                  \
             cudaDeviceSynchronize();                                                          \
@@ -409,7 +409,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CF_##ID, Query)(bm::State & state) {                            \
+    BENCHMARK_DEFINE_F(CF_##ID, Query)(bm::State & state) {                                   \
         adaptiveInsert(*filter, d_keys);                                                      \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
@@ -420,7 +420,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CF_##ID, QueryNegative)(bm::State & state) {                    \
+    BENCHMARK_DEFINE_F(CF_##ID, QueryNegative)(bm::State & state) {                           \
         adaptiveInsert(*filter, d_keys);                                                      \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
@@ -431,7 +431,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CF_##ID, Delete)(bm::State & state) {                           \
+    BENCHMARK_DEFINE_F(CF_##ID, Delete)(bm::State & state) {                                  \
         for (auto _ : state) {                                                                \
             filter->clear();                                                                  \
             adaptiveInsert(*filter, d_keys);                                                  \
@@ -444,14 +444,14 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_REGISTER_F(CF_##ID, Insert) BENCHMARK_CONFIG_LF;                         \
-    BENCHMARK_REGISTER_F(CF_##ID, Query) BENCHMARK_CONFIG_LF;                          \
-    BENCHMARK_REGISTER_F(CF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                  \
-    BENCHMARK_REGISTER_F(CF_##ID, Delete) BENCHMARK_CONFIG_LF;                         \
+    BENCHMARK_REGISTER_F(CF_##ID, Insert) BENCHMARK_CONFIG_LF;                                \
+    BENCHMARK_REGISTER_F(CF_##ID, Query) BENCHMARK_CONFIG_LF;                                 \
+    BENCHMARK_REGISTER_F(CF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                         \
+    BENCHMARK_REGISTER_F(CF_##ID, Delete) BENCHMARK_CONFIG_LF;                                \
                                                                                               \
     /* CPU Cuckoo Filter (2014) */                                                            \
-    using CPUCF_##ID = CPUCuckooFilterFixture<(LF) * 0.01>;                               \
-    BENCHMARK_DEFINE_F(CPUCF_##ID, Insert)(bm::State & state) {                           \
+    using CPUCF_##ID = CPUCuckooFilterFixture<(LF) * 0.01>;                                   \
+    BENCHMARK_DEFINE_F(CPUCF_##ID, Insert)(bm::State & state) {                               \
         for (auto _ : state) {                                                                \
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> tempFilter(capacity);    \
             timer.start();                                                                    \
@@ -465,7 +465,7 @@ class GQFFixtureLF : public benchmark::Fixture {
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag>(capacity).SizeInBytes(); \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CPUCF_##ID, Query)(bm::State & state) {                            \
+    BENCHMARK_DEFINE_F(CPUCF_##ID, Query)(bm::State & state) {                                \
         cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> filter(capacity);            \
         for (const auto& key : keys) {                                                        \
             filter.Add(key);                                                                  \
@@ -481,7 +481,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CPUCF_##ID, QueryNegative)(bm::State & state) {                    \
+    BENCHMARK_DEFINE_F(CPUCF_##ID, QueryNegative)(bm::State & state) {                        \
         cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> filter(capacity);            \
         for (const auto& key : keys) {                                                        \
             filter.Add(key);                                                                  \
@@ -497,7 +497,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(CPUCF_##ID, Delete)(bm::State & state) {                           \
+    BENCHMARK_DEFINE_F(CPUCF_##ID, Delete)(bm::State & state) {                               \
         for (auto _ : state) {                                                                \
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag> tempFilter(capacity);    \
             for (const auto& key : keys) {                                                    \
@@ -514,14 +514,14 @@ class GQFFixtureLF : public benchmark::Fixture {
             cuckoofilter::CuckooFilter<uint64_t, Config::bitsPerTag>(capacity).SizeInBytes(); \
         setCounters(state, filterMemory);                                                     \
     }                                                                                         \
-    BENCHMARK_REGISTER_F(CPUCF_##ID, Insert) BENCHMARK_CONFIG_LF;                         \
-    BENCHMARK_REGISTER_F(CPUCF_##ID, Query) BENCHMARK_CONFIG_LF;                          \
-    BENCHMARK_REGISTER_F(CPUCF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                  \
-    BENCHMARK_REGISTER_F(CPUCF_##ID, Delete) BENCHMARK_CONFIG_LF;                         \
+    BENCHMARK_REGISTER_F(CPUCF_##ID, Insert) BENCHMARK_CONFIG_LF;                             \
+    BENCHMARK_REGISTER_F(CPUCF_##ID, Query) BENCHMARK_CONFIG_LF;                              \
+    BENCHMARK_REGISTER_F(CPUCF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                      \
+    BENCHMARK_REGISTER_F(CPUCF_##ID, Delete) BENCHMARK_CONFIG_LF;                             \
                                                                                               \
     /* Bloom Filter */                                                                        \
-    using BBF_##ID = BloomFilterFixture<(LF) * 0.01>;                                \
-    BENCHMARK_DEFINE_F(BBF_##ID, Insert)(bm::State & state) {                        \
+    using BBF_##ID = BloomFilterFixture<(LF) * 0.01>;                                         \
+    BENCHMARK_DEFINE_F(BBF_##ID, Insert)(bm::State & state) {                                 \
         for (auto _ : state) {                                                                \
             filter->clear();                                                                  \
             cudaDeviceSynchronize();                                                          \
@@ -531,7 +531,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(BBF_##ID, Query)(bm::State & state) {                         \
+    BENCHMARK_DEFINE_F(BBF_##ID, Query)(bm::State & state) {                                  \
         filter->add(d_keys.begin(), d_keys.end());                                            \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
@@ -546,7 +546,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(BBF_##ID, QueryNegative)(bm::State & state) {                 \
+    BENCHMARK_DEFINE_F(BBF_##ID, QueryNegative)(bm::State & state) {                          \
         filter->add(d_keys.begin(), d_keys.end());                                            \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
@@ -561,9 +561,9 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_REGISTER_F(BBF_##ID, Insert) BENCHMARK_CONFIG_LF;                      \
-    BENCHMARK_REGISTER_F(BBF_##ID, Query) BENCHMARK_CONFIG_LF;                       \
-    BENCHMARK_REGISTER_F(BBF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;               \
+    BENCHMARK_REGISTER_F(BBF_##ID, Insert) BENCHMARK_CONFIG_LF;                               \
+    BENCHMARK_REGISTER_F(BBF_##ID, Query) BENCHMARK_CONFIG_LF;                                \
+    BENCHMARK_REGISTER_F(BBF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                        \
                                                                                               \
     /* TCF */                                                                                 \
     using TCF_##ID = TCFFixture<(LF) * 0.01>;                                                 \
