@@ -21,7 +21,7 @@ app = typer.Typer(help="Plot FPR benchmark results")
 def extract_filter_type(name: str) -> Optional[str]:
     """Extract filter type from benchmark name"""
     if "GPUCF_FPR" in name:
-        return "Cuckoo Filter"
+        return "GPU Cuckoo"
     elif "CPUCF_FPR" in name:
         return "CPU Cuckoo"
     elif "Bloom_FPR" in name:
