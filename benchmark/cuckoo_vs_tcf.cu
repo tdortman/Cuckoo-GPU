@@ -20,7 +20,7 @@ namespace bm = benchmark;
 
 using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
-constexpr double TCF_LOAD_FACTOR = 0.85;
+constexpr double LOAD_FACTOR = 0.95;
 
 class TCFFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
@@ -28,7 +28,7 @@ class TCFFixture : public benchmark::Fixture {
 
    public:
     void SetUp(const benchmark::State& state) override {
-        auto [cap, num] = calculateCapacityAndSize(state.range(0), TCF_LOAD_FACTOR);
+        auto [cap, num] = calculateCapacityAndSize(state.range(0), LOAD_FACTOR);
         capacity = cap;
         n = num;
 
@@ -60,11 +60,11 @@ class TCFFixture : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-using CFFixture = CuckooFilterFixture<Config, TCF_LOAD_FACTOR>;
+using CFFixture = CuckooFilterFixture<Config, LOAD_FACTOR>;
 
 static void CF_FPR(bm::State& state) {
     GPUTimer timer;
-    auto [capacity, n] = calculateCapacityAndSize(state.range(0), TCF_LOAD_FACTOR);
+    auto [capacity, n] = calculateCapacityAndSize(state.range(0), LOAD_FACTOR);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys);
@@ -165,7 +165,7 @@ BENCHMARK_DEFINE_F(TCFFixture, Delete)(bm::State& state) {
 
 static void TCF_FPR(bm::State& state) {
     GPUTimer timer;
-    auto [capacity, n] = calculateCapacityAndSize(state.range(0), TCF_LOAD_FACTOR);
+    auto [capacity, n] = calculateCapacityAndSize(state.range(0), LOAD_FACTOR);
     size_t filterMemory = capacity * sizeof(uint16_t);
 
     thrust::device_vector<uint64_t> d_keys(n);

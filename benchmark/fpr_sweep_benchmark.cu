@@ -317,13 +317,9 @@ static void TCF_FPR_Sweep(bm::State& state) {
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t fingerprintBits = sizeof(FingerprintType) * 8;
 
-    // TCF can only hold 0.85 * capacity items
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
-
     GPUTimer timer;
     auto n = static_cast<size_t>(FIXED_CAPACITY * loadFactor);
-    auto requiredUsableCapacity = static_cast<size_t>(n / loadFactor);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / loadFactor);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
@@ -497,12 +493,10 @@ static void TCF_Insert_Sweep(bm::State& state) {
     using TCFType = host_bulk_tcf<uint64_t, FingerprintType>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t fingerprintBits = sizeof(FingerprintType) * 8;
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
 
     GPUTimer timer;
     auto n = static_cast<size_t>(FIXED_CAPACITY * loadFactor);
-    auto requiredUsableCapacity = static_cast<size_t>(n / loadFactor);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / loadFactor);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
@@ -635,12 +629,10 @@ static void TCF_PositiveQuery_Sweep(bm::State& state) {
     using TCFType = host_bulk_tcf<uint64_t, FingerprintType>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t fingerprintBits = sizeof(FingerprintType) * 8;
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
 
     GPUTimer timer;
     auto n = static_cast<size_t>(FIXED_CAPACITY * loadFactor);
-    auto requiredUsableCapacity = static_cast<size_t>(n / loadFactor);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / loadFactor);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
@@ -684,12 +676,10 @@ static void TCF_Delete_Sweep(bm::State& state) {
     using TCFType = host_bulk_tcf<uint64_t, FingerprintType>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t fingerprintBits = sizeof(FingerprintType) * 8;
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
 
     GPUTimer timer;
     auto n = static_cast<size_t>(FIXED_CAPACITY * loadFactor);
-    auto requiredUsableCapacity = static_cast<size_t>(n / loadFactor);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / loadFactor);
 
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));

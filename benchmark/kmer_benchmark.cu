@@ -156,9 +156,7 @@ static void TCF_Insert(bm::State& state) {
 
     size_t n = g_kmerData.size();
 
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
-    auto requiredUsableCapacity = static_cast<size_t>(n / LOAD_FACTOR);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
     size_t filterMemory = capacity * sizeof(uint16_t);
 
@@ -190,9 +188,7 @@ static void TCF_Query(bm::State& state) {
 
     size_t n = g_kmerData.size();
 
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
-    auto requiredUsableCapacity = static_cast<size_t>(n / LOAD_FACTOR);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
     size_t filterMemory = capacity * sizeof(uint16_t);
 
@@ -226,9 +222,7 @@ static void TCF_Delete(bm::State& state) {
 
     size_t n = g_kmerData.size();
 
-    constexpr double TCF_CAPACITY_FACTOR = 0.85;
-    auto requiredUsableCapacity = static_cast<size_t>(n / LOAD_FACTOR);
-    auto capacity = static_cast<size_t>(requiredUsableCapacity / TCF_CAPACITY_FACTOR);
+    auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
     size_t filterMemory = capacity * sizeof(uint16_t);
 
