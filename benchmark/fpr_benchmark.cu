@@ -285,12 +285,13 @@ static void PartitionedCF_FPR(bm::State& state) {
 }
 #endif  // __x86_64__
 
-#define FPR_CONFIG               \
-    ->Arg(1 << 28)               \
-        ->Unit(bm::kMillisecond) \
-        ->UseManualTime()        \
-        ->Iterations(10)         \
-        ->Repetitions(5)         \
+#define FPR_CONFIG                   \
+    ->RangeMultiplier(2)             \
+        ->Range(1 << 15, 1ULL << 28) \
+        ->Unit(bm::kMillisecond)     \
+        ->UseManualTime()            \
+        ->Iterations(10)             \
+        ->Repetitions(5)             \
         ->ReportAggregatesOnly(true);
 
 static void GQF_FPR(bm::State& state) {
