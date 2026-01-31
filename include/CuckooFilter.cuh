@@ -350,27 +350,17 @@ struct CuckooFilter {
         return AltBucketPolicy::hash64(key);
     }
 
-    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
-    getCandidateBuckets(const T& key, size_t numBuckets) {
-        return AltBucketPolicy::getCandidateBuckets(key, numBuckets);
+    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType, TagType>
+    getCandidateBucketsAndFPs(const T& key, size_t numBuckets) {
+        return AltBucketPolicy::getCandidateBucketsAndFPs(key, numBuckets);
     }
 
     /**
      * @brief Computes the alternate bucket for a fingerprint.
-     *
-     * For policies without choice bit: simply returns alternate bucket.
-     * For policies with choice bit: returns alternate bucket (fp unchanged here,
-     *   caller must use getAlternateBucketWithNewFp for eviction).
      */
     static __host__ __device__ size_t
     getAlternateBucket(size_t bucket, TagType fp, size_t numBuckets) {
-        if constexpr (AltBucketPolicy::usesChoiceBit) {
-            auto [alt, newFp] =
-                AltBucketPolicy::getAlternateBucketWithNewFp(bucket, fp, numBuckets);
-            return alt;
-        } else {
-            return AltBucketPolicy::getAlternateBucket(bucket, fp, numBuckets);
-        }
+        return AltBucketPolicy::getAlternateBucket(bucket, fp, numBuckets);
     }
 
     /**
@@ -1114,55 +1104,34 @@ struct CuckooFilter {
      * reached).
      */
     __device__ bool insert(const T& key) {
-        auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
+        auto [i1, i2, fp1, fp2] = getCandidateBucketsAndFPs(key, numBuckets);
 
-        // For choice bit policies: fp has choice=0, need fpForSecondary with choice=1
+        // For all policies: fp1 is for bucket i1, fp2 is for bucket i2
+        // For non-choice-bit policies, fp1 == fp2
+        if (tryInsertAtBucket(i1, fp1) || tryInsertAtBucket(i2, fp2)) {
+            return true;
+        }
+
+        // For eviction, use correct fingerprint for the starting bucket
+        auto startBucket = (fp1 & 1) == 0 ? i1 : i2;
+        TagType evictFp;
+
         if constexpr (AltBucketPolicy::usesChoiceBit) {
-            // Try primary bucket with choice=0
-            if (tryInsertAtBucket(i1, fp)) {
-                return true;
-            }
-
-            // Get fingerprint with flipped choice bit for secondary
-            auto [_, fpForSecondary] = getAlternateBucketWithNewFp(i1, fp, numBuckets);
-            if (tryInsertAtBucket(i2, fpForSecondary)) {
-                return true;
-            }
-
-            // For eviction, use correct fingerprint for the starting bucket
-            TagType evictFp = (fp & 1) == 0 ? fp : fpForSecondary;
-            auto startBucket = (fp & 1) == 0 ? i1 : i2;
-
-            if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
-                return insertWithEvictionBFS(evictFp, startBucket);
-            } else if constexpr (Config::evictionPolicy == EvictionPolicy::DFS) {
-                return insertWithEvictionDFS(evictFp, startBucket);
-            } else {
-                static_assert(
-                    Config::evictionPolicy == EvictionPolicy::DFS ||
-                        Config::evictionPolicy == EvictionPolicy::BFS,
-                    "Unhandled eviction policy"
-                );
-            }
+            evictFp = (fp1 & 1) == 0 ? fp1 : fp2;
         } else {
-            // Standard policy: no choice bit
-            if (tryInsertAtBucket(i1, fp) || tryInsertAtBucket(i2, fp)) {
-                return true;
-            }
+            evictFp = fp1;
+        }
 
-            auto startBucket = (fp & 1) == 0 ? i1 : i2;
-
-            if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
-                return insertWithEvictionBFS(fp, startBucket);
-            } else if constexpr (Config::evictionPolicy == EvictionPolicy::DFS) {
-                return insertWithEvictionDFS(fp, startBucket);
-            } else {
-                static_assert(
-                    Config::evictionPolicy == EvictionPolicy::DFS ||
-                        Config::evictionPolicy == EvictionPolicy::BFS,
-                    "Unhandled eviction policy"
-                );
-            }
+        if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
+            return insertWithEvictionBFS(evictFp, startBucket);
+        } else if constexpr (Config::evictionPolicy == EvictionPolicy::DFS) {
+            return insertWithEvictionDFS(evictFp, startBucket);
+        } else {
+            static_assert(
+                Config::evictionPolicy == EvictionPolicy::DFS ||
+                    Config::evictionPolicy == EvictionPolicy::BFS,
+                "Unhandled eviction policy"
+            );
         }
     }
 
@@ -1173,15 +1142,11 @@ struct CuckooFilter {
      * @return true if the key is found, false otherwise.
      */
     __device__ bool contains(const T& key) const {
-        auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
+        auto [i1, i2, fp1, fp2] = getCandidateBucketsAndFPs(key, numBuckets);
 
-        if constexpr (AltBucketPolicy::usesChoiceBit) {
-            // For choice bit: i1 has fp with choice=0, i2 has fp with choice=1
-            auto [_, fpForSecondary] = getAlternateBucketWithNewFp(i1, fp, numBuckets);
-            return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fpForSecondary);
-        } else {
-            return d_buckets[i1].contains(fp) || d_buckets[i2].contains(fp);
-        }
+        // fp1 is for bucket i1, fp2 is for bucket i2
+        // For non-choice-bit policies, fp1 == fp2
+        return d_buckets[i1].contains(fp1) || d_buckets[i2].contains(fp2);
     }
 
     /**
@@ -1191,15 +1156,11 @@ struct CuckooFilter {
      * @return true if the key was found and removed, false otherwise.
      */
     __device__ bool remove(const T& key) {
-        auto [i1, i2, fp] = getCandidateBuckets(key, numBuckets);
+        auto [i1, i2, fp1, fp2] = getCandidateBucketsAndFPs(key, numBuckets);
 
-        if constexpr (AltBucketPolicy::usesChoiceBit) {
-            // For choice bit: i1 has fp with choice=0, i2 has fp with choice=1
-            auto [_, fpForSecondary] = getAlternateBucketWithNewFp(i1, fp, numBuckets);
-            return tryRemoveAtBucket(i1, fp) || tryRemoveAtBucket(i2, fpForSecondary);
-        } else {
-            return tryRemoveAtBucket(i1, fp) || tryRemoveAtBucket(i2, fp);
-        }
+        // fp1 is for bucket i1, fp2 is for bucket i2
+        // For non-choice-bit policies, fp1 == fp2
+        return tryRemoveAtBucket(i1, fp1) || tryRemoveAtBucket(i2, fp2);
     }
 };
 
@@ -1295,10 +1256,10 @@ __global__ void computePackedTagsKernel(
     constexpr size_t bitsPerTag = Config::bitsPerTag;
 
     typename Config::KeyType key = keys[idx];
-    auto [i1, i2, fp] = Filter::getCandidateBuckets(key, numBuckets);
+    auto [i1, i2, fp1, fp2] = Filter::getCandidateBucketsAndFPs(key, numBuckets);
 
     packedTags[idx] =
-        (static_cast<PackedTagType>(i1) << bitsPerTag) | static_cast<PackedTagType>(fp);
+        (static_cast<PackedTagType>(i1) << bitsPerTag) | static_cast<PackedTagType>(fp1);
 }
 
 template <typename Config>
@@ -1329,14 +1290,20 @@ __global__ void insertKernelSorted(
         if (filter->tryInsertAtBucket(primaryBucket, fp)) {
             success = 1;
         } else {
-            auto [secondaryBucket, fpForSecondary] =
+            auto [i2, fp2] =
                 Filter::getAlternateBucketWithNewFp(primaryBucket, fp, filter->numBuckets);
 
-            if (filter->tryInsertAtBucket(secondaryBucket, fpForSecondary)) {
+            if (filter->tryInsertAtBucket(i2, fp2)) {
                 success = 1;
             } else {
-                TagType evictFp = (fp & 1) == 0 ? fp : fpForSecondary;
-                auto startBucket = (fp & 1) == 0 ? primaryBucket : secondaryBucket;
+                TagType evictFp;
+                auto startBucket = (fp & 1) == 0 ? primaryBucket : i2;
+
+                if constexpr (Config::AltBucketPolicy::usesChoiceBit) {
+                    evictFp = (fp & 1) == 0 ? fp : fp2;
+                } else {
+                    evictFp = fp;
+                }
 
                 if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
                     success = filter->insertWithEvictionBFS(evictFp, startBucket);

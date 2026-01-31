@@ -40,10 +40,10 @@ struct XorAltBucketPolicy {
      *
      * @param key Key to hash
      * @param numBuckets Number of buckets in the filter
-     * @return A tuple of (bucket1, bucket2, fingerprint)
+     * @return A tuple of (bucket1, bucket2, fingerprintForBucket1, fingerprintForBucket2)
      */
-    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
-    getCandidateBuckets(const KeyType& key, size_t numBuckets) {
+    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType, TagType>
+    getCandidateBucketsAndFPs(const KeyType& key, size_t numBuckets) {
         const uint64_t h = hash64(key);
 
         // Upper 32 bits for the fingerprint
@@ -57,7 +57,7 @@ struct XorAltBucketPolicy {
         const size_t i1 = h_bucket & (numBuckets - 1);
         const size_t i2 = getAlternateBucket(i1, fp, numBuckets);
 
-        return {i1, i2, fp};
+        return {i1, i2, fp, fp};
     }
 
     /**
@@ -121,10 +121,10 @@ struct AddSubAltBucketPolicy {
      *
      * @param key Key to hash
      * @param numBuckets Total number of buckets (should be even for proper block division)
-     * @return A tuple of (bucket1, bucket2, fingerprint)
+     * @return A tuple of (bucket1, bucket2, fingerprintForBucket1, fingerprintForBucket2)
      */
-    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
-    getCandidateBuckets(const KeyType& key, size_t numBuckets) {
+    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType, TagType>
+    getCandidateBucketsAndFPs(const KeyType& key, size_t numBuckets) {
         const uint64_t h = hash64(key);
 
         // Upper 32 bits for the fingerprint
@@ -139,7 +139,7 @@ struct AddSubAltBucketPolicy {
         const size_t i1 = h_bucket % bucketsPerBlock;
         const size_t i2 = getAlternateBucket(i1, fp, numBuckets);
 
-        return {i1, i2, fp};
+        return {i1, i2, fp, fp};
     }
 
     /**
@@ -254,14 +254,16 @@ struct OffsetAltBucketPolicy {
     /**
      * @brief Computes the primary and alternate bucket indices for a given key.
      *
-     * Returns fingerprint with choice=0 (indicating primary bucket).
+     * Returns both fingerprint variants to avoid redundant computations:
+     * - fp1: fingerprint with choice=0 for primary bucket
+     * - fp2: fingerprint with choice=1 for alternate bucket
      *
      * @param key Key to hash
      * @param numBuckets Number of buckets in the filter
-     * @return A tuple of (bucket1, bucket2, fingerprint_with_choice_0)
+     * @return A tuple of (bucket1, bucket2, fingerprintForBucket1, fingerprintForBucket2)
      */
-    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType>
-    getCandidateBuckets(const KeyType& key, size_t numBuckets) {
+    static __host__ __device__ cuda::std::tuple<size_t, size_t, TagType, TagType>
+    getCandidateBucketsAndFPs(const KeyType& key, size_t numBuckets) {
         const uint64_t h = hash64(key);
 
         // Upper 32 bits for the fingerprint (use bitsPerTag-1 bits)
@@ -270,18 +272,19 @@ struct OffsetAltBucketPolicy {
         // Ensure non-zero (0 is reserved for empty)
         const TagType pureFp = TagType(masked == 0 ? 1 : masked);
 
-        // Combine with choice=0 (primary bucket)
-        const TagType fp = setChoiceBit(pureFp, 0);
+        // Create both fingerprint variants (choice=0 and choice=1)
+        const TagType fp1 = setChoiceBit(pureFp, 0);
+        const TagType fp2 = setChoiceBit(pureFp, 1);
 
         // Lower 32 bits for the bucket index
         const uint32_t h_bucket = h & 0xFFFFFFFF;
         const size_t i1 = h_bucket % numBuckets;
 
-        // Compute i2 using the fingerprint (this will flip the choice bit)
+        // Compute i2 using the fingerprint offset
         const size_t offset = computeOffset(pureFp, numBuckets);
         const size_t i2 = (i1 + offset) % numBuckets;
 
-        return {i1, i2, fp};
+        return {i1, i2, fp1, fp2};
     }
 
     /**
@@ -291,38 +294,34 @@ struct OffsetAltBucketPolicy {
      * - choice=0: we're at primary bucket, add offset to get alternate
      * - choice=1: we're at alternate bucket, subtract offset to get primary
      *
-     * IMPORTANT: This also flips the choice bit in the fingerprint!
-     * The caller must update the stored fingerprint with the returned value.
-     *
      * @param bucket Current bucket index.
-     * @param fp Fingerprint (with choice bit) - will be modified to flip choice.
+     * @param fp Fingerprint (with choice bit).
      * @param numBuckets Total number of buckets.
-     * @return size_t Alternate bucket index.
+     * @return Alternate bucket index.
      */
     static __host__ __device__ size_t
-    getAlternateBucket(size_t bucket, TagType& fp, size_t numBuckets) {
+    getAlternateBucket(size_t bucket, TagType fp, size_t numBuckets) {
         const TagType pureFp = getPureFingerprint(fp);
         const TagType choice = getChoiceBit(fp);
         const size_t offset = computeOffset(pureFp, numBuckets);
 
-        size_t alt;
         if (choice == 0) {
-            // At primary bucket, add offset to get alternate
-            alt = (bucket + offset) % numBuckets;
+            return (bucket + offset) % numBuckets;
         } else {
-            // At alternate bucket, subtract offset to get primary (avoid underflow)
-            alt = (bucket + numBuckets - offset) % numBuckets;
+            return (bucket + numBuckets - offset) % numBuckets;
         }
-
-        // Flip the choice bit
-        fp = setChoiceBit(pureFp, 1 - choice);
-
-        return alt;
     }
 
     /**
-     * @brief Const version that doesn't modify the fingerprint.
-     * Returns what the alternate bucket would be AND what the new fp would be.
+     * @brief Computes alternate bucket AND updated fingerprint for eviction.
+     *
+     * Returns what the alternate bucket would be AND what the new fp would be
+     * (with flipped choice bit). This is used during eviction when we need both.
+     *
+     * @param bucket Current bucket index.
+     * @param fp Fingerprint (with choice bit).
+     * @param numBuckets Total number of buckets.
+     * @return Tuple of (alternate bucket index, new fingerprint with flipped choice bit).
      */
     static __host__ __device__ cuda::std::tuple<size_t, TagType>
     getAlternateBucketWithNewFp(size_t bucket, TagType fp, size_t numBuckets) {
