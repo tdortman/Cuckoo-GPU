@@ -961,11 +961,7 @@ struct CuckooFilter {
             const size_t currWord = (startWord + i) & (Bucket::wordCount - 1);
             auto expected = bucket.packedTags[currWord].load(cuda::memory_order_relaxed);
 
-            bool retryWord;
-            do {
-                retryWord = false;
-
-                // check for any empty slot in this word
+            while (true) {
                 WordType zeroMask = getZeroMask<TagType, WordType>(expected);
 
                 if (zeroMask == 0) {
@@ -988,11 +984,8 @@ struct CuckooFilter {
                         expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
                     )) {
                     return true;
-                } else {
-                    // CAS failed, expected is updated, retry with new value
-                    retryWord = true;
                 }
-            } while (retryWord);
+            }
         }
         return false;
     }
