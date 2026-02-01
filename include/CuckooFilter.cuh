@@ -44,7 +44,7 @@ template <
     size_t blockSize_ = 256,
     size_t bucketSize_ = 16,
     template <typename, typename, size_t, size_t> class AltBucketPolicy_ = XorAltBucketPolicy,
-    EvictionPolicy evictionPolicy_ = EvictionPolicy::DFS,
+    EvictionPolicy evictionPolicy_ = EvictionPolicy::BFS,
     typename WordType_ = uint64_t>
 struct CuckooConfig {
     using KeyType = T;
