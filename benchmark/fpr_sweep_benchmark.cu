@@ -84,7 +84,7 @@ static FPRTestData& getFPRTestData() {
 }
 
 template <size_t bitsPerTag, int loadFactorPercent>
-static void GPUCF_FPR_Sweep(bm::State& state) {
+static void GCF_FPR_Sweep(bm::State& state) {
     using Config = GPUCuckooConfig<bitsPerTag>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
 
@@ -135,7 +135,7 @@ static void GPUCF_FPR_Sweep(bm::State& state) {
 }
 
 template <size_t bitsPerTag, int loadFactorPercent>
-static void GPUCF_Insert_Sweep(bm::State& state) {
+static void GCF_Insert_Sweep(bm::State& state) {
     using Config = GPUCuckooConfig<bitsPerTag>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
 
@@ -173,7 +173,7 @@ static void GPUCF_Insert_Sweep(bm::State& state) {
 }
 
 template <size_t bitsPerTag, int loadFactorPercent>
-static void GPUCF_PositiveQuery_Sweep(bm::State& state) {
+static void GCF_PositiveQuery_Sweep(bm::State& state) {
     using Config = GPUCuckooConfig<bitsPerTag>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
 
@@ -213,7 +213,7 @@ static void GPUCF_PositiveQuery_Sweep(bm::State& state) {
 }
 
 template <size_t bitsPerTag, int loadFactorPercent>
-static void GPUCF_Delete_Sweep(bm::State& state) {
+static void GCF_Delete_Sweep(bm::State& state) {
     using Config = GPUCuckooConfig<bitsPerTag>;
     constexpr double loadFactor = loadFactorPercent / 100.0;
 
@@ -254,7 +254,7 @@ static void GPUCF_Delete_Sweep(bm::State& state) {
 using BloomFilter = cuco::bloom_filter<uint64_t>;
 
 template <int bitsPerElement, int loadFactorPercent>
-static void Bloom_FPR_Sweep(bm::State& state) {
+static void BBF_FPR_Sweep(bm::State& state) {
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t bitsPerBlock =
         BloomFilter::words_per_block * sizeof(typename BloomFilter::word_type) * 8;
@@ -447,7 +447,7 @@ static void GQF_FPR_Sweep(bm::State& state) {
 }
 
 template <int bitsPerElement, int loadFactorPercent>
-static void Bloom_Insert_Sweep(bm::State& state) {
+static void BBF_Insert_Sweep(bm::State& state) {
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t bitsPerBlock =
         BloomFilter::words_per_block * sizeof(typename BloomFilter::word_type) * 8;
@@ -579,7 +579,7 @@ static void GQF_Insert_Sweep(bm::State& state) {
 }
 
 template <int bitsPerElement, int loadFactorPercent>
-static void Bloom_PositiveQuery_Sweep(bm::State& state) {
+static void BBF_PositiveQuery_Sweep(bm::State& state) {
     constexpr double loadFactor = loadFactorPercent / 100.0;
     constexpr size_t bitsPerBlock =
         BloomFilter::words_per_block * sizeof(typename BloomFilter::word_type) * 8;
@@ -823,46 +823,46 @@ static void GQF_Delete_Sweep(bm::State& state) {
 
 #if GQF_BITS == 8
 
-    #define REGISTER_GPUCF_FOR_LOAD_FACTOR(LF)                         \
-        BENCHMARK(GPUCF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;            \
-        BENCHMARK(GPUCF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(GPUCF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(GPUCF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
-        BENCHMARK(GPUCF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
-        BENCHMARK(GPUCF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;        \
-        BENCHMARK(GPUCF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;  \
-        BENCHMARK(GPUCF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG; \
-        BENCHMARK(GPUCF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG; \
-        BENCHMARK(GPUCF_Delete_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
-        BENCHMARK(GPUCF_Delete_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
-        BENCHMARK(GPUCF_Delete_Sweep<32, LF>) FPR_SWEEP_CONFIG;
+    #define REGISTER_GCF_FOR_LOAD_FACTOR(LF)                           \
+        BENCHMARK(GCF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;              \
+        BENCHMARK(GCF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;             \
+        BENCHMARK(GCF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;             \
+        BENCHMARK(GCF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(GCF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
+        BENCHMARK(GCF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;          \
+        BENCHMARK(GCF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;    \
+        BENCHMARK(GCF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG;   \
+        BENCHMARK(GCF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG;   \
+        BENCHMARK(GCF_Delete_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(GCF_Delete_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
+        BENCHMARK(GCF_Delete_Sweep<32, LF>) FPR_SWEEP_CONFIG;
 
-REGISTER_GPUCF_FOR_LOAD_FACTOR(35)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(40)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(50)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(75)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(85)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(90)
-REGISTER_GPUCF_FOR_LOAD_FACTOR(95)
+REGISTER_GCF_FOR_LOAD_FACTOR(35)
+REGISTER_GCF_FOR_LOAD_FACTOR(40)
+REGISTER_GCF_FOR_LOAD_FACTOR(50)
+REGISTER_GCF_FOR_LOAD_FACTOR(75)
+REGISTER_GCF_FOR_LOAD_FACTOR(85)
+REGISTER_GCF_FOR_LOAD_FACTOR(90)
+REGISTER_GCF_FOR_LOAD_FACTOR(95)
 
-    #define REGISTER_BLOOM_FOR_LOAD_FACTOR(LF)                         \
-        BENCHMARK(Bloom_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;            \
-        BENCHMARK(Bloom_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(Bloom_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(Bloom_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
-        BENCHMARK(Bloom_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
-        BENCHMARK(Bloom_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;        \
-        BENCHMARK(Bloom_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;  \
-        BENCHMARK(Bloom_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG; \
-        BENCHMARK(Bloom_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG;
+    #define REGISTER_BBF_FOR_LOAD_FACTOR(LF)                           \
+        BENCHMARK(BBF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;              \
+        BENCHMARK(BBF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;             \
+        BENCHMARK(BBF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;             \
+        BENCHMARK(BBF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(BBF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
+        BENCHMARK(BBF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;          \
+        BENCHMARK(BBF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;    \
+        BENCHMARK(BBF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG;   \
+        BENCHMARK(BBF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG;
 
-REGISTER_BLOOM_FOR_LOAD_FACTOR(35)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(40)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(50)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(75)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(85)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(90)
-REGISTER_BLOOM_FOR_LOAD_FACTOR(95)
+REGISTER_BBF_FOR_LOAD_FACTOR(35)
+REGISTER_BBF_FOR_LOAD_FACTOR(40)
+REGISTER_BBF_FOR_LOAD_FACTOR(50)
+REGISTER_BBF_FOR_LOAD_FACTOR(75)
+REGISTER_BBF_FOR_LOAD_FACTOR(85)
+REGISTER_BBF_FOR_LOAD_FACTOR(90)
+REGISTER_BBF_FOR_LOAD_FACTOR(95)
 
     #define REGISTER_TCF_FOR_LOAD_FACTOR(LF)                               \
         BENCHMARK(TCF_FPR_Sweep<uint8_t, LF>) FPR_SWEEP_CONFIG;            \

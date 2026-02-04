@@ -94,7 +94,6 @@ def main(
 
     fig, ax = pu.setup_figure(
         figsize=(10, 6),
-        title="Query Speedup: 256-bit vs 128-bit Loads",
     )
 
     ax.plot(  # ty:ignore[possibly-missing-attribute]
@@ -103,12 +102,18 @@ def main(
         "o-",
         label="256-bit speedup",
         color="#2A9D8F",
-        linewidth=2.5,
-        markersize=8,
+        linewidth=pu.LINE_WIDTH,
+        markersize=pu.MARKER_SIZE,
     )
 
     # Add a reference line at 0% (no improvement)
-    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=1.5, alpha=0.7)  # ty:ignore[possibly-missing-attribute]
+    ax.axhline(
+        y=0,
+        color="#888888",
+        linestyle="--",
+        linewidth=pu.REFERENCE_LINE_WIDTH,
+        alpha=pu.HATCHED_BAR_ALPHA,
+    )  # ty:ignore[possibly-missing-attribute]
 
     # Format y-axis as percentages
     from matplotlib.ticker import FuncFormatter

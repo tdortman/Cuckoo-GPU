@@ -13,9 +13,9 @@ using Config = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy>;
 using Filter = CuckooFilter<Config>;
 using PackedTagType = typename Filter::PackedTagType;
 
-using CF = CuckooFilterFixture<Config>;
+using GCF = CuckooFilterFixture<Config>;
 
-BENCHMARK_DEFINE_F(CF, InsertUnsorted)(bm::State& state) {
+BENCHMARK_DEFINE_F(GCF, InsertUnsorted)(bm::State& state) {
     for (auto _ : state) {
         filter->clear();
         cudaDeviceSynchronize();
@@ -30,7 +30,7 @@ BENCHMARK_DEFINE_F(CF, InsertUnsorted)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(CF, InsertSorted)(bm::State& state) {
+BENCHMARK_DEFINE_F(GCF, InsertSorted)(bm::State& state) {
     for (auto _ : state) {
         filter->clear();
         cudaDeviceSynchronize();
@@ -45,7 +45,7 @@ BENCHMARK_DEFINE_F(CF, InsertSorted)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(CF, InsertPresorted)(bm::State& state) {
+BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
     PackedTagType* d_packedTags;
     CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
 
@@ -93,13 +93,13 @@ BENCHMARK_DEFINE_F(CF, InsertPresorted)(bm::State& state) {
         ->Repetitions(10)                \
         ->ReportAggregatesOnly(true)
 
-BENCHMARK_REGISTER_F(CF, InsertUnsorted)
+BENCHMARK_REGISTER_F(GCF, InsertUnsorted)
 SORTED_UNSORTED_BENCHMARK_CONFIG;
 
-BENCHMARK_REGISTER_F(CF, InsertSorted)
+BENCHMARK_REGISTER_F(GCF, InsertSorted)
 SORTED_UNSORTED_BENCHMARK_CONFIG;
 
-BENCHMARK_REGISTER_F(CF, InsertPresorted)
+BENCHMARK_REGISTER_F(GCF, InsertPresorted)
 SORTED_UNSORTED_BENCHMARK_CONFIG;
 
 STANDARD_BENCHMARK_MAIN();

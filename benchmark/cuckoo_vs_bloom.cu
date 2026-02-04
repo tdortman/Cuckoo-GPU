@@ -68,7 +68,7 @@ class BloomFilterFixture : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-using CFFixture = CuckooFilterFixture<Config>;
+using GCFFixture = CuckooFilterFixture<Config>;
 
 using BBFFixture = BloomFilterFixture<>;
 
@@ -127,7 +127,7 @@ BENCHMARK_DEFINE_F(BBFFixture, InsertAndQuery)(bm::State& state) {
     setCounters(state);
 }
 
-static void CF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
@@ -220,10 +220,10 @@ static void BBF_FPR(bm::State& state) {
     );
 }
 
-DEFINE_AND_REGISTER_INSERT_QUERY(CFFixture)
+DEFINE_AND_REGISTER_INSERT_QUERY(GCFFixture)
 REGISTER_INSERT_QUERY(BBFFixture)
 
-REGISTER_FUNCTION_BENCHMARK(CF_FPR);
+REGISTER_FUNCTION_BENCHMARK(GCF_FPR);
 REGISTER_FUNCTION_BENCHMARK(BBF_FPR);
 
 STANDARD_BENCHMARK_MAIN();

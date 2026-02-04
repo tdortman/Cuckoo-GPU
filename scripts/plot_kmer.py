@@ -21,7 +21,7 @@ app = typer.Typer(help="Plot k-mer benchmark results")
 
 
 def extract_filter_and_operation(name: str) -> tuple[Optional[str], Optional[str]]:
-    """Extract filter type and operation from benchmark name like 'GPUCF_Insert'."""
+    """Extract filter type and operation from benchmark name like 'GCF_Insert'."""
     match = re.match(r"(\w+)_(Insert|Query|Delete)", name)
     if match:
         return match.group(1), match.group(2)
@@ -63,20 +63,13 @@ def main(
     output_dir: Optional[Path] = typer.Option(
         None, "--output-dir", "-o", help="Output directory for plots"
     ),
-    dataset_name: Optional[str] = typer.Option(
-        None, "--dataset", "-d", help="Dataset name for title (e.g., 'E. coli')"
-    ),
-    k: Optional[int] = typer.Option(
-        None, "--k", "-k", help="K-mer size for title (e.g., 21)"
-    ),
 ):
     """
     Plot k-mer benchmark results as clustered bar charts.
 
     Examples:
         ./plot_kmer.py results.csv
-        ./plot_kmer.py results.csv -d "E. coli" -k 21
-        ./plot_kmer.py results.csv -o custom/dir -d "Human chr14" -k 31
+        ./plot_kmer.py results.csv -o custom/dir
     """
     df = load_csv_data(csv_file)
 
@@ -86,7 +79,7 @@ def main(
 
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
 
-    filter_order = ["GPUCF", "Bloom", "TCF", "GQF"]
+    filter_order = ["GCF", "BBF", "TCF", "GQF"]
     filters = [f for f in filter_order if f in df["filter"].values]
     operations = ["Query", "Insert", "Delete"]
 
@@ -116,28 +109,26 @@ def main(
         labels={f: pu.get_filter_display_name(f) for f in filters},
     )
 
-    title = "K-mer Benchmark"
-    if dataset_name and k:
-        title += f"\n{dataset_name} (k={k})"
-    elif dataset_name:
-        title += f"\n{dataset_name}"
-    elif k:
-        title += f"\n(k={k})"
-
     pu.format_axis(
         ax,  # ty:ignore[invalid-argument-type]
         "Operation",
         "Throughput [M ops/s]",
-        title=title,
         xscale=None,
     )
-    pu.create_legend(
-        ax,  # ty:ignore[invalid-argument-type]
-        loc="upper right",
-        fontsize=pu.DEFAULT_FONT_SIZE,
+
+    # Get handles and labels from axis, then create figure legend above
+    handles, labels = ax.get_legend_handles_labels()  # ty:ignore[possibly-missing-attribute]
+    fig.legend(
+        handles,
+        labels,
+        fontsize=pu.LEGEND_FONT_SIZE,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=len(labels),
+        framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
 
     output_file = output_dir / "kmer_benchmark.pdf"
     pu.save_figure(fig, output_file, f"K-mer benchmark plot saved to {output_file}")

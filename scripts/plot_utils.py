@@ -15,54 +15,36 @@ import pandas as pd
 import typer
 
 FILTER_STYLES = {
-    "cuckoo": {"color": "#2E86AB", "marker": "o"},
-    "bloom": {"color": "#A23B72", "marker": "s"},
+    "gcf": {"color": "#2E86AB", "marker": "o"},
+    "ccf": {"color": "#00B4D8", "marker": "o"},
+    "bbf": {"color": "#A23B72", "marker": "s"},
     "tcf": {"color": "#C73E1D", "marker": "^"},
     "gqf": {"color": "#F18F01", "marker": "D"},
-    "partitioned": {"color": "#6A994E", "marker": "D"},
-    "cpu_cuckoo": {"color": "#00B4D8", "marker": "o"},
+    "pcf": {"color": "#6A994E", "marker": "D"},
 }
 
 FILTER_COLORS = {
-    "GPU Cuckoo": FILTER_STYLES["cuckoo"]["color"],
-    "Cuckoo": FILTER_STYLES["cuckoo"]["color"],
-    "Cuckoo Filter": FILTER_STYLES["cuckoo"]["color"],
-    "CPU Cuckoo": FILTER_STYLES["cpu_cuckoo"]["color"],
-    "Blocked Bloom": FILTER_STYLES["bloom"]["color"],
-    "TCF": FILTER_STYLES["tcf"]["color"],
-    "GQF": FILTER_STYLES["gqf"]["color"],
-    "Partitioned Cuckoo": FILTER_STYLES["partitioned"]["color"],
+    "GPU Cuckoo": FILTER_STYLES["gcf"]["color"],
+    "CPU Cuckoo": FILTER_STYLES["ccf"]["color"],
+    "Blocked Bloom": FILTER_STYLES["bbf"]["color"],
+    "Two-Choice": FILTER_STYLES["tcf"]["color"],
+    "GPU Quotient": FILTER_STYLES["gqf"]["color"],
+    "Partitioned Cuckoo": FILTER_STYLES["pcf"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
-    # Standard names (lowercase of C++ fixture names)
-    "gpucuckoo": "GPU Cuckoo",
-    "blockedbloom": "Blocked Bloom",
-    "tcf": "TCF",
-    "gqf": "GQF",
-    "partitionedcuckoo": "Partitioned Cuckoo",
-    "cpucuckoo": "CPU Cuckoo",
-    # Legacy compatibility (for existing CSVs)
-    "cuckoo": "Cuckoo",
-    "bloom": "Blocked Bloom",
-    "bbf": "Blocked Bloom",
-    "cf": "GPU Cuckoo",
-    "cpucf": "CPU Cuckoo",
+    "gcf": "GPU Cuckoo",
+    "ccf": "CPU Cuckoo",
+    "tcf": "Two-Choice",
+    "gqf": "GPU Quotient",
     "pcf": "Partitioned Cuckoo",
-    "cpu": "CPU Cuckoo",
-    "partitioned": "Partitioned Cuckoo",
-    # FPR sweep variants
-    "gpucf": "GPU Cuckoo",
-    "Bloom": "Blocked Bloom",
-    "TCF": "TCF",
-    "GQF": "GQF",
-    "GPUCF": "GPU Cuckoo",
+    "bbf": "Blocked Bloom",
 }
 
 OPERATION_COLORS = {
     "Insert": FILTER_COLORS["GPU Cuckoo"],
     "Query": FILTER_COLORS["Blocked Bloom"],
-    "Delete": FILTER_COLORS["GQF"],
+    "Delete": FILTER_COLORS["GPU Quotient"],
 }
 
 
@@ -70,21 +52,28 @@ DEFAULT_FONT_SIZE = 12
 AXIS_LABEL_FONT_SIZE = 14
 TITLE_FONT_SIZE = 16
 LEGEND_FONT_SIZE = 10
-LINE_WIDTH = 2.5
-MARKER_SIZE = 8
+LINE_WIDTH = 2
+MARKER_SIZE = 6
 GRID_ALPHA = 0.3
+BAR_EDGE_WIDTH = 0.5
+REFERENCE_LINE_WIDTH = 1.5
+LEGEND_FRAME_ALPHA = 0
+LEGEND_FRAME_ALPHA_SOLID = 0.9
+HATCHED_BAR_ALPHA = 0.7
+SCALING_BAR_ALPHA = 0.8
 
 
 def get_filter_display_name(filter_type: str) -> str:
     """Get human-readable display name for a filter type.
 
     Args:
-        filter_type: Internal filter identifier (e.g., 'cuckoo', 'bloom')
+        filter_type: Internal filter identifier (e.g., 'gcf', 'bbf')
 
     Returns:
-        Display name (e.g., 'Cuckoo', 'Blocked Bloom')
+        Display name (e.g., 'GPU Cuckoo', 'Blocked Bloom')
     """
-    return FILTER_DISPLAY_NAMES.get(filter_type, filter_type.capitalize())
+    normalized = filter_type.lower()
+    return FILTER_DISPLAY_NAMES.get(normalized, filter_type.capitalize())
 
 
 def format_power_of_two(n: int) -> str:
@@ -346,7 +335,7 @@ def normalize_benchmark_name(name: str) -> str:
 
 
 POLICY_COLORS = {
-    "Xor": FILTER_STYLES["cuckoo"]["color"],
+    "Xor": FILTER_STYLES["gcf"]["color"],
     "AddSub": FILTER_STYLES["tcf"]["color"],
     "Offset": FILTER_STYLES["gqf"]["color"],
 }

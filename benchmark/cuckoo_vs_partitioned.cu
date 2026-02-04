@@ -34,10 +34,10 @@ using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
 #endif
 
-using GPUCFFixture = CuckooFilterFixture<Config>;
+using GCFFixture = CuckooFilterFixture<Config>;
 
 #ifdef __x86_64__
-class PartitionedCFFixture : public benchmark::Fixture {
+class PCFFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
     using benchmark::Fixture::TearDown;
 
@@ -87,7 +87,7 @@ class PartitionedCFFixture : public benchmark::Fixture {
 };
 #endif  // __x86_64__
 
-static void GPUCF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -136,7 +136,7 @@ static void GPUCF_FPR(bm::State& state) {
 }
 
 #ifdef __x86_64__
-BENCHMARK_DEFINE_F(PartitionedCFFixture, Insert)(bm::State& state) {
+BENCHMARK_DEFINE_F(PCFFixture, Insert)(bm::State& state) {
     for (auto _ : state) {
         PartitionedCuckooFilter tempFilter(s, n_partitions, n_threads, n_tasks);
         auto constructKeys = keys;
@@ -156,7 +156,7 @@ BENCHMARK_DEFINE_F(PartitionedCFFixture, Insert)(bm::State& state) {
     setCounters(state, filterMemory);
 }
 
-BENCHMARK_DEFINE_F(PartitionedCFFixture, Query)(bm::State& state) {
+BENCHMARK_DEFINE_F(PCFFixture, Query)(bm::State& state) {
     PartitionedCuckooFilter filter(s, n_partitions, n_threads, n_tasks);
     filter.construct(keys.data(), keys.size());
 
@@ -174,7 +174,7 @@ BENCHMARK_DEFINE_F(PartitionedCFFixture, Query)(bm::State& state) {
     setCounters(state, filterMemory);
 }
 
-static void PartitionedCF_FPR(bm::State& state) {
+static void PCF_FPR(bm::State& state) {
     CPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), TARGET_LOAD_FACTOR);
 
@@ -232,13 +232,13 @@ static void PartitionedCF_FPR(bm::State& state) {
 }
 #endif  // __x86_64__
 
-DEFINE_AND_REGISTER_INSERT_QUERY(GPUCFFixture)
+DEFINE_AND_REGISTER_INSERT_QUERY(GCFFixture)
 
 #ifdef __x86_64__
-REGISTER_INSERT_QUERY(PartitionedCFFixture)
-REGISTER_FUNCTION_BENCHMARK(PartitionedCF_FPR);
+REGISTER_INSERT_QUERY(PCFFixture)
+REGISTER_FUNCTION_BENCHMARK(PCF_FPR);
 #endif  // __x86_64__
 
-REGISTER_FUNCTION_BENCHMARK(GPUCF_FPR);
+REGISTER_FUNCTION_BENCHMARK(GCF_FPR);
 
 STANDARD_BENCHMARK_MAIN();

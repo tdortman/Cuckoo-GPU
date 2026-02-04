@@ -13,6 +13,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import plot_utils as pu
 import typer
 
 app = typer.Typer(help="Plot FPR benchmark results")
@@ -20,18 +21,18 @@ app = typer.Typer(help="Plot FPR benchmark results")
 
 def extract_filter_type(name: str) -> Optional[str]:
     """Extract filter type from benchmark name"""
-    if "GPUCF_FPR" in name:
-        return "GPU Cuckoo"
-    elif "CPUCF_FPR" in name:
-        return "CPU Cuckoo"
-    elif "Bloom_FPR" in name:
-        return "Bloom Filter"
+    if "GCF_FPR" in name:
+        return "gcf"
+    elif "CCF_FPR" in name:
+        return "ccf"
+    elif "BBF_FPR" in name:
+        return "bbf"
     elif "TCF_FPR" in name:
-        return "TCF"
+        return "tcf"
     elif "GQF_FPR" in name:
-        return "GQF"
-    elif "PartitionedCF_FPR" in name:
-        return "Partitioned Cuckoo"
+        return "gqf"
+    elif "PCF_FPR" in name:
+        return "pcf"
     return None
 
 
@@ -87,16 +88,6 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Define colors and markers for each filter type
-    filter_styles = {
-        "Cuckoo Filter": {"color": "#2E86AB", "marker": "o"},
-        "CPU Cuckoo": {"color": "#00B4D8", "marker": "o"},
-        "Bloom Filter": {"color": "#A23B72", "marker": "s"},
-        "TCF": {"color": "#C73E1D", "marker": "v"},
-        "GQF": {"color": "#F18F01", "marker": "^"},
-        "Partitioned Cuckoo": {"color": "#6A994E", "marker": "D"},
-    }
-
     # Plot 1: FPR vs Memory Size
     fig, ax = plt.subplots(figsize=(12, 8))
 
@@ -104,30 +95,35 @@ def main(
         memory_sizes = sorted(fpr_data[filter_type].keys())
         fpr_values = [fpr_data[filter_type][mem] for mem in memory_sizes]
 
-        style = filter_styles.get(filter_type, {"marker": "o"})
+        style = pu.FILTER_STYLES.get(filter_type, {})
         ax.plot(
             memory_sizes,
             fpr_values,
-            label=filter_type,
-            linewidth=2.5,
-            markersize=8,
-            color=style.get("color"),
-            marker=style.get("marker", "o"),
+            label=pu.get_filter_display_name(filter_type),
+            linewidth=pu.LINE_WIDTH,
+            markersize=pu.MARKER_SIZE,
+            **style,
         )
 
-    ax.set_xlabel("Memory Size [bytes]", fontsize=14, fontweight="bold")
-    ax.set_ylabel("False Positive Rate [%]", fontsize=14, fontweight="bold")
+    ax.set_xlabel(
+        "Memory Size [bytes]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
+    ax.set_ylabel(
+        "False Positive Rate [%]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=0)
-    ax.set_title(
-        "False Positive Rate vs Memory Size",
-        fontsize=16,
-        fontweight="bold",
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        fontsize=pu.LEGEND_FONT_SIZE,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.12),
+        ncol=len(labels),
+        framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "fpr_vs_memory.pdf"
     plt.savefig(
@@ -150,29 +146,32 @@ def main(
         memory_sizes = sorted(bits_per_item_data[filter_type].keys())
         bits_values = [bits_per_item_data[filter_type][mem] for mem in memory_sizes]
 
-        style = filter_styles.get(filter_type, {"marker": "o"})
+        style = pu.FILTER_STYLES.get(filter_type, {})
         ax.plot(
             memory_sizes,
             bits_values,
-            label=filter_type,
-            linewidth=2.5,
-            markersize=8,
-            color=style.get("color"),
-            marker=style.get("marker", "o"),
+            label=pu.get_filter_display_name(filter_type),
+            linewidth=pu.LINE_WIDTH,
+            markersize=pu.MARKER_SIZE,
+            **style,
         )
 
-    ax.set_xlabel("Memory Size [bytes]", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Bits per Item", fontsize=14, fontweight="bold")
+    ax.set_xlabel(
+        "Memory Size [bytes]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
+    ax.set_ylabel("Bits per Item", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
     ax.set_xscale("log", base=2)
-    ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(fontsize=10, loc="center left", bbox_to_anchor=(1, 0.5), framealpha=0)
-    ax.set_title(
-        "Space Efficiency vs Memory Size",
-        fontsize=16,
-        fontweight="bold",
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        fontsize=pu.LEGEND_FONT_SIZE,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.12),
+        ncol=len(labels),
+        framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "bits_per_item_vs_memory.pdf"
     plt.savefig(

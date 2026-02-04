@@ -64,7 +64,7 @@ constexpr double LOAD_FACTOR = 0.95;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 constexpr size_t FPR_TEST_SIZE = 1'000'000;
 
-static void GPUCF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     size_t targetMemory = state.range(0);
 
@@ -99,7 +99,7 @@ static void GPUCF_FPR(bm::State& state) {
     setFPRCounters(state, filterMemory, n, fpr, falsePositives, FPR_TEST_SIZE);
 }
 
-static void CPUCF_FPR(bm::State& state) {
+static void CCF_FPR(bm::State& state) {
     CPUTimer timer;
     size_t targetMemory = state.range(0);
     size_t capacity = (targetMemory * 8) / Config::bitsPerTag;
@@ -136,7 +136,7 @@ static void CPUCF_FPR(bm::State& state) {
     setFPRCounters(state, filterMemory, n, fpr, falsePositives, FPR_TEST_SIZE);
 }
 
-static void Bloom_FPR(bm::State& state) {
+static void BBF_FPR(bm::State& state) {
     GPUTimer timer;
     size_t targetMemory = state.range(0);
 
@@ -234,7 +234,7 @@ static void TCF_FPR(bm::State& state) {
 }
 
 #ifdef __x86_64__
-static void PartitionedCF_FPR(bm::State& state) {
+static void PCF_FPR(bm::State& state) {
     CPUTimer timer;
     size_t targetMemory = state.range(0);
 
@@ -350,13 +350,13 @@ static void GQF_FPR(bm::State& state) {
     qf_destroy_device(qf);
 }
 
-BENCHMARK(GPUCF_FPR) FPR_CONFIG;
-BENCHMARK(CPUCF_FPR) FPR_CONFIG;
-BENCHMARK(Bloom_FPR) FPR_CONFIG;
+BENCHMARK(GCF_FPR) FPR_CONFIG;
+BENCHMARK(CCF_FPR) FPR_CONFIG;
+BENCHMARK(BBF_FPR) FPR_CONFIG;
 BENCHMARK(TCF_FPR) FPR_CONFIG;
 
 #ifdef __x86_64__
-BENCHMARK(PartitionedCF_FPR) FPR_CONFIG;
+BENCHMARK(PCF_FPR) FPR_CONFIG;
 #endif
 
 BENCHMARK(GQF_FPR) FPR_CONFIG;

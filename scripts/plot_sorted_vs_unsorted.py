@@ -83,12 +83,6 @@ def main(
         "-o",
         help="Output directory for plot (default: build/)",
     ),
-    title: Optional[str] = typer.Option(
-        None,
-        "--title",
-        "-t",
-        help="Custom plot title",
-    ),
 ):
     """
     Generate a throughput comparison plot for sorted vs unsorted insertion methods.
@@ -145,25 +139,29 @@ def main(
             "o-",
             label=display_name,
             color=color,
-            linewidth=2.5,
-            markersize=8,
+            linewidth=pu.LINE_WIDTH,
+            markersize=pu.MARKER_SIZE,
         )
 
-    ax.set_xlabel("Capacity (elements)", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
+    ax.set_xlabel(
+        "Capacity (elements)", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
+    ax.set_ylabel(
+        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
     ax.set_xscale("log", base=2)
 
-    ax.legend(fontsize=11, loc="best", framealpha=0.9)
-    ax.grid(True, which="both", ls="--", alpha=0.3)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        fontsize=pu.LEGEND_FONT_SIZE,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.12),
+        ncol=len(labels),
+        framealpha=pu.LEGEND_FRAME_ALPHA,
+    )
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
 
-    if title:
-        ax.set_title(title, fontsize=16, fontweight="bold")
-    else:
-        ax.set_title(
-            "Insertion Throughput: Sorted vs Unsorted", fontsize=16, fontweight="bold"
-        )
-
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "sorted_vs_unsorted.pdf"
     pu.save_figure(None, output_file, f"Plot saved to {output_file}")

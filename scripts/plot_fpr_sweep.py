@@ -47,8 +47,8 @@ def parse_benchmark_name(name: str) -> dict:
         result["operation"] = "delete"
 
     # Map benchmark name prefix to standardized filter name
-    # GPUCF_FPR_Sweep → "gpucf" → "GPU Cuckoo"
-    for prefix in ["GPUCF", "Bloom", "TCF", "GQF"]:
+    # GCF_FPR_Sweep → "gcf" → "GPU Cuckoo"
+    for prefix in ["GCF", "BBF", "TCF", "GQF"]:
         if name.startswith(prefix):
             result["filter"] = pu.get_filter_display_name(prefix.lower())
             break
@@ -97,7 +97,6 @@ def plot_fpr_comparison_on_axis(
     ax: plt.Axes,
     df: pd.DataFrame,
     hit_rate: float,
-    exponent: Optional[int] = None,
     show_xlabel: bool = True,
 ) -> list:
     """Plot FPR comparison on a single axis. Returns legend elements."""
@@ -215,7 +214,7 @@ def plot_fpr_comparison_on_axis(
                 bar_width,
                 color=pu.FILTER_COLORS[filter_name],
                 edgecolor="white",
-                linewidth=0.5,
+                linewidth=pu.BAR_EDGE_WIDTH,
             )
             bar_offset += bar_width
 
@@ -227,9 +226,9 @@ def plot_fpr_comparison_on_axis(
                     bar_width,
                     color=pu.FILTER_COLORS[filter_name],
                     edgecolor="white",
-                    linewidth=0.5,
+                    linewidth=pu.BAR_EDGE_WIDTH,
                     hatch="//",
-                    alpha=0.7,
+                    alpha=pu.HATCHED_BAR_ALPHA,
                 )
                 bar_offset += bar_width
 
@@ -241,9 +240,9 @@ def plot_fpr_comparison_on_axis(
                     bar_width,
                     color=pu.FILTER_COLORS[filter_name],
                     edgecolor="white",
-                    linewidth=0.5,
+                    linewidth=pu.BAR_EDGE_WIDTH,
                     hatch="--",
-                    alpha=0.7,
+                    alpha=pu.HATCHED_BAR_ALPHA,
                 )
 
     # Set x-axis labels at center of each FPR target group
@@ -252,20 +251,18 @@ def plot_fpr_comparison_on_axis(
         for i in range(n_fpr_targets)
     ]
     ax.set_xticks(target_centers)
-    ax.set_xticklabels([label for _, label in FPR_TARGETS], fontsize=12)
+    ax.set_xticklabels(
+        [label for _, label in FPR_TARGETS], fontsize=pu.DEFAULT_FONT_SIZE
+    )
 
     if show_xlabel:
-        ax.set_xlabel("Target FPR", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
-
-    hit_pct = int(hit_rate * 100)
-    title = rf"Best Throughput by Target FPR ({hit_pct}% hit rate)"
-    if exponent is not None:
-        title += f" $\\left(n=2^{{{exponent}}}\\right)$"
-    ax.set_title(title, fontsize=16, fontweight="bold")
+        ax.set_xlabel("Target FPR", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
+    ax.set_ylabel(
+        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
 
     ax.set_yscale("log")
-    ax.grid(True, which="both", ls="--", alpha=0.3)
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
 
     # Build legend elements
     legend_elements = [
@@ -274,11 +271,15 @@ def plot_fpr_comparison_on_axis(
     legend_elements.append(Patch(facecolor="gray", label="Query"))
     if has_insert_data:
         legend_elements.append(
-            Patch(facecolor="gray", hatch="//", alpha=0.7, label="Insert")
+            Patch(
+                facecolor="gray", hatch="//", alpha=pu.HATCHED_BAR_ALPHA, label="Insert"
+            )
         )
     if has_delete_data:
         legend_elements.append(
-            Patch(facecolor="gray", hatch="--", alpha=0.7, label="Delete")
+            Patch(
+                facecolor="gray", hatch="--", alpha=pu.HATCHED_BAR_ALPHA, label="Delete"
+            )
         )
 
     return legend_elements, filter_names  # ty:ignore[invalid-return-type]
@@ -300,18 +301,6 @@ def main(
         "-o",
         help="Output directory for plots (default: build/)",
     ),
-    exponent_top: Optional[int] = typer.Option(
-        None,
-        "--exponent-top",
-        "-et",
-        help="Exponent for n (as power of 2) to display in top plot title",
-    ),
-    exponent_bottom: Optional[int] = typer.Option(
-        None,
-        "--exponent-bottom",
-        "-eb",
-        help="Exponent for n (as power of 2) to display in bottom plot title",
-    ),
     hit_rate: float = typer.Option(
         50.0,
         "--hit-rate",
@@ -326,40 +315,36 @@ def main(
 
     Examples:
         plot_fpr_sweep.py small.csv large.csv
-        plot_fpr_sweep.py small.csv large.csv --exponent-top 22 --exponent-bottom 26
+        plot_fpr_sweep.py small.csv large.csv --hit-rate 75
     """
     # Load data from both CSV files
-    csv_files = [
-        (csv_file_top, exponent_top),
-        (csv_file_bottom, exponent_bottom),
-    ]
+    csv_files = [csv_file_top, csv_file_bottom]
 
     data_list = []
-    for csv_file, exponent in csv_files:
+    for csv_file in csv_files:
         if not csv_file.exists():
             typer.secho(
                 f"Error: File not found: {csv_file}", fg=typer.colors.RED, err=True
             )
             raise typer.Exit(1)
         df = load_and_parse_csv(csv_file)
-        data_list.append((df, exponent))
+        data_list.append(df)
 
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
 
     # Create figure with 2 vertically stacked subplots
-    fig, axes = plt.subplots(2, 1, figsize=(16, 14))
+    fig, axes = plt.subplots(2, 1, figsize=(14, 10))
 
     all_legend_elements = []
     seen_labels = set()
 
-    for idx, (ax, (df, exponent)) in enumerate(zip(axes, data_list)):
+    for idx, (ax, df) in enumerate(zip(axes, data_list)):
         show_xlabel = idx == 1  # Only show x-label on bottom plot
 
         legend_elements, filter_names = plot_fpr_comparison_on_axis(
             ax,
             df,
             hit_rate / 100.0,
-            exponent=exponent,
             show_xlabel=show_xlabel,
         )
 
@@ -369,17 +354,18 @@ def main(
                 all_legend_elements.append(elem)
                 seen_labels.add(elem.get_label())
 
-    plt.tight_layout()
-
-    # Create combined legend outside on the right
+    # Create combined legend above the plots
     if all_legend_elements:
         fig.legend(
             handles=all_legend_elements,
-            fontsize=10,
-            loc="center left",
-            bbox_to_anchor=(1.0, 0.5),
-            framealpha=0,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=len(all_legend_elements),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
         )
+
+    plt.tight_layout(rect=(0, 0, 1, 0.94))
 
     output_path = output_dir / "fpr_sweep_throughput.pdf"
     pu.save_figure(fig, output_path, f"Saved throughput comparison to {output_path}")

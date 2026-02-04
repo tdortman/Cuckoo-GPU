@@ -14,7 +14,7 @@ namespace bm = benchmark;
 using Config = CuckooConfig<uint64_t, 16, 500, 128, 16>;
 constexpr size_t CPU_BITS_PER_ITEM = Config::bitsPerTag;
 
-using GPUCFFixture = CuckooFilterFixture<Config>;
+using GCFFixture = CuckooFilterFixture<Config>;
 
 template <typename KeyType, size_t bitsPerItem, double loadFactor = 0.95>
 class CPUCuckooFilterFixture : public benchmark::Fixture {
@@ -47,9 +47,9 @@ class CPUCuckooFilterFixture : public benchmark::Fixture {
     CPUTimer timer;
 };
 
-using CPUCFFixture = CPUCuckooFilterFixture<uint64_t, CPU_BITS_PER_ITEM>;
+using CCFFixture = CPUCuckooFilterFixture<uint64_t, CPU_BITS_PER_ITEM>;
 
-BENCHMARK_DEFINE_F(CPUCFFixture, Insert)(bm::State& state) {
+BENCHMARK_DEFINE_F(CCFFixture, Insert)(bm::State& state) {
     for (auto _ : state) {
         cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
 
@@ -70,7 +70,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Insert)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(CPUCFFixture, Query)(bm::State& state) {
+BENCHMARK_DEFINE_F(CCFFixture, Query)(bm::State& state) {
     cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> filter(capacity);
     for (const auto& key : keys) {
         filter.Add(key);
@@ -93,7 +93,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Query)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(CPUCFFixture, Delete)(bm::State& state) {
+BENCHMARK_DEFINE_F(CCFFixture, Delete)(bm::State& state) {
     for (auto _ : state) {
         cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
         for (const auto& key : keys) {
@@ -117,7 +117,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, Delete)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(CPUCFFixture, InsertQueryDelete)(bm::State& state) {
+BENCHMARK_DEFINE_F(CCFFixture, InsertQueryDelete)(bm::State& state) {
     for (auto _ : state) {
         cuckoofilter::CuckooFilter<uint64_t, CPU_BITS_PER_ITEM> tempFilter(capacity);
 
@@ -154,7 +154,7 @@ BENCHMARK_DEFINE_F(CPUCFFixture, InsertQueryDelete)(bm::State& state) {
     setCounters(state);
 }
 
-static void GPUCF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
@@ -199,7 +199,7 @@ static void GPUCF_FPR(bm::State& state) {
     );
 }
 
-static void CPUCF_FPR(bm::State& state) {
+static void CCF_FPR(bm::State& state) {
     CPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
@@ -244,10 +244,10 @@ static void CPUCF_FPR(bm::State& state) {
     );
 }
 
-DEFINE_AND_REGISTER_CORE_BENCHMARKS(GPUCFFixture)
-REGISTER_CORE_BENCHMARKS(CPUCFFixture)
+DEFINE_AND_REGISTER_CORE_BENCHMARKS(GCFFixture)
+REGISTER_CORE_BENCHMARKS(CCFFixture)
 
-REGISTER_FUNCTION_BENCHMARK(GPUCF_FPR);
-REGISTER_FUNCTION_BENCHMARK(CPUCF_FPR);
+REGISTER_FUNCTION_BENCHMARK(GCF_FPR);
+REGISTER_FUNCTION_BENCHMARK(CCF_FPR);
 
 BENCHMARK_MAIN();

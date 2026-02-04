@@ -30,7 +30,7 @@ size_t getQFSizeHost(QF* d_qf) {
     return h_metadata.total_size_in_bytes;
 }
 
-using CFFixture = CuckooFilterFixture<Config>;
+using GCFFixture = CuckooFilterFixture<Config>;
 
 void convertGQFResults(thrust::device_vector<uint64_t>& d_results) {
     thrust::device_ptr<uint64_t> d_resultsPtr(d_results.data().get());
@@ -86,7 +86,7 @@ class GQFFixture : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-static void CF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
@@ -251,13 +251,13 @@ static void GQF_FPR(bm::State& state) {
     qf_destroy_device(qf);
 }
 
-DEFINE_AND_REGISTER_CORE_BENCHMARKS(CFFixture)
+DEFINE_AND_REGISTER_CORE_BENCHMARKS(GCFFixture)
 
 REGISTER_BENCHMARK(GQFFixture, Insert);
 REGISTER_BENCHMARK(GQFFixture, Query);
 REGISTER_BENCHMARK(GQFFixture, Delete);
 
-REGISTER_FUNCTION_BENCHMARK(CF_FPR);
+REGISTER_FUNCTION_BENCHMARK(GCF_FPR);
 REGISTER_FUNCTION_BENCHMARK(GQF_FPR);
 
 STANDARD_BENCHMARK_MAIN();

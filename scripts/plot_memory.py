@@ -107,13 +107,19 @@ def main(
             sizes = sorted(memory_data[bench_name].keys())
             memory = [memory_data[bench_name][size] for size in sizes]
 
-            ax1.plot(sizes, memory, "o-", label=bench_name, linewidth=2.5, markersize=8)
+            ax1.plot(
+                sizes,
+                memory,
+                "o-",
+                label=bench_name,
+                linewidth=pu.LINE_WIDTH,
+                markersize=pu.MARKER_SIZE,
+            )
 
         pu.format_axis(
             ax1,
-            xlabel="Input Size",
+            xlabel="",
             ylabel="Memory Usage (MiB)",
-            title="Total Memory Usage",
             xscale="log",
             yscale="log",
         )
@@ -133,13 +139,19 @@ def main(
             sizes = sorted(bits_per_item_data[bench_name].keys())
             bpi = [bits_per_item_data[bench_name][size] for size in sizes]
 
-            ax2.plot(sizes, bpi, "o-", label=bench_name, linewidth=2.5, markersize=8)
+            ax2.plot(
+                sizes,
+                bpi,
+                "o-",
+                label=bench_name,
+                linewidth=pu.LINE_WIDTH,
+                markersize=pu.MARKER_SIZE,
+            )
 
         pu.format_axis(
             ax2,
             xlabel="Input Size",
             ylabel="Bits Per Item",
-            title="Memory Efficiency (Bits Per Item)",
             xscale="log",
         )
 

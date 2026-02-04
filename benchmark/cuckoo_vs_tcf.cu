@@ -60,9 +60,9 @@ class TCFFixture : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-using CFFixture = CuckooFilterFixture<Config, LOAD_FACTOR>;
+using GCFFixture = CuckooFilterFixture<Config, LOAD_FACTOR>;
 
-static void CF_FPR(bm::State& state) {
+static void GCF_FPR(bm::State& state) {
     GPUTimer timer;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), LOAD_FACTOR);
 
@@ -227,10 +227,10 @@ static void TCF_FPR(bm::State& state) {
     cudaFree(d_misses);
 }
 
-DEFINE_AND_REGISTER_CORE_BENCHMARKS(CFFixture);
+DEFINE_AND_REGISTER_CORE_BENCHMARKS(GCFFixture);
 REGISTER_CORE_BENCHMARKS(TCFFixture);
 
-REGISTER_FUNCTION_BENCHMARK(CF_FPR);
+REGISTER_FUNCTION_BENCHMARK(GCF_FPR);
 REGISTER_FUNCTION_BENCHMARK(TCF_FPR);
 
 STANDARD_BENCHMARK_MAIN();

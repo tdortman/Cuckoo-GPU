@@ -18,7 +18,7 @@ import typer
 app = typer.Typer(help="Plot Speed of Light (SOL) benchmark results")
 
 METRICS = [
-    ("sm_throughput", "Compute (SM)"),
+    ("sm_throughput", "Compute"),
     ("memory_throughput", "Memory"),
     ("l1_throughput", "L1 Cache"),
     ("l2_throughput", "L2 Cache"),
@@ -91,25 +91,33 @@ def main(
                     capacities,
                     values,
                     label=metric_name,
-                    linewidth=2.5,
-                    markersize=8,
+                    linewidth=pu.LINE_WIDTH,
+                    markersize=pu.MARKER_SIZE,
                     **style,  # ty:ignore[invalid-argument-type]
                 )
 
-            ax.set_xlabel("Filter Capacity (elements)", fontsize=14, fontweight="bold")
-            ax.set_ylabel("Throughput (% of Peak)", fontsize=14, fontweight="bold")
-            ax.set_title(
-                f"SOL Throughput Analysis - {pu.get_filter_display_name(filter_type)} / {operation.capitalize()}",
-                fontsize=16,
+            ax.set_xlabel(
+                "Filter Capacity (elements)",
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
                 fontweight="bold",
-                pad=20,
+            )
+            ax.set_ylabel(
+                "Throughput (% of Peak)",
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
+                fontweight="bold",
             )
             ax.set_xscale("log", base=2)
             ax.set_ylim(0, 105)
-            ax.grid(True, which="both", ls="--", alpha=0.3)
-            ax.legend(fontsize=12, loc="best", framealpha=0.9)
+            ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+            ax.legend(
+                fontsize=pu.LEGEND_FONT_SIZE,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.12),
+                ncol=len(METRICS),
+                framealpha=pu.LEGEND_FRAME_ALPHA,
+            )
 
-            plt.tight_layout()
+            plt.tight_layout(rect=(0, 0, 1, 0.92))
 
             output_file = output_dir / f"sol_{filter_type}_{operation}.pdf"
             plt.savefig(output_file, bbox_inches="tight")
@@ -129,7 +137,8 @@ def main(
 
             fig, ax = plt.subplots(figsize=(12, 7))
 
-            for filter_type in sorted(op_subset["filter"].unique()):
+            filter_types = sorted(op_subset["filter"].unique())
+            for filter_type in filter_types:
                 filter_subset = op_subset[
                     op_subset["filter"] == filter_type
                 ].sort_values("capacity")
@@ -141,28 +150,34 @@ def main(
                 ax.plot(
                     filter_subset["capacity"].values,
                     filter_subset[metric_col].values,
-                    label=f"{pu.get_filter_display_name(filter_type)} ({metric_name.replace('_', ' ').title()})",
-                    linewidth=2.5,
-                    markersize=8,
+                    label=pu.get_filter_display_name(filter_type),
+                    linewidth=pu.LINE_WIDTH,
+                    markersize=pu.MARKER_SIZE,
                     **style,  # ty:ignore[invalid-argument-type]
                 )
 
-            ax.set_xlabel("Filter Capacity (elements)", fontsize=14, fontweight="bold")
-            ax.set_ylabel(
-                f"{metric_name} Throughput (% of Peak)", fontsize=14, fontweight="bold"
-            )
-            ax.set_title(
-                f"{metric_name} Throughput Comparison - {operation.capitalize()}",
-                fontsize=16,
+            ax.set_xlabel(
+                "Filter Capacity (elements)",
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
                 fontweight="bold",
-                pad=20,
+            )
+            ax.set_ylabel(
+                f"{metric_name} Throughput (% of Peak)",
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
+                fontweight="bold",
             )
             ax.set_xscale("log", base=2)
             ax.set_ylim(0, 105)
-            ax.grid(True, which="both", ls="--", alpha=0.3)
-            ax.legend(fontsize=12, loc="best", framealpha=0.9)
+            ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+            ax.legend(
+                fontsize=pu.LEGEND_FONT_SIZE,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.12),
+                ncol=len(filter_types),
+                framealpha=pu.LEGEND_FRAME_ALPHA,
+            )
 
-            plt.tight_layout()
+            plt.tight_layout(rect=(0, 0, 1, 0.92))
 
             output_file = output_dir / f"sol_compare_{metric_col}_{operation}.pdf"
             plt.savefig(
@@ -181,7 +196,7 @@ def main(
         if metric_col not in df.columns:
             continue
 
-        filters = ["cuckoo", "bloom", "tcf", "gqf"]
+        filters = ["gcf", "bbf", "tcf", "gqf"]
         available_filters = [f for f in filters if f in df["filter"].unique()]
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=False, sharey=False)
@@ -205,37 +220,41 @@ def main(
                     subset["capacity"].values,
                     subset[metric_col].values,
                     label=operation.capitalize(),
-                    linewidth=2.5,
-                    markersize=8,
+                    linewidth=pu.LINE_WIDTH,
+                    markersize=pu.MARKER_SIZE,
                     color=style.get("color"),
                     marker=marker,
                     linestyle="-",
                 )
 
-            ax.set_title(
-                pu.get_filter_display_name(filter_type),
-                fontsize=14,
-                fontweight="bold",
-            )
             ax.set_xscale("log", base=2)
             ax.set_ylim(0, 105)
-            ax.grid(True, which="both", ls="--", alpha=0.3)
-            ax.legend(fontsize=10, loc="best", framealpha=0)
+            ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+            ax.set_title(
+                pu.get_filter_display_name(filter_type),
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
+                fontweight="bold",
+            )
+            ax.legend(
+                fontsize=pu.LEGEND_FONT_SIZE,
+                loc="best",
+                framealpha=pu.LEGEND_FRAME_ALPHA,
+            )
 
         # Hide unused subplots if fewer than 4 filters
         for idx in range(len(available_filters), 4):
             axes[idx].set_visible(False)
 
         # Common axis labels
-        fig.supxlabel("Filter Capacity (elements)", fontsize=14, fontweight="bold")
-        fig.supylabel(
-            f"{metric_name} Throughput (% of Peak)", fontsize=14, fontweight="bold"
-        )
-        fig.suptitle(
-            f"{metric_name} Throughput by Filter",
-            fontsize=16,
+        fig.supxlabel(
+            "Filter Capacity (elements)",
+            fontsize=pu.AXIS_LABEL_FONT_SIZE,
             fontweight="bold",
-            y=1.02,
+        )
+        fig.supylabel(
+            f"{metric_name} Throughput (% of Peak)",
+            fontsize=pu.AXIS_LABEL_FONT_SIZE,
+            fontweight="bold",
         )
 
         plt.tight_layout()

@@ -66,7 +66,7 @@ def main(
 
     # Create 2x2 grid plots (one subplot per filter), per cache level
     for cache_level, metric_col in [("L1", "l1_hit_rate"), ("L2", "l2_hit_rate")]:
-        filters = ["cuckoo", "bloom", "tcf", "gqf"]
+        filters = ["gcf", "bbf", "tcf", "gqf"]
         available_filters = [f for f in filters if f in df["filter"].unique()]
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=False, sharey=False)
@@ -87,37 +87,41 @@ def main(
                     subset["capacity"].values,
                     subset[metric_col].values,
                     label=operation.capitalize(),
-                    linewidth=2.5,
-                    markersize=8,
+                    linewidth=pu.LINE_WIDTH,
+                    markersize=pu.MARKER_SIZE,
                     color=pu.FILTER_STYLES.get(filter_type, {}).get("color"),
                     marker=operation_markers.get(operation, "o"),
                     linestyle="-",
                 )
 
-            ax.set_title(
-                pu.get_filter_display_name(filter_type),
-                fontsize=14,
-                fontweight="bold",
-            )
             ax.set_xscale("log", base=2)
             ax.set_ylim(0, 105)
-            ax.grid(True, which="both", ls="--", alpha=0.3)
-            ax.legend(fontsize=10, loc="best", framealpha=0)
+            ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+            ax.set_title(
+                pu.get_filter_display_name(filter_type),
+                fontsize=pu.AXIS_LABEL_FONT_SIZE,
+                fontweight="bold",
+            )
+            ax.legend(
+                fontsize=pu.LEGEND_FONT_SIZE,
+                loc="best",
+                framealpha=pu.LEGEND_FRAME_ALPHA,
+            )
 
         # Hide unused subplots if fewer than 4 filters
         for idx in range(len(available_filters), 4):
             axes[idx].set_visible(False)
 
         # Common axis labels
-        fig.supxlabel("Filter Capacity (elements)", fontsize=14, fontweight="bold")
-        fig.supylabel(
-            f"{cache_level} Cache Hit Rate (%)", fontsize=14, fontweight="bold"
-        )
-        fig.suptitle(
-            f"{cache_level} Cache Hit Rate by Filter",
-            fontsize=16,
+        fig.supxlabel(
+            "Filter Capacity (elements)",
+            fontsize=pu.AXIS_LABEL_FONT_SIZE,
             fontweight="bold",
-            y=1.02,
+        )
+        fig.supylabel(
+            f"{cache_level} Cache Hit Rate (%)",
+            fontsize=pu.AXIS_LABEL_FONT_SIZE,
+            fontweight="bold",
         )
 
         plt.tight_layout()

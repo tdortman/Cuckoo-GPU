@@ -66,7 +66,7 @@ void ensureDeviceKeys() {
     }
 }
 
-static void GPUCF_Insert(bm::State& state) {
+static void GCF_Insert(bm::State& state) {
     GPUTimer timer;
     ensureDeviceKeys();
 
@@ -91,7 +91,7 @@ static void GPUCF_Insert(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void GPUCF_Query(bm::State& state) {
+static void GCF_Query(bm::State& state) {
     GPUTimer timer;
     ensureDeviceKeys();
 
@@ -118,7 +118,7 @@ static void GPUCF_Query(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void GPUCF_Delete(bm::State& state) {
+static void GCF_Delete(bm::State& state) {
     GPUTimer timer;
     ensureDeviceKeys();
 
@@ -348,7 +348,7 @@ static void GQF_Delete(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void Bloom_Insert(bm::State& state) {
+static void BBF_Insert(bm::State& state) {
     GPUTimer timer;
     ensureDeviceKeys();
 
@@ -380,7 +380,7 @@ static void Bloom_Insert(bm::State& state) {
     setCommonCounters(state, filterMemory, n);
 }
 
-static void Bloom_Query(bm::State& state) {
+static void BBF_Query(bm::State& state) {
     GPUTimer timer;
     ensureDeviceKeys();
 
@@ -424,17 +424,17 @@ static void Bloom_Query(bm::State& state) {
         ->Repetitions(5)            \
         ->ReportAggregatesOnly(true)
 
-BENCHMARK(GPUCF_Insert) KMER_CONFIG;
-BENCHMARK(GPUCF_Query) KMER_CONFIG;
-BENCHMARK(GPUCF_Delete) KMER_CONFIG;
+BENCHMARK(GCF_Insert) KMER_CONFIG;
+BENCHMARK(GCF_Query) KMER_CONFIG;
+BENCHMARK(GCF_Delete) KMER_CONFIG;
 BENCHMARK(TCF_Insert) KMER_CONFIG;
 BENCHMARK(TCF_Query) KMER_CONFIG;
 BENCHMARK(TCF_Delete) KMER_CONFIG;
 BENCHMARK(GQF_Insert) KMER_CONFIG;
 BENCHMARK(GQF_Query) KMER_CONFIG;
 BENCHMARK(GQF_Delete) KMER_CONFIG;
-BENCHMARK(Bloom_Insert) KMER_CONFIG;
-BENCHMARK(Bloom_Query) KMER_CONFIG;
+BENCHMARK(BBF_Insert) KMER_CONFIG;
+BENCHMARK(BBF_Query) KMER_CONFIG;
 
 int main(int argc, char** argv) {
     std::string kmerFile;

@@ -135,16 +135,33 @@ def main(
     for bench_name in benchmark_names:
         sizes = sorted(benchmark_data[bench_name].keys())
         throughput = [benchmark_data[bench_name][size] for size in sizes]
-        ax.plot(sizes, throughput, "o-", label=bench_name, linewidth=2.5, markersize=8)
+        ax.plot(
+            sizes,
+            throughput,
+            "o-",
+            label=bench_name,
+            linewidth=pu.LINE_WIDTH,
+            markersize=pu.MARKER_SIZE,
+        )
 
-    ax.set_xlabel("Input Size", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
+    ax.set_xlabel("Input Size", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
+    ax.set_ylabel(
+        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+    )
     ax.set_xscale("log", base=2)
     # ax.set_yscale("log")
-    ax.legend(fontsize=10, loc="best", ncol=2, framealpha=0)
-    ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.set_title("Throughput Comparison", fontsize=16, fontweight="bold")
-    plt.tight_layout()
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+
+    # Move legend above the plot
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        fontsize=pu.LEGEND_FONT_SIZE,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.15),
+        ncol=len(labels),
+        framealpha=pu.LEGEND_FRAME_ALPHA,
+    )
+    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "benchmark_throughput.pdf"
     pu.save_figure(None, output_file, f"Throughput plot saved to {output_file}")

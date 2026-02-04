@@ -72,11 +72,8 @@ def create_performance_heatmap(df: pd.DataFrame, operation: str, ax):
         else 2.0,
     )
 
-    ax.set_title(
-        f"{operation} Performance vs. Bucket Size", fontsize=14, fontweight="bold"
-    )
-    ax.set_xlabel("Bucket Size", fontsize=12)
-    ax.set_ylabel("Input Size", fontsize=12)
+    ax.set_xlabel("Bucket Size", fontsize=pu.AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Input Size", fontsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.set_yticklabels(
         [f"$2^{{{int(exp)}}}$" for exp in normalized_table.index], rotation=0
     )
@@ -138,5 +135,4 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
     app()

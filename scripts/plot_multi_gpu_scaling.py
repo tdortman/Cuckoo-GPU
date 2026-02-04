@@ -3,7 +3,6 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #   "matplotlib",
-#   "numpy",
 #   "pandas",
 #   "typer",
 # ]
@@ -13,7 +12,6 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import plot_utils as pu
 import typer
@@ -160,7 +158,7 @@ def plot_scaling_on_axis(
                 bar_width,
                 color=pu.OPERATION_COLORS.get(operation, "#999999"),
                 edgecolor="white",
-                linewidth=0.5,
+                linewidth=pu.BAR_EDGE_WIDTH,
                 hatch=hatch,
                 alpha=alpha,
             )
@@ -168,51 +166,36 @@ def plot_scaling_on_axis(
     # Set x-axis labels
     group_centers = [i * group_width for i in range(n_gpu_counts)]
     ax.set_xticks(group_centers)
-    ax.set_xticklabels([str(g) for g in gpu_counts], fontsize=12)
+    ax.set_xticklabels([str(g) for g in gpu_counts], fontsize=pu.DEFAULT_FONT_SIZE)
 
     if show_xlabel:
-        ax.set_xlabel("Number of GPUs", fontsize=14, fontweight="bold")
+        ax.set_xlabel(
+            "Number of GPUs", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        )
 
     if use_throughput:
-        ax.set_ylabel("Normalized Throughput", fontsize=14, fontweight="bold")
+        ax.set_ylabel(
+            "Normalized Throughput", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        )
     else:
-        ax.set_ylabel("Normalized Time", fontsize=14, fontweight="bold")
+        ax.set_ylabel(
+            "Normalized Time", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        )
 
-    # Build title with capacity info
-    if (
-        "capacity_per_gpu" in mode_df.columns
-        and not mode_df["capacity_per_gpu"].isna().all()
-    ):
-        if scaling_mode == "weak":
-            cap = mode_df["capacity_per_gpu"].iloc[0]
-            cap_exp = round(np.log2(cap)) if cap > 0 else 0
-            title = rf"Weak Scaling (${2}^{{{cap_exp}}}$ slots/GPU)"
-        else:
-            total_cap = (
-                mode_df["total_capacity"].iloc[0]
-                if "total_capacity" in mode_df.columns
-                else 0
-            )
-            total_exp = round(np.log2(total_cap)) if total_cap > 0 else 0
-            title = rf"Strong Scaling (${2}^{{{total_exp}}}$ total slots)"
-    else:
-        title = f"{scaling_mode.capitalize()} Scaling"
-
-    ax.set_title(title, fontsize=16, fontweight="bold")
-    ax.grid(True, which="both", ls="--", alpha=0.3, axis="y")
+    ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA, axis="y")
 
     legend_elements = [
         Patch(facecolor=pu.OPERATION_COLORS["Query"], label="Query"),
         Patch(
             facecolor=pu.OPERATION_COLORS["Insert"],
             hatch="//",
-            alpha=0.8,
+            alpha=pu.SCALING_BAR_ALPHA,
             label="Insert",
         ),
         Patch(
             facecolor=pu.OPERATION_COLORS["Delete"],
             hatch="--",
-            alpha=0.8,
+            alpha=pu.SCALING_BAR_ALPHA,
             label="Delete",
         ),
     ]
@@ -268,13 +251,14 @@ def main(
         if legend_elements:
             fig.legend(
                 handles=legend_elements,
-                fontsize=10,
-                loc="center left",
-                bbox_to_anchor=(1.0, 0.5),
-                framealpha=0.9,
+                fontsize=pu.LEGEND_FONT_SIZE,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.0),
+                ncol=len(legend_elements),
+                framealpha=pu.LEGEND_FRAME_ALPHA,
             )
 
-        plt.tight_layout()
+        plt.tight_layout(rect=(0, 0, 1, 0.95))
 
         output_path = output_dir / f"{mode}_scaling.pdf"
         pu.save_figure(fig, output_path, f"Saved plot to {output_path}")

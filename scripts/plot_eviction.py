@@ -109,24 +109,6 @@ def main(
         "-o",
         help="Output directory for plots (default: build/)",
     ),
-    label_top: Optional[str] = typer.Option(
-        None,
-        "--label-top",
-        "-lt",
-        help="Label to append to top plot title",
-    ),
-    label_middle: Optional[str] = typer.Option(
-        None,
-        "--label-middle",
-        "-lm",
-        help="Label to append to middle plot title",
-    ),
-    label_bottom: Optional[str] = typer.Option(
-        None,
-        "--label-bottom",
-        "-lb",
-        help="Label to append to bottom plot title",
-    ),
 ):
     """
     Generate eviction throughput plots from three benchmark CSV files.
@@ -139,13 +121,13 @@ def main(
     """
     # Load data from all three CSV files
     csv_files = [
-        (csv_file_top, "top", label_top),
-        (csv_file_middle, "middle", label_middle),
-        (csv_file_bottom, "bottom", label_bottom),
+        (csv_file_top, "top"),
+        (csv_file_middle, "middle"),
+        (csv_file_bottom, "bottom"),
     ]
 
     data_list = []
-    for csv_file, position, label in csv_files:
+    for csv_file, position in csv_files:
         eviction_data, total_evictions_data, throughput_data, capacity = load_csv_data(
             csv_file
         )
@@ -156,40 +138,36 @@ def main(
                 err=True,
             )
             raise typer.Exit(1)
-        data_list.append((throughput_data, capacity, label))
+        data_list.append((throughput_data, capacity))
 
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
 
     policy_styles = {
-        "BFS": {"color": "#2E86AB", "marker": "o", "linestyle": "-"},
-        "DFS": {"color": "#A23B72", "marker": "s", "linestyle": "--"},
+        "BFS": {**pu.FILTER_STYLES["gcf"], "linestyle": "-"},
+        "DFS": {**pu.FILTER_STYLES["bbf"], "linestyle": "--"},
     }
 
     # Create figure with 3 vertically stacked subplots
-    fig, axes = plt.subplots(3, 1, figsize=(12, 16), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
 
     all_handles = []
     all_labels = []
 
-    for idx, (ax, (throughput_data, capacity, label)) in enumerate(
-        zip(axes, data_list)
-    ):
+    for idx, (ax, (throughput_data, capacity)) in enumerate(zip(axes, data_list)):
         for policy in sorted(throughput_data.keys()):
             load_factors = sorted(throughput_data[policy].keys())
             throughputs = [
                 throughput_data[policy][lf] / 1e6 for lf in load_factors
             ]  # Convert to millions
 
-            style = policy_styles.get(policy, {"marker": "o", "linestyle": "-"})
+            style = policy_styles.get(policy, {})
             (line,) = ax.plot(
                 load_factors,
                 throughputs,
                 label=policy,
-                linewidth=2.5,
-                markersize=8,
-                color=style.get("color"),
-                marker=style.get("marker", "o"),
-                linestyle=style.get("linestyle", "-"),
+                linewidth=pu.LINE_WIDTH,
+                markersize=pu.MARKER_SIZE,
+                **style,
             )
 
             # Collect handles/labels from first plot only
@@ -199,28 +177,28 @@ def main(
 
         # Only show x-label on bottom plot
         if idx == 2:
-            ax.set_xlabel("Load Factor", fontsize=14, fontweight="bold")
+            ax.set_xlabel(
+                "Load Factor", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+            )
 
-        ax.set_ylabel("Throughput [M ops/s]", fontsize=14, fontweight="bold")
-        ax.grid(True, which="both", ls="--", alpha=0.3)
+        ax.set_ylabel(
+            "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        )
+        ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
 
-        title = pu.format_capacity_title("Insert Throughput", capacity)
-        if label:
-            title += f" ({label})"
-        ax.set_title(title, fontsize=16, fontweight="bold")
-
-    plt.tight_layout()
-
-    # Create combined legend outside on the right
+    # Create combined legend above the plots
     if all_handles:
         fig.legend(
             all_handles,
             all_labels,
-            fontsize=10,
-            loc="center left",
-            bbox_to_anchor=(1.0, 0.5),
-            framealpha=0,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=len(all_labels),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
         )
+
+    plt.tight_layout(rect=(0, 0, 1, 0.96))
 
     output_file = output_dir / "eviction_throughput.pdf"
     pu.save_figure(fig, output_file, f"Throughput plot saved to {output_file}")

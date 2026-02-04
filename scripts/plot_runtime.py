@@ -88,14 +88,20 @@ def main(
 
     fig, ax = pu.setup_figure(
         figsize=(12, 8),
-        title="Runtime Comparison",
     )
 
     for bench_name in benchmark_names:
         sizes = sorted(benchmark_data[bench_name].keys())
         times = [benchmark_data[bench_name][size] for size in sizes]
 
-        ax.plot(sizes, times, "o-", label=bench_name, linewidth=2.5, markersize=8)
+        ax.plot(
+            sizes,
+            times,
+            "o-",
+            label=bench_name,
+            linewidth=pu.LINE_WIDTH,
+            markersize=pu.MARKER_SIZE,
+        )
 
     pu.format_axis(
         ax,
