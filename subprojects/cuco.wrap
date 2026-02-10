@@ -1,4 +1,4 @@
 [wrap-git]
 url = https://github.com/NVIDIA/cuCollections.git
-revision = d3701ae8e7f2a08f25f9713e182692b4ca544112
+revision = 8333a0beb551bc1a46314840de3c28b855564ccb
 depth = 1

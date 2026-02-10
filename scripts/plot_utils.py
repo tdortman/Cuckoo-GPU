@@ -21,6 +21,7 @@ FILTER_STYLES = {
     "tcf": {"color": "#C73E1D", "marker": "^"},
     "gqf": {"color": "#F18F01", "marker": "D"},
     "pcf": {"color": "#6A994E", "marker": "D"},
+    "dm":  {"color": "#9932CC", "marker": "*"},
 }
 
 FILTER_COLORS = {
@@ -30,6 +31,7 @@ FILTER_COLORS = {
     "Two-Choice": FILTER_STYLES["tcf"]["color"],
     "GPU Quotient": FILTER_STYLES["gqf"]["color"],
     "Partitioned Cuckoo": FILTER_STYLES["pcf"]["color"],
+    "Dynamic Map": FILTER_STYLES["dm"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
@@ -39,6 +41,7 @@ FILTER_DISPLAY_NAMES = {
     "gqf": "GPU Quotient",
     "pcf": "Partitioned Cuckoo",
     "bbf": "Blocked Bloom",
+    "dm": "Dynamic Map",
 }
 
 OPERATION_COLORS = {

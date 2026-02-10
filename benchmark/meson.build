@@ -66,6 +66,11 @@ benchmarks = {
         'deps': [tcf_dep],
         'extra_args': ['-w'],
     },
+    'cuckoo-vs-dynamic-map': {
+        'src': 'cuckoo_vs_dynamic_map.cu',
+        'deps': [cuco_dep],
+        'extra_args': ['-w'],
+    },
     'load-factor': {
         'src': 'load_factor_benchmark.cu',
         'deps': [cuco_dep, tcf_dep, gqf_dep] + (is_x86_64 ? [partitioned_dep] : []),
