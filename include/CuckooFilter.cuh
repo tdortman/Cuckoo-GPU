@@ -466,7 +466,7 @@ struct CuckooFilter {
     ) {
         PackedTagType* d_packedTags;
 
-        CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
+        CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
 
         size_t numBlocks = SDIV(n, blockSize);
 
@@ -477,23 +477,36 @@ struct CuckooFilter {
         size_t tempStorageBytes = 0;
 
         cub::DeviceRadixSort::SortKeys(
-            d_tempStorage, tempStorageBytes, d_packedTags, d_packedTags, n
+            d_tempStorage,
+            tempStorageBytes,
+            d_packedTags,
+            d_packedTags,
+            n,
+            0,
+            sizeof(PackedTagType) * 8,
+            stream
         );
 
-        CUDA_CALL(cudaMalloc(&d_tempStorage, tempStorageBytes));
+        CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
 
         cub::DeviceRadixSort::SortKeys(
-            d_tempStorage, tempStorageBytes, d_packedTags, d_packedTags, n
+            d_tempStorage,
+            tempStorageBytes,
+            d_packedTags,
+            d_packedTags,
+            n,
+            0,
+            sizeof(PackedTagType) * 8,
+            stream
         );
 
-        CUDA_CALL(cudaFree(d_tempStorage));
+        CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
         insertKernelSorted<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this);
 
+        CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
         CUDA_CALL(cudaStreamSynchronize(stream));
-
-        CUDA_CALL(cudaFree(d_packedTags));
 
         return occupiedSlots();
     }
