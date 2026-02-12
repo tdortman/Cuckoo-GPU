@@ -117,7 +117,7 @@ For workloads that exceed single GPU capacity:
 
 cuckoogpu::FilterMultiGPU<Config> filter(numGPUs, totalCapacity);
 filter.insertMany(h_keys, numKeys);
-filter.containsMany(h_keys, h_results, numKeys);
+filter.containsMany(h_keys, numKeys, h_results);
 ```
 
 ## Project Structure
