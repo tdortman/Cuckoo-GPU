@@ -1,6 +1,6 @@
 # GPU-Accelerated Cuckoo Filter
 
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tdortman.github.io/cuckoo-filter/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tdortman.github.io/Cuckoo-GPU/)
 
 A high-performance CUDA implementation of the Cuckoo Filter data structure, developed as part of the thesis "Design and Evaluation of a GPU-Accelerated Cuckoo Filter".
 
@@ -123,14 +123,14 @@ filter.containsMany(h_keys, h_results, numKeys);
 ## Project Structure
 
 ```
-include/           - Header files
+include/cuckoogpu/   - Header files
   CuckooFilter.cuh           - Main filter implementation
   CuckooFilterMultiGPU.cuh   - Multi-GPU implementation
   CuckooFilterIPC.cuh        - IPC support
   bucket_policies.cuh        - Alternative bucket policies
   helpers.cuh                - Helper functions
-src/               - Example applications
-benchmark/         - benchmarks
-tests/             - Unit tests
-scripts/           - Scripts for running/plotting benchmarks
+src/                 - Example applications
+benchmark/           - benchmarks
+tests/               - Unit tests
+scripts/             - Scripts for running/plotting benchmarks
 ```

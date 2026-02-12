@@ -1,5 +1,5 @@
 project(
-    'cuckoo-filter-cuda',
+    'Cuckoo-GPU',
     ['cuda', 'cpp'],
     version: '0.1',
     meson_version: '>= 1.3.0',
