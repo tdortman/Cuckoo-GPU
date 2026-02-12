@@ -77,7 +77,13 @@ class CuckooFilter;
  */
 template <typename Config>
 __global__ void
-insertKernel(const typename Config::KeyType* keys, size_t n, CuckooFilter<Config>* filter);
+insertKernel(
+    const typename Config::KeyType* keys,
+    bool* output,
+    size_t n,
+    CuckooFilter<Config>* filter,
+    uint32_t* evictionAttempts
+);
 
 /**
  * @brief Kernel for inserting pre-sorted keys into the filter.
@@ -85,8 +91,10 @@ insertKernel(const typename Config::KeyType* keys, size_t n, CuckooFilter<Config
 template <typename Config>
 __global__ void insertKernelSorted(
     const typename CuckooFilter<Config>::PackedTagType* packedTags,
+    bool* output,
     size_t n,
-    CuckooFilter<Config>* filter
+    CuckooFilter<Config>* filter,
+    uint32_t* evictionAttempts
 );
 
 /**
@@ -440,12 +448,42 @@ struct CuckooFilter {
         cudaStream_t stream = {}
     ) {
         size_t numBlocks = SDIV(n, blockSize);
-        insertKernel<Config><<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
+        insertKernel<Config>
+            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, nullptr);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
+
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+    /**
+     * @brief Inserts a batch of keys and records per-attempt eviction counts.
+     *
+     * @param d_keys Pointer to device memory containing keys to insert.
+     * @param n Number of keys to insert.
+     * @param d_evictionAttempts Device output array of size n. Each entry stores the number of
+     * evictions performed by the corresponding insertion attempt.
+     * @param d_output Optional pointer to an output array indicating per-key insertion success.
+     * @param stream CUDA stream to use for the operation.
+     * @return size_t Total number of occupied slots after insertion.
+     */
+    size_t insertManyWithEvictionCounts(
+        const T* d_keys,
+        const size_t n,
+        uint32_t* d_evictionAttempts,
+        bool* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
+        size_t numBlocks = SDIV(n, blockSize);
+        insertKernel<Config>
+            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, d_evictionAttempts);
+
+        CUDA_CALL(cudaStreamSynchronize(stream));
+
+        return occupiedSlots();
+    }
+#endif
 
     /**
      * @brief This pre-sorts the input keys based on the primary bucket index to allow for
@@ -503,13 +541,81 @@ struct CuckooFilter {
         CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
         insertKernelSorted<Config>
-            <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this);
+            <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this, nullptr);
 
         CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
         CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
+
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+    /**
+     * @brief Inserts a pre-sorted batch of keys and records per-attempt eviction counts.
+     *
+     * @param d_keys Pointer to device memory containing keys to insert.
+     * @param n Number of keys to insert.
+     * @param d_evictionAttempts Device output array of size n. Each entry stores the number of
+     * evictions performed by the corresponding insertion attempt.
+     * @param d_output Optional pointer to an output array indicating per-key insertion success.
+     * @param stream CUDA stream to use for the operation.
+     * @return size_t Updated number of occupied slots in the filter.
+     */
+    size_t insertManySortedWithEvictionCounts(
+        const T* d_keys,
+        const size_t n,
+        uint32_t* d_evictionAttempts,
+        bool* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
+        PackedTagType* d_packedTags;
+
+        CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
+
+        size_t numBlocks = SDIV(n, blockSize);
+
+        computePackedTagsKernel<Config>
+            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_packedTags, n, numBuckets);
+
+        void* d_tempStorage = nullptr;
+        size_t tempStorageBytes = 0;
+
+        cub::DeviceRadixSort::SortKeys(
+            d_tempStorage,
+            tempStorageBytes,
+            d_packedTags,
+            d_packedTags,
+            n,
+            0,
+            sizeof(PackedTagType) * 8,
+            stream
+        );
+
+        CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
+
+        cub::DeviceRadixSort::SortKeys(
+            d_tempStorage,
+            tempStorageBytes,
+            d_packedTags,
+            d_packedTags,
+            n,
+            0,
+            sizeof(PackedTagType) * 8,
+            stream
+        );
+
+        CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
+
+        insertKernelSorted<Config><<<numBlocks, blockSize, 0, stream>>>(
+            d_packedTags, d_output, n, this, d_evictionAttempts
+        );
+
+        CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
+        CUDA_CALL(cudaStreamSynchronize(stream));
+
+        return occupiedSlots();
+    }
+#endif
 
     /**
      * @brief Checks for the existence of a batch of keys.
@@ -607,6 +713,43 @@ struct CuckooFilter {
         return insertMany(thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr, stream);
     }
 
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+    /**
+     * @brief Inserts keys from a Thrust device vector and records per-attempt eviction counts.
+     * @param d_keys Vector of keys to insert.
+     * @param d_evictionAttempts Vector to store per-key eviction counts. Resized if necessary.
+     * @param d_output Optional vector to store per-key insertion success. Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertManyWithEvictionCounts(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<uint32_t>& d_evictionAttempts,
+        thrust::device_vector<uint8_t>* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
+        if (d_evictionAttempts.size() != d_keys.size()) {
+            d_evictionAttempts.resize(d_keys.size());
+        }
+
+        bool* d_outputPtr = nullptr;
+        if (d_output != nullptr) {
+            if (d_output->size() != d_keys.size()) {
+                d_output->resize(d_keys.size());
+            }
+            d_outputPtr = reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output->data()));
+        }
+
+        return insertManyWithEvictionCounts(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_evictionAttempts.data()),
+            d_outputPtr,
+            stream
+        );
+    }
+#endif
+
     /**
      * @brief Inserts keys from a Thrust device vector, sorting them first.
      * @param d_keys Vector of keys to insert.
@@ -665,6 +808,44 @@ struct CuckooFilter {
             thrust::raw_pointer_cast(d_keys.data()), d_keys.size(), nullptr, stream
         );
     }
+
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+    /**
+     * @brief Inserts keys from a Thrust device vector, sorting first, and records per-attempt
+     * eviction counts.
+     * @param d_keys Vector of keys to insert.
+     * @param d_evictionAttempts Vector to store per-key eviction counts. Resized if necessary.
+     * @param d_output Optional vector to store per-key insertion success. Resized if necessary.
+     * @param stream CUDA stream.
+     * @return size_t Total number of occupied slots.
+     */
+    size_t insertManySortedWithEvictionCounts(
+        const thrust::device_vector<T>& d_keys,
+        thrust::device_vector<uint32_t>& d_evictionAttempts,
+        thrust::device_vector<uint8_t>* d_output = nullptr,
+        cudaStream_t stream = {}
+    ) {
+        if (d_evictionAttempts.size() != d_keys.size()) {
+            d_evictionAttempts.resize(d_keys.size());
+        }
+
+        bool* d_outputPtr = nullptr;
+        if (d_output != nullptr) {
+            if (d_output->size() != d_keys.size()) {
+                d_output->resize(d_keys.size());
+            }
+            d_outputPtr = reinterpret_cast<bool*>(thrust::raw_pointer_cast(d_output->data()));
+        }
+
+        return insertManySortedWithEvictionCounts(
+            thrust::raw_pointer_cast(d_keys.data()),
+            d_keys.size(),
+            thrust::raw_pointer_cast(d_evictionAttempts.data()),
+            d_outputPtr,
+            stream
+        );
+    }
+#endif
 
     /**
      * @brief Checks for existence of keys in a Thrust device vector.
@@ -1004,7 +1185,11 @@ struct CuckooFilter {
      * @param startBucket Index of the bucket to start the search from
      * @return true if the insertion was successful, false otherwise
      */
-    __device__ bool insertWithEvictionDFS(TagType fp, size_t startBucket) {
+    __device__ bool insertWithEvictionDFS(
+        TagType fp,
+        size_t startBucket,
+        uint32_t* evictionAttempts = nullptr
+    ) {
         TagType currentFp = fp;
         size_t currentBucket = startBucket;
 
@@ -1028,6 +1213,9 @@ struct CuckooFilter {
 
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
             d_numEvictions->fetch_add(1, cuda::memory_order_relaxed);
+            if (evictionAttempts != nullptr) {
+                (*evictionAttempts)++;
+            }
 #endif
 
             currentFp = evictedFp;
@@ -1054,7 +1242,11 @@ struct CuckooFilter {
      * @param startBucket Index of the bucket to start the search from
      * @return true if the insertion was successful, false otherwise
      */
-    __device__ bool insertWithEvictionBFS(TagType fp, size_t startBucket) {
+    __device__ bool insertWithEvictionBFS(
+        TagType fp,
+        size_t startBucket,
+        uint32_t* evictionAttempts = nullptr
+    ) {
         constexpr size_t numCandidates = std::max(1UL, bucketSize / 2);
 
         Bucket& bucket = d_buckets[startBucket];
@@ -1093,6 +1285,9 @@ struct CuckooFilter {
                         )) {
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
                         d_numEvictions->fetch_add(1, cuda::memory_order_relaxed);
+                        if (evictionAttempts != nullptr) {
+                            (*evictionAttempts)++;
+                        }
 #endif
                         return true;
                     }
@@ -1104,7 +1299,7 @@ struct CuckooFilter {
         }
 
         // fall back to greedy DFS
-        return insertWithEvictionDFS(fp, startBucket);
+        return insertWithEvictionDFS(fp, startBucket, evictionAttempts);
     }
 
     /**
@@ -1116,7 +1311,7 @@ struct CuckooFilter {
      * @return true if insertion succeeded, false if the filter is too full (max evictions
      * reached).
      */
-    __device__ bool insert(const T& key) {
+    __device__ bool insert(const T& key, uint32_t* evictionAttempts = nullptr) {
         auto [i1, i2, fp1, fp2] = getCandidateBucketsAndFPs(key, numBuckets);
 
         // For all policies: fp1 is for bucket i1, fp2 is for bucket i2
@@ -1136,9 +1331,9 @@ struct CuckooFilter {
         }
 
         if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
-            return insertWithEvictionBFS(evictFp, startBucket);
+            return insertWithEvictionBFS(evictFp, startBucket, evictionAttempts);
         } else if constexpr (Config::evictionPolicy == EvictionPolicy::DFS) {
-            return insertWithEvictionDFS(evictFp, startBucket);
+            return insertWithEvictionDFS(evictFp, startBucket, evictionAttempts);
         } else {
             static_assert(
                 Config::evictionPolicy == EvictionPolicy::DFS ||
@@ -1182,7 +1377,8 @@ __global__ void insertKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter
+    CuckooFilter<Config>* filter,
+    uint32_t* evictionAttempts
 ) {
     using BlockReduce = cub::BlockReduce<int32_t, Config::blockSize>;
     __shared__ typename BlockReduce::TempStorage tempStorage;
@@ -1192,10 +1388,15 @@ __global__ void insertKernel(
     int32_t success = 0;
 
     if (idx < n) {
-        success = filter->insert(keys[idx]);
+        uint32_t threadEvictions = 0;
+        success = filter->insert(keys[idx], &threadEvictions);
 
         if (output != nullptr) {
             output[idx] = success;
+        }
+
+        if (evictionAttempts != nullptr) {
+            evictionAttempts[idx] = threadEvictions;
         }
     }
 
@@ -1280,7 +1481,8 @@ __global__ void insertKernelSorted(
     const typename CuckooFilter<Config>::PackedTagType* packedTags,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter
+    CuckooFilter<Config>* filter,
+    uint32_t* evictionAttempts
 ) {
     using BlockReduce = cub::BlockReduce<int, Config::blockSize>;
     __shared__ typename BlockReduce::TempStorage tempStorage;
@@ -1295,6 +1497,7 @@ __global__ void insertKernelSorted(
     constexpr TagType fpMask = (1ULL << bitsPerTag) - 1;
 
     int32_t success = 0;
+    uint32_t threadEvictions = 0;
     if (idx < n) {
         PackedTagType packedTag = packedTags[idx];
         size_t primaryBucket = packedTag >> bitsPerTag;
@@ -1319,9 +1522,9 @@ __global__ void insertKernelSorted(
                 }
 
                 if constexpr (Config::evictionPolicy == EvictionPolicy::BFS) {
-                    success = filter->insertWithEvictionBFS(evictFp, startBucket);
+                    success = filter->insertWithEvictionBFS(evictFp, startBucket, &threadEvictions);
                 } else if constexpr (Config::evictionPolicy == EvictionPolicy::DFS) {
-                    success = filter->insertWithEvictionDFS(evictFp, startBucket);
+                    success = filter->insertWithEvictionDFS(evictFp, startBucket, &threadEvictions);
                 } else {
                     static_assert(
                         Config::evictionPolicy == EvictionPolicy::DFS ||
@@ -1334,6 +1537,10 @@ __global__ void insertKernelSorted(
 
         if (output != nullptr) {
             output[idx] = success;
+        }
+
+        if (evictionAttempts != nullptr) {
+            evictionAttempts[idx] = threadEvictions;
         }
     }
 

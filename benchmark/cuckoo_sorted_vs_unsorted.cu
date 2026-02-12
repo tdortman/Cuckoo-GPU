@@ -72,7 +72,7 @@ BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
 
         timer.start();
         insertKernelSorted<Config>
-            <<<numBlocks, Config::blockSize>>>(d_packedTags, nullptr, n, filter.get());
+            <<<numBlocks, Config::blockSize>>>(d_packedTags, nullptr, n, filter.get(), nullptr);
         cudaDeviceSynchronize();
         double elapsed = timer.elapsed();
 
