@@ -21,7 +21,7 @@ cuda_args = [
     '-gencode=arch=compute_75,code=compute_75',
 ]
 
-gpu_cuckoo_dep = declare_dependency(
+cuckoogpu_dep = declare_dependency(
     include_directories: include_directories('include'),
 )
 

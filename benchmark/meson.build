@@ -29,7 +29,7 @@ gqf_dep = gpu_filters.get_variable('gqf_dep')
 gqf_deps = gpu_filters.get_variable('gqf_deps')
 tcf_dep = gpu_filters.get_variable('tcf_dep')
 
-bench_deps = [gpu_cuckoo_dep, benchmark_dep, cpu_cuckoo_dep]
+bench_deps = [cuckoogpu_dep, benchmark_dep, cpu_cuckoo_dep]
 
 benchmarks = {
     'cuckoo-vs-bloom': {
@@ -133,7 +133,7 @@ endforeach
 executable(
     'profiler',
     'profiler_benchmark.cu',
-    dependencies: [gpu_cuckoo_dep, cli11_dep, cuco_dep, tcf_dep, benchmark_dep, gqf_dep],
+    dependencies: [cuckoogpu_dep, cli11_dep, cuco_dep, tcf_dep, benchmark_dep, gqf_dep],
     cuda_args: cuda_args,
     install: false,
 )

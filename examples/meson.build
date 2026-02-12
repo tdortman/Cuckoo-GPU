@@ -9,7 +9,7 @@ foreach name, config : examples
     executable(
         name,
         config['src'],
-        dependencies: [gpu_cuckoo_dep, cli11_dep] + config.get('deps', []),
+        dependencies: [cuckoogpu_dep, cli11_dep] + config.get('deps', []),
         cuda_args: cuda_args,
         install: true,
     )
