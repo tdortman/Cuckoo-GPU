@@ -76,8 +76,7 @@ class CuckooFilter;
  * @brief Kernel for inserting keys into the filter.
  */
 template <typename Config>
-__global__ void
-insertKernel(
+__global__ void insertKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
@@ -1185,11 +1184,8 @@ struct CuckooFilter {
      * @param startBucket Index of the bucket to start the search from
      * @return true if the insertion was successful, false otherwise
      */
-    __device__ bool insertWithEvictionDFS(
-        TagType fp,
-        size_t startBucket,
-        uint32_t* evictionAttempts = nullptr
-    ) {
+    __device__ bool
+    insertWithEvictionDFS(TagType fp, size_t startBucket, uint32_t* evictionAttempts = nullptr) {
         TagType currentFp = fp;
         size_t currentBucket = startBucket;
 
@@ -1242,11 +1238,8 @@ struct CuckooFilter {
      * @param startBucket Index of the bucket to start the search from
      * @return true if the insertion was successful, false otherwise
      */
-    __device__ bool insertWithEvictionBFS(
-        TagType fp,
-        size_t startBucket,
-        uint32_t* evictionAttempts = nullptr
-    ) {
+    __device__ bool
+    insertWithEvictionBFS(TagType fp, size_t startBucket, uint32_t* evictionAttempts = nullptr) {
         constexpr size_t numCandidates = std::max(1UL, bucketSize / 2);
 
         Bucket& bucket = d_buckets[startBucket];
