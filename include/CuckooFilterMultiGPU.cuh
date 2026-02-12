@@ -22,6 +22,8 @@
 #include <gossip.cuh>
 #include <plan_parser.hpp>
 
+namespace cuckoogpu {
+
 /**
  * @brief A multi-GPU implementation of the Cuckoo Filter.
  *
@@ -32,7 +34,7 @@
  * @tparam Config The configuration structure for the Cuckoo Filter.
  */
 template <typename Config>
-class CuckooFilterMultiGPU {
+class FilterMultiGPU {
    public:
     using T = typename Config::KeyType;
 
@@ -46,7 +48,7 @@ class CuckooFilterMultiGPU {
         size_t numGPUs;
 
         __host__ __device__ gossip::gpu_id_t operator()(const T& key) const {
-            uint64_t hash = CuckooFilter<Config>::hash64(key);
+            uint64_t hash = Filter<Config>::hash64(key);
             return static_cast<gossip::gpu_id_t>(hash % numGPUs);
         }
     };
@@ -58,7 +60,7 @@ class CuckooFilterMultiGPU {
     size_t numGPUs;
     size_t capacityPerGPU;
     float memoryFactor;
-    std::vector<CuckooFilter<Config>*> filters;
+    std::vector<Filter<Config>*> filters;
 
     gossip::context_t gossipContext;
     gossip::multisplit_t multisplit;
@@ -162,7 +164,7 @@ class CuckooFilterMultiGPU {
      * @param h_keys Pointer to host memory containing keys to process.
      * @param n Number of keys to process.
      * @param h_output Optional pointer to host memory to store the boolean results.
-     * @param filterOp The specific CuckooFilter operation to execute.
+     * @param filterOp The specific Filter operation to execute.
      * @tparam returnOccupied If true, returns total occupied slots after operation.
      * @tparam hasOutput If true, expects an output buffer for results.
      * @return Total occupied slots if returnOccupied is true, otherwise 0.
@@ -310,15 +312,16 @@ class CuckooFilterMultiGPU {
 
    public:
     /**
-     * @brief Constructs a new CuckooFilterMultiGPU with default transfer plan.
+     * @brief Constructs a new FilterMultiGPU with default transfer plan.
      *
-     * Initializes gossip context, multisplit, all-to-all primitives, and CuckooFilter instances
+     * Initializes gossip context, multisplit, all-to-all primitives, and Filter instances
      * on each available GPU.
      *
      * @param numGPUs Number of GPUs to use.
      * @param capacity Total capacity of the distributed filter.
+     * @param memFactor Fraction of free GPU memory to use for buffers.
      */
-    CuckooFilterMultiGPU(size_t numGPUs, size_t capacity, float memFactor = defaultMemoryFactor)
+    FilterMultiGPU(size_t numGPUs, size_t capacity, float memFactor = defaultMemoryFactor)
         : numGPUs(numGPUs),
           capacityPerGPU(static_cast<size_t>(SDIV(capacity, numGPUs) * 1.02)),
           memoryFactor(memFactor),
@@ -338,9 +341,9 @@ class CuckooFilterMultiGPU {
 
         for (size_t i = 0; i < numGPUs; ++i) {
             CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
-            CuckooFilter<Config>* filter;
-            CUDA_CALL(cudaMallocManaged(&filter, sizeof(CuckooFilter<Config>)));
-            new (filter) CuckooFilter<Config>(capacityPerGPU);
+            Filter<Config>* filter;
+            CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
+            new (filter) Filter<Config>(capacityPerGPU);
             filters[i] = filter;
         }
         gossipContext.sync_hard();
@@ -349,17 +352,18 @@ class CuckooFilterMultiGPU {
     }
 
     /**
-     * @brief Constructs a new CuckooFilterMultiGPU with custom transfer plan.
+     * @brief Constructs a new FilterMultiGPU with custom transfer plan.
      *
      * Initializes gossip context, multisplit, all-to-all primitives with provided
-     * transfer plan loaded from file, and CuckooFilter instances on each available GPU.
+     * transfer plan loaded from file, and Filter instances on each available GPU.
      *
      * @param numGPUs Number of GPUs to use.
      * @param capacity Total capacity of the distributed filter.
      * @param transferPlanPath Path to gossip transfer plan file for optimized topology-aware
      * transfers.
+     * @param memFactor Fraction of free GPU memory to use for buffers.
      */
-    CuckooFilterMultiGPU(
+    FilterMultiGPU(
         size_t numGPUs,
         size_t capacity,
         const char* transferPlanPath,
@@ -402,9 +406,9 @@ class CuckooFilterMultiGPU {
 
         for (size_t i = 0; i < numGPUs; ++i) {
             CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
-            CuckooFilter<Config>* filter;
-            CUDA_CALL(cudaMallocManaged(&filter, sizeof(CuckooFilter<Config>)));
-            new (filter) CuckooFilter<Config>(capacityPerGPU);
+            Filter<Config>* filter;
+            CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
+            new (filter) Filter<Config>(capacityPerGPU);
             filters[i] = filter;
         }
         gossipContext.sync_hard();
@@ -413,21 +417,21 @@ class CuckooFilterMultiGPU {
     }
 
     /**
-     * @brief Destroys the CuckooFilterMultiGPU.
+     * @brief Destroys the FilterMultiGPU.
      *
      * Cleans up filter instances and pre-allocated buffers.
      */
-    ~CuckooFilterMultiGPU() {
+    ~FilterMultiGPU() {
         freeBuffers();
         for (size_t i = 0; i < numGPUs; ++i) {
             CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
-            filters[i]->~CuckooFilter<Config>();
+            filters[i]->~Filter<Config>();
             CUDA_CALL(cudaFree(filters[i]));
         }
     }
 
-    CuckooFilterMultiGPU(const CuckooFilterMultiGPU&) = delete;
-    CuckooFilterMultiGPU& operator=(const CuckooFilterMultiGPU&) = delete;
+    FilterMultiGPU(const FilterMultiGPU&) = delete;
+    FilterMultiGPU& operator=(const FilterMultiGPU&) = delete;
 
     /**
      * @brief Inserts a batch of keys into the distributed filter.
@@ -444,7 +448,7 @@ class CuckooFilterMultiGPU {
                 h_keys,
                 n,
                 h_output,
-                [](CuckooFilter<Config>* filter,
+                [](Filter<Config>* filter,
                    const T* keys,
                    bool* results,
                    size_t count,
@@ -455,7 +459,7 @@ class CuckooFilterMultiGPU {
                 h_keys,
                 n,
                 nullptr,
-                [](CuckooFilter<Config>* filter,
+                [](Filter<Config>* filter,
                    const T* keys,
                    bool* /*unused results*/,
                    size_t count,
@@ -475,7 +479,7 @@ class CuckooFilterMultiGPU {
             h_keys,
             n,
             h_output,
-            [](CuckooFilter<Config>* filter,
+            [](Filter<Config>* filter,
                const T* keys,
                bool* results,
                size_t count,
@@ -496,7 +500,7 @@ class CuckooFilterMultiGPU {
                 h_keys,
                 n,
                 h_output,
-                [](CuckooFilter<Config>* filter,
+                [](Filter<Config>* filter,
                    const T* keys,
                    bool* results,
                    size_t count,
@@ -507,7 +511,7 @@ class CuckooFilterMultiGPU {
                 h_keys,
                 n,
                 nullptr,
-                [](CuckooFilter<Config>* filter,
+                [](Filter<Config>* filter,
                    const T* keys,
                    bool* /*unused results*/,
                    size_t count,
@@ -703,3 +707,5 @@ class CuckooFilterMultiGPU {
         return deleteMany(thrust::raw_pointer_cast(h_keys.data()), h_keys.size(), nullptr);
     }
 };
+
+}  // namespace cuckoogpu

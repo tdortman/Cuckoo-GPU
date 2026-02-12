@@ -156,8 +156,22 @@ void parseCustomArgs(int argc, char** argv, std::vector<char*>& benchmarkArgv) {
     }
 }
 
-using BFSConfig = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy, EvictionPolicy::BFS>;
-using DFSConfig = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy, EvictionPolicy::DFS>;
+using BFSConfig = cuckoogpu::Config<
+    uint64_t,
+    16,
+    500,
+    256,
+    16,
+    cuckoogpu::XorAltBucketPolicy,
+    cuckoogpu::EvictionPolicy::BFS>;
+using DFSConfig = cuckoogpu::Config<
+    uint64_t,
+    16,
+    500,
+    256,
+    16,
+    cuckoogpu::XorAltBucketPolicy,
+    cuckoogpu::EvictionPolicy::DFS>;
 
 static constexpr double PREFILL_FRACTION = 0.75;
 
@@ -205,7 +219,7 @@ class EvictionBenchmarkFixture : public benchmark::Fixture {
             d_keysMeasured, nMeasured, static_cast<uint64_t>(UINT32_MAX) + 1, UINT64_MAX
         );
 
-        filter = std::make_unique<CuckooFilter<ConfigType>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<ConfigType>>(capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -241,7 +255,7 @@ class EvictionBenchmarkFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<uint64_t> d_keysPrefill;
     thrust::device_vector<uint64_t> d_keysMeasured;
-    std::unique_ptr<CuckooFilter<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::Filter<ConfigType>> filter;
     GPUTimer timer;
 };
 

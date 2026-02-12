@@ -14,6 +14,8 @@
 #include "hashutil.cuh"
 #include "helpers.cuh"
 
+namespace cuckoogpu {
+
 /**
  * @brief Eviction policy for the Cuckoo Filter.
  */
@@ -46,7 +48,7 @@ template <
     template <typename, typename, size_t, size_t> class AltBucketPolicy_ = XorAltBucketPolicy,
     EvictionPolicy evictionPolicy_ = EvictionPolicy::BFS,
     typename WordType_ = uint64_t>
-struct CuckooConfig {
+struct Config {
     using KeyType = T;
     static constexpr size_t bitsPerTag = bitsPerTag_;
     static constexpr size_t maxEvictions = maxEvictions_;
@@ -70,7 +72,9 @@ struct CuckooConfig {
 };
 
 template <typename Config>
-class CuckooFilter;
+class Filter;
+
+namespace detail {
 
 /**
  * @brief Kernel for inserting keys into the filter.
@@ -80,7 +84,7 @@ __global__ void insertKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter,
+    Filter<Config>* filter,
     uint32_t* evictionAttempts
 );
 
@@ -89,10 +93,10 @@ __global__ void insertKernel(
  */
 template <typename Config>
 __global__ void insertKernelSorted(
-    const typename CuckooFilter<Config>::PackedTagType* packedTags,
+    const typename Filter<Config>::PackedTagType* packedTags,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter,
+    Filter<Config>* filter,
     uint32_t* evictionAttempts
 );
 
@@ -102,7 +106,7 @@ __global__ void insertKernelSorted(
 template <typename Config>
 __global__ void computePackedTagsKernel(
     const typename Config::KeyType* keys,
-    typename CuckooFilter<Config>::PackedTagType* packedTags,
+    typename Filter<Config>::PackedTagType* packedTags,
     size_t n,
     size_t numBuckets
 );
@@ -115,19 +119,17 @@ __global__ void containsKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter
+    Filter<Config>* filter
 );
 
 /**
  * @brief Kernel for deleting keys.
  */
 template <typename Config>
-__global__ void deleteKernel(
-    const typename Config::KeyType* keys,
-    bool* output,
-    size_t n,
-    CuckooFilter<Config>* filter
-);
+__global__ void
+deleteKernel(const typename Config::KeyType* keys, bool* output, size_t n, Filter<Config>* filter);
+
+}  // namespace detail
 
 /**
  * @brief A CUDA-accelerated Cuckoo Filter implementation.
@@ -139,7 +141,7 @@ __global__ void deleteKernel(
  * @tparam Config The configuration structure defining filter parameters.
  */
 template <typename Config>
-struct CuckooFilter {
+struct Filter {
     using T = typename Config::KeyType;
     static constexpr size_t bitsPerTag = Config::bitsPerTag;
 
@@ -156,7 +158,7 @@ struct CuckooFilter {
         "The tag must be 8, 16 or 32 bits"
     );
 
-    static_assert(powerOfTwo(bucketSize), "Bucket size must be a power of 2");
+    static_assert(detail::powerOfTwo(bucketSize), "Bucket size must be a power of 2");
 
     using PackedTagType = typename std::conditional<bitsPerTag <= 8, uint32_t, uint64_t>::type;
 
@@ -224,17 +226,17 @@ struct CuckooFilter {
      *
      */
     struct Bucket {
-        static_assert(powerOfTwo(bitsPerTag), "bitsPerTag must be a power of 2");
+        static_assert(detail::powerOfTwo(bitsPerTag), "bitsPerTag must be a power of 2");
 
         using WordType = typename Config::WordType;
 
         static constexpr size_t tagsPerWord = sizeof(WordType) / sizeof(TagType);
         static_assert(tagsPerWord >= 1, "TagType must fit within WordType");
         static_assert(bucketSize % tagsPerWord == 0, "bucketSize must be divisible by tagsPerWord");
-        static_assert(powerOfTwo(tagsPerWord), "tagsPerWord must be a power of 2");
+        static_assert(detail::powerOfTwo(tagsPerWord), "tagsPerWord must be a power of 2");
 
         static constexpr size_t wordCount = bucketSize / tagsPerWord;
-        static_assert(powerOfTwo(wordCount), "wordCount must be a power of 2");
+        static_assert(detail::powerOfTwo(wordCount), "wordCount must be a power of 2");
 
         cuda::std::atomic<WordType> packedTags[wordCount];
 
@@ -258,7 +260,7 @@ struct CuckooFilter {
         checkWords(const WordType (&loaded)[N], WordType replicatedTag) {
             _Pragma("unroll")
             for (size_t j = 0; j < N; ++j) {
-                if (hasZero<TagType, WordType>(loaded[j] ^ replicatedTag)) {
+                if (detail::hasZero<TagType, WordType>(loaded[j] ^ replicatedTag)) {
                     return true;
                 }
             }
@@ -290,12 +292,12 @@ struct CuckooFilter {
          * architecture.
          */
         __device__ bool contains(TagType tag) const {
-            const WordType replicatedTag = replicateTag<TagType, WordType>(tag);
+            const WordType replicatedTag = detail::replicateTag<TagType, WordType>(tag);
 
             // Scalar path
             if constexpr (wordCount == 1) {
                 const auto packed = reinterpret_cast<const WordType&>(packedTags[0]);
-                return hasZero<TagType, WordType>(packed ^ replicatedTag);
+                return detail::hasZero<TagType, WordType>(packed ^ replicatedTag);
             }
 
             const uint32_t startSlot = tag & (bucketSize - 1);
@@ -311,7 +313,9 @@ struct CuckooFilter {
                 WordType loaded[wordsPerLoad256];
                 for (size_t i = 0; i < wordCount / wordsPerLoad256; i++) {
                     const size_t idx = (startAlignedIdx + i * wordsPerLoad256) & (wordCount - 1);
-                    load256BitGlobalNC(reinterpret_cast<const WordType*>(&packedTags[idx]), loaded);
+                    detail::load256BitGlobalNC(
+                        reinterpret_cast<const WordType*>(&packedTags[idx]), loaded
+                    );
                     if (checkWords(loaded, replicatedTag)) {
                         return true;
                     }
@@ -391,8 +395,8 @@ struct CuckooFilter {
         return AltBucketPolicy::calculateNumBuckets(capacity);
     }
 
-    CuckooFilter(const CuckooFilter&) = delete;
-    CuckooFilter& operator=(const CuckooFilter&) = delete;
+    Filter(const Filter&) = delete;
+    Filter& operator=(const Filter&) = delete;
 
     /**
      * @brief Constructs a new Cuckoo Filter.
@@ -401,7 +405,7 @@ struct CuckooFilter {
      *
      * @param capacity Desired capacity (number of items) for the filter.
      */
-    explicit CuckooFilter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
+    explicit Filter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
         CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
         CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
@@ -416,7 +420,7 @@ struct CuckooFilter {
      *
      * Frees allocated device memory.
      */
-    ~CuckooFilter() {
+    ~Filter() {
         if (d_buckets) {
             CUDA_CALL(cudaFree(d_buckets));
         }
@@ -447,7 +451,7 @@ struct CuckooFilter {
         cudaStream_t stream = {}
     ) {
         size_t numBlocks = SDIV(n, blockSize);
-        insertKernel<Config>
+        detail::insertKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, nullptr);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
@@ -475,7 +479,7 @@ struct CuckooFilter {
         cudaStream_t stream = {}
     ) {
         size_t numBlocks = SDIV(n, blockSize);
-        insertKernel<Config>
+        detail::insertKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, d_evictionAttempts);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
@@ -507,7 +511,7 @@ struct CuckooFilter {
 
         size_t numBlocks = SDIV(n, blockSize);
 
-        computePackedTagsKernel<Config>
+        detail::computePackedTagsKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_packedTags, n, numBuckets);
 
         void* d_tempStorage = nullptr;
@@ -539,7 +543,7 @@ struct CuckooFilter {
 
         CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
-        insertKernelSorted<Config>
+        detail::insertKernelSorted<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this, nullptr);
 
         CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
@@ -573,7 +577,7 @@ struct CuckooFilter {
 
         size_t numBlocks = SDIV(n, blockSize);
 
-        computePackedTagsKernel<Config>
+        detail::computePackedTagsKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_packedTags, n, numBuckets);
 
         void* d_tempStorage = nullptr;
@@ -605,7 +609,7 @@ struct CuckooFilter {
 
         CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
-        insertKernelSorted<Config><<<numBlocks, blockSize, 0, stream>>>(
+        detail::insertKernelSorted<Config><<<numBlocks, blockSize, 0, stream>>>(
             d_packedTags, d_output, n, this, d_evictionAttempts
         );
 
@@ -626,7 +630,8 @@ struct CuckooFilter {
      */
     void containsMany(const T* d_keys, const size_t n, bool* d_output, cudaStream_t stream = {}) {
         size_t numBlocks = SDIV(n, blockSize);
-        containsKernel<Config><<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
+        detail::containsKernel<Config>
+            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
     }
@@ -649,7 +654,8 @@ struct CuckooFilter {
         cudaStream_t stream = {}
     ) {
         size_t numBlocks = SDIV(n, blockSize);
-        deleteKernel<Config><<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
+        detail::deleteKernel<Config>
+            <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
 
         CUDA_CALL(cudaStreamSynchronize(stream));
 
@@ -1093,8 +1099,9 @@ struct CuckooFilter {
             while (true) {
                 auto expected = bucket.packedTags[currIdx].load(cuda::memory_order_relaxed);
 
-                WordType matchMask =
-                    getZeroMask<TagType, WordType>(expected ^ replicateTag<TagType, WordType>(tag));
+                WordType matchMask = detail::getZeroMask<TagType, WordType>(
+                    expected ^ detail::replicateTag<TagType, WordType>(tag)
+                );
 
                 if (matchMask == 0) {
                     // No matching tags in this word
@@ -1145,7 +1152,7 @@ struct CuckooFilter {
             auto expected = bucket.packedTags[currWord].load(cuda::memory_order_relaxed);
 
             while (true) {
-                WordType zeroMask = getZeroMask<TagType, WordType>(expected);
+                WordType zeroMask = detail::getZeroMask<TagType, WordType>(expected);
 
                 if (zeroMask == 0) {
                     // No empty slots in this word, move to next
@@ -1182,6 +1189,7 @@ struct CuckooFilter {
      *
      * @param fp Fingerprint to insert
      * @param startBucket Index of the bucket to start the search from
+     * @param evictionAttempts Optional pointer to a counter for eviction attempts
      * @return true if the insertion was successful, false otherwise
      */
     __device__ bool
@@ -1235,6 +1243,7 @@ struct CuckooFilter {
      * original location.
      *
      * @param fp Fingerprint to insert
+     * @param evictionAttempts Optional pointer to a counter for eviction attempts
      * @param startBucket Index of the bucket to start the search from
      * @return true if the insertion was successful, false otherwise
      */
@@ -1301,6 +1310,7 @@ struct CuckooFilter {
      * Computes candidate buckets and attempts insertion, performing eviction if necessary.
      *
      * @param key The key to insert.
+     * @param evictionAttempts Optional pointer to a counter for eviction attempts
      * @return true if insertion succeeded, false if the filter is too full (max evictions
      * reached).
      */
@@ -1365,12 +1375,14 @@ struct CuckooFilter {
     }
 };
 
+namespace detail {
+
 template <typename Config>
 __global__ void insertKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter,
+    Filter<Config>* filter,
     uint32_t* evictionAttempts
 ) {
     using BlockReduce = cub::BlockReduce<int32_t, Config::blockSize>;
@@ -1408,7 +1420,7 @@ __global__ void containsKernel(
     const typename Config::KeyType* keys,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter
+    Filter<Config>* filter
 ) {
     auto idx = globalThreadId();
 
@@ -1418,12 +1430,8 @@ __global__ void containsKernel(
 }
 
 template <typename Config>
-__global__ void deleteKernel(
-    const typename Config::KeyType* keys,
-    bool* output,
-    size_t n,
-    CuckooFilter<Config>* filter
-) {
+__global__ void
+deleteKernel(const typename Config::KeyType* keys, bool* output, size_t n, Filter<Config>* filter) {
     using BlockReduce = cub::BlockReduce<int32_t, Config::blockSize>;
     __shared__ typename BlockReduce::TempStorage tempStorage;
 
@@ -1448,7 +1456,7 @@ __global__ void deleteKernel(
 template <typename Config>
 __global__ void computePackedTagsKernel(
     const typename Config::KeyType* keys,
-    typename CuckooFilter<Config>::PackedTagType* packedTags,
+    typename Filter<Config>::PackedTagType* packedTags,
     size_t n,
     size_t numBuckets
 ) {
@@ -1458,12 +1466,12 @@ __global__ void computePackedTagsKernel(
         return;
     }
 
-    using Filter = CuckooFilter<Config>;
-    using PackedTagType = typename Filter::PackedTagType;
+    using FilterType = Filter<Config>;
+    using PackedTagType = typename FilterType::PackedTagType;
     constexpr size_t bitsPerTag = Config::bitsPerTag;
 
     typename Config::KeyType key = keys[idx];
-    auto [i1, i2, fp1, fp2] = Filter::getCandidateBucketsAndFPs(key, numBuckets);
+    auto [i1, i2, fp1, fp2] = FilterType::getCandidateBucketsAndFPs(key, numBuckets);
 
     packedTags[idx] =
         (static_cast<PackedTagType>(i1) << bitsPerTag) | static_cast<PackedTagType>(fp1);
@@ -1471,10 +1479,10 @@ __global__ void computePackedTagsKernel(
 
 template <typename Config>
 __global__ void insertKernelSorted(
-    const typename CuckooFilter<Config>::PackedTagType* packedTags,
+    const typename Filter<Config>::PackedTagType* packedTags,
     bool* output,
     size_t n,
-    CuckooFilter<Config>* filter,
+    Filter<Config>* filter,
     uint32_t* evictionAttempts
 ) {
     using BlockReduce = cub::BlockReduce<int, Config::blockSize>;
@@ -1482,9 +1490,9 @@ __global__ void insertKernelSorted(
 
     size_t idx = globalThreadId();
 
-    using Filter = CuckooFilter<Config>;
-    using TagType = typename Filter::TagType;
-    using PackedTagType = typename Filter::PackedTagType;
+    using FilterType = Filter<Config>;
+    using TagType = typename FilterType::TagType;
+    using PackedTagType = typename FilterType::PackedTagType;
 
     constexpr size_t bitsPerTag = Config::bitsPerTag;
     constexpr TagType fpMask = (1ULL << bitsPerTag) - 1;
@@ -1500,7 +1508,7 @@ __global__ void insertKernelSorted(
             success = 1;
         } else {
             auto [i2, fp2] =
-                Filter::getAlternateBucketWithNewFp(primaryBucket, fp, filter->numBuckets);
+                FilterType::getAlternateBucketWithNewFp(primaryBucket, fp, filter->numBuckets);
 
             if (filter->tryInsertAtBucket(i2, fp2)) {
                 success = 1;
@@ -1543,3 +1551,7 @@ __global__ void insertKernelSorted(
         filter->d_numOccupied->fetch_add(blockSum, cuda::memory_order_relaxed);
     }
 }
+
+}  // namespace detail
+
+}  // namespace cuckoogpu

@@ -9,8 +9,8 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy>;
-using Filter = CuckooFilter<Config>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16, cuckoogpu::XorAltBucketPolicy>;
+using Filter = cuckoogpu::Filter<Config>;
 using PackedTagType = typename Filter::PackedTagType;
 
 using GCF = CuckooFilterFixture<Config>;
@@ -50,7 +50,7 @@ BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
     CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
 
     size_t numBlocks = SDIV(n, Config::blockSize);
-    computePackedTagsKernel<Config><<<numBlocks, Config::blockSize>>>(
+    cuckoogpu::detail::computePackedTagsKernel<Config><<<numBlocks, Config::blockSize>>>(
         thrust::raw_pointer_cast(d_keys.data()), d_packedTags, n, filter->numBuckets
     );
 
@@ -71,7 +71,7 @@ BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
         cudaDeviceSynchronize();
 
         timer.start();
-        insertKernelSorted<Config>
+        cuckoogpu::detail::insertKernelSorted<Config>
             <<<numBlocks, Config::blockSize>>>(d_packedTags, nullptr, n, filter.get(), nullptr);
         cudaDeviceSynchronize();
         double elapsed = timer.elapsed();

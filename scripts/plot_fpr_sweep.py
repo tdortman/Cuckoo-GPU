@@ -129,11 +129,13 @@ def plot_fpr_comparison_on_axis(
     # Calculate weighted average query throughput based on hit rate
     neg_query_df["avg_query_throughput"] = neg_query_df.apply(
         lambda r: (
-            hit_rate * r["positive_query_throughput"]
-            + (1 - hit_rate) * r["throughput_mops"]
-        )
-        if pd.notna(r["positive_query_throughput"])
-        else r["throughput_mops"],
+            (
+                hit_rate * r["positive_query_throughput"]
+                + (1 - hit_rate) * r["throughput_mops"]
+            )
+            if pd.notna(r["positive_query_throughput"])
+            else r["throughput_mops"]
+        ),
         axis=1,
     )
 

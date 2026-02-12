@@ -9,7 +9,7 @@
 
 class CuckooFilterTest : public ::testing::Test {
    protected:
-    using Config = CuckooConfig<uint32_t, 16, 500, 256, 16>;
+    using Config = cuckoogpu::Config<uint32_t, 16, 500, 256, 16>;
 
     const double TARGET_LOAD_FACTOR = 0.95;
 
@@ -31,7 +31,7 @@ class CuckooFilterTest : public ::testing::Test {
 
 TEST_F(CuckooFilterTest, BasicInsertAndQuery) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -52,7 +52,7 @@ TEST_F(CuckooFilterTest, BasicInsertAndQuery) {
 
 TEST_F(CuckooFilterTest, EmptyFilter) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> queryKeys = {1, 2, 3, 4, 5};
     thrust::device_vector<uint32_t> d_keys(queryKeys.begin(), queryKeys.end());
@@ -70,7 +70,7 @@ TEST_F(CuckooFilterTest, EmptyFilter) {
 
 TEST_F(CuckooFilterTest, ClearOperation) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -100,7 +100,7 @@ TEST_F(CuckooFilterTest, ClearOperation) {
 
 TEST_F(CuckooFilterTest, LoadFactor) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     EXPECT_FLOAT_EQ(filter.loadFactor(), 0.0f);
 
@@ -125,7 +125,7 @@ TEST_F(CuckooFilterTest, LoadFactor) {
 
 TEST_F(CuckooFilterTest, NearCapacityInsertion) {
     const size_t numKeys = (1 << 20) * TARGET_LOAD_FACTOR;
-    CuckooFilter<Config> filter(numKeys);
+    cuckoogpu::Filter<Config> filter(numKeys);
 
     auto keys = generateRandomKeys<uint32_t>(numKeys);
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -146,7 +146,7 @@ TEST_F(CuckooFilterTest, NearCapacityInsertion) {
 
 TEST_F(CuckooFilterTest, DuplicateInsertions) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 1, 2, 2, 3, 3, 4, 4, 5, 5};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -171,7 +171,7 @@ TEST_F(CuckooFilterTest, DuplicateInsertions) {
 
 TEST_F(CuckooFilterTest, BasicDeletion) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -209,7 +209,7 @@ TEST_F(CuckooFilterTest, BasicDeletion) {
 
 TEST_F(CuckooFilterTest, DeleteNonExistentKeys) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -226,7 +226,7 @@ TEST_F(CuckooFilterTest, DeleteNonExistentKeys) {
 
 TEST_F(CuckooFilterTest, PartialDeletion) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> insertKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     thrust::device_vector<uint32_t> d_insertKeys(insertKeys.begin(), insertKeys.end());
@@ -274,7 +274,7 @@ TEST_F(CuckooFilterTest, PartialDeletion) {
 
 TEST_F(CuckooFilterTest, DeleteAndReinsert) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -303,7 +303,7 @@ TEST_F(CuckooFilterTest, DeleteAndReinsert) {
 
 TEST_F(CuckooFilterTest, LoadFactorAfterDeletion) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     const size_t numKeys = 1000;
     auto keys = generateRandomKeys<uint32_t>(numKeys);
@@ -323,7 +323,7 @@ TEST_F(CuckooFilterTest, LoadFactorAfterDeletion) {
 
 TEST_F(CuckooFilterTest, DeleteDuplicates) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 1, 1, 2, 2, 3};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -345,7 +345,7 @@ TEST_F(CuckooFilterTest, DeleteDuplicates) {
 
 TEST_F(CuckooFilterTest, InsertAndVerifyOutput) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());
@@ -376,7 +376,7 @@ TEST_F(CuckooFilterTest, InsertAndVerifyOutput) {
 TEST_F(CuckooFilterTest, InsertFullFilterReportsFailures) {
     // Use a small capacity to easily fill the filter
     const size_t capacity = 100;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     // Generate more keys than the filter can hold
     const size_t numKeys = capacity * 2;
@@ -400,7 +400,7 @@ TEST_F(CuckooFilterTest, InsertFullFilterReportsFailures) {
 
 TEST_F(CuckooFilterTest, InsertSortedAndVerifyOutput) {
     const size_t capacity = 10000;
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     std::vector<uint32_t> keys = {1, 2, 3, 4, 5, 100, 200, 300};
     thrust::device_vector<uint32_t> d_keys(keys.begin(), keys.end());

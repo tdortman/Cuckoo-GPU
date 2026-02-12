@@ -18,7 +18,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
 size_t getQFSizeHost(QF* d_qf) {
     QF h_qf;
@@ -93,9 +93,9 @@ static void GCF_FPR(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys);
 
-    using FPRConfig = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+    using FPRConfig = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
-    auto filter = std::make_unique<CuckooFilter<FPRConfig>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<FPRConfig>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
     adaptiveInsert(*filter, d_keys);
 

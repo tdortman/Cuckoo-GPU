@@ -13,8 +13,8 @@
 #include <iostream>
 #include <random>
 #include <string_view>
-#include "CuckooFilterMultiGPU.cuh"
 #include "bucket_policies.cuh"
+#include "CuckooFilterMultiGPU.cuh"
 #include "helpers.cuh"
 
 int main(int argc, char** argv) {
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
 
     std::cout << std::format("Using {} {}\n", numGPUsToUse, (numGPUsToUse == 1 ? "GPU" : "GPUs"));
 
-    using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+    using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
     size_t capacity = 1ULL << exponent;
     auto n = static_cast<size_t>(capacity * targetLoadFactor);
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint64_t> h_input = d_input;
 
-    auto filter = CuckooFilterMultiGPU<Config>(static_cast<size_t>(numGPUsToUse), capacity);
+    auto filter = cuckoogpu::FilterMultiGPU<Config>(static_cast<size_t>(numGPUsToUse), capacity);
 
     auto start = std::chrono::high_resolution_clock::now();
     size_t count = filter.insertMany(h_input);
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t found = countOnes(h_output.data(), n);
+    size_t found = cuckoogpu::detail::countOnes(h_output.data(), n);
     std::cout << std::format("Found {} / {} items in {} ms\n", found, n, duration);
 
     size_t fprTestSize = std::min(n, size_t(1000000));
@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t falsePositives = countOnes(h_fprOutput.data(), fprTestSize);
+    size_t falsePositives = cuckoogpu::detail::countOnes(h_fprOutput.data(), fprTestSize);
 
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
     double theoreticalFPR =
@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t deleted = countOnes(h_deleteOutput.data(), deleteCount);
+    size_t deleted = cuckoogpu::detail::countOnes(h_deleteOutput.data(), deleteCount);
 
     std::cout << std::format(
         "Deleted {} / {} items in {} ms (load factor = {})\n",
@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
     );
 
     filter.containsMany(h_deleteKeys, h_deleteOutput);
-    size_t stillFound = countOnes(h_deleteOutput.data(), deleteCount);
+    size_t stillFound = cuckoogpu::detail::countOnes(h_deleteOutput.data(), deleteCount);
     std::cout << std::format(
         "After deletion, {} / {} deleted items still found\n", stillFound, deleteCount
     );
@@ -181,7 +181,8 @@ int main(int argc, char** argv) {
     }
 
     filter.containsMany(h_nonDeletedKeys, h_nonDeletedOutput);
-    size_t nonDeletedFound = countOnes(h_nonDeletedOutput.data(), nonDeletedCount);
+    size_t nonDeletedFound =
+        cuckoogpu::detail::countOnes(h_nonDeletedOutput.data(), nonDeletedCount);
     std::cout << std::format(
         "Non-deleted keys still found: {} / {}\n\n", nonDeletedFound, nonDeletedCount
     );

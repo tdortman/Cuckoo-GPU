@@ -75,10 +75,10 @@ meson setup build -DBUILD_BENCHMARKS=false -DBUILD_TESTS=false
 #include <CuckooFilter.cuh>
 
 // Configure the filter: key type, fingerprint bits, max evictions, block size, bucket size
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
 
 // Create a filter with the desired capacity
-CuckooFilter<Config> filter(1 << 20);  // capacity for ~1M items
+cuckoogpu::Filter<Config> filter(1 << 20);  // capacity for ~1M items
 
 // Insert keys (d_keys is a device pointer)
 filter.insertMany(d_keys, numKeys);
@@ -95,7 +95,7 @@ filter.deleteMany(d_keys, d_results, numKeys);
 
 ### Configuration Options
 
-The `CuckooConfig` template accepts the following parameters:
+The `Config` template accepts the following parameters:
 
 | Parameter         | Description                              | Default              |
 | ----------------- | ---------------------------------------- | -------------------- |
@@ -115,7 +115,7 @@ For workloads that exceed single GPU capacity:
 ```cpp
 #include <CuckooFilterMultiGPU.cuh>
 
-CuckooFilterMultiGPU<Config> filter(numGPUs, totalCapacity);
+cuckoogpu::FilterMultiGPU<Config> filter(numGPUs, totalCapacity);
 filter.insertMany(h_keys, numKeys);
 filter.containsMany(h_keys, h_results, numKeys);
 ```

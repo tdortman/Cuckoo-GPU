@@ -13,6 +13,8 @@
 #include "CuckooFilter.cuh"
 #include "helpers.cuh"
 
+namespace cuckoogpu {
+
 /**
  * @brief Type of request that can be sent to the IPC server.
  */
@@ -50,7 +52,7 @@ struct FilterRequest {
  */
 struct SharedQueue {
     static constexpr size_t QUEUE_SIZE = 256;
-    static_assert(powerOfTwo(QUEUE_SIZE), "queue size must be a power of two");
+    static_assert(detail::powerOfTwo(QUEUE_SIZE), "queue size must be a power of two");
 
     std::atomic<uint64_t> head;  ///< Producer index
     std::atomic<uint64_t> tail;  ///< Consumer index
@@ -188,14 +190,14 @@ struct SharedQueue {
  * @tparam Config The configuration structure for the Cuckoo Filter.
  */
 template <typename Config>
-class CuckooFilterIPCServer {
+class FilterIPCServer {
    private:
-    CuckooFilter<Config>* filter;  ///< Pointer to the Cuckoo Filter instance
-    SharedQueue* queue;            ///< Pointer to the shared queue
-    int shmFd;                     ///< File descriptor for the shared memory segment
-    std::string shmName;           ///< Name of the shared memory segment
-    bool running;                  ///< Whether the server is running
-    std::thread workerThread;      ///< Worker thread for processing requests
+    Filter<Config>* filter;    ///< Pointer to the Cuckoo Filter instance
+    SharedQueue* queue;        ///< Pointer to the shared queue
+    int shmFd;                 ///< File descriptor for the shared memory segment
+    std::string shmName;       ///< Name of the shared memory segment
+    bool running;              ///< Whether the server is running
+    std::thread workerThread;  ///< Worker thread for processing requests
 
     void processRequests() {
         bool shutdownReceived = false;
@@ -308,16 +310,16 @@ class CuckooFilterIPCServer {
 
    public:
     /**
-     * @brief Constructs a new CuckooFilterIPCServer.
+     * @brief Constructs a new FilterIPCServer.
      *
      * Creates the shared memory segment and initializes the shared queue.
      *
      * @param name Unique name for the shared memory segment.
      * @param capacity Capacity of the Cuckoo Filter.
      */
-    CuckooFilterIPCServer(const std::string& name, size_t capacity)
+    FilterIPCServer(const std::string& name, size_t capacity)
         : shmName("/cuckoo_filter_" + name), running(false) {
-        filter = new CuckooFilter<Config>(capacity);
+        filter = new Filter<Config>(capacity);
 
         // shared memory for queue
         shmFd = shm_open(shmName.c_str(), O_CREAT | O_RDWR, 0666);
@@ -355,11 +357,11 @@ class CuckooFilterIPCServer {
     }
 
     /**
-     * @brief Destroys the CuckooFilterIPCServer.
+     * @brief Destroys the FilterIPCServer.
      *
      * Stops the server, cleans up shared memory and resources.
      */
-    ~CuckooFilterIPCServer() {
+    ~FilterIPCServer() {
         stop();
 
         if (queue != MAP_FAILED) {
@@ -385,7 +387,7 @@ class CuckooFilterIPCServer {
         }
 
         running = true;
-        workerThread = std::thread(&CuckooFilterIPCServer::processRequests, this);
+        workerThread = std::thread(&FilterIPCServer::processRequests, this);
     }
 
     /**
@@ -436,10 +438,10 @@ class CuckooFilterIPCServer {
     }
 
     /**
-     * @brief Returns a pointer to the underlying CuckooFilter instance.
-     * @return CuckooFilter<Config>* Pointer to the filter.
+     * @brief Returns a pointer to the underlying Filter instance.
+     * @return Filter<Config>* Pointer to the filter.
      */
-    CuckooFilter<Config>* getFilter() {
+    Filter<Config>* getFilter() {
         return filter;
     }
 };
@@ -454,7 +456,7 @@ class CuckooFilterIPCServer {
  * @tparam Config The configuration structure for the Cuckoo Filter.
  */
 template <typename Config>
-class CuckooFilterIPCClient {
+class FilterIPCClient {
    private:
     SharedQueue* queue;      ///< Pointer to the shared queue
     int shmFd;               ///< File descriptor for the shared memory segment
@@ -465,13 +467,13 @@ class CuckooFilterIPCClient {
     using T = typename Config::KeyType;
 
     /**
-     * @brief Constructs a new CuckooFilterIPCClient.
+     * @brief Constructs a new FilterIPCClient.
      *
      * Connects to the shared memory segment.
      *
      * @param name Name of the shared memory segment to connect to.
      */
-    explicit CuckooFilterIPCClient(const std::string& name)
+    explicit FilterIPCClient(const std::string& name)
         : shmName("/cuckoo_filter_" + name), nextRequestId(0) {
         shmFd = shm_open(shmName.c_str(), O_RDWR, 0666);
         if (shmFd == -1) {
@@ -495,11 +497,11 @@ class CuckooFilterIPCClient {
     }
 
     /**
-     * @brief Destroys the CuckooFilterIPCClient.
+     * @brief Destroys the FilterIPCClient.
      *
      * Unmaps the shared memory.
      */
-    ~CuckooFilterIPCClient() {
+    ~FilterIPCClient() {
         if (queue != MAP_FAILED) {
             munmap(queue, sizeof(SharedQueue));
         }
@@ -700,3 +702,5 @@ class CuckooFilterIPCClient {
         return req->result;
     }
 };
+
+}  // namespace cuckoogpu

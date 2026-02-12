@@ -6,6 +6,8 @@
 #include "hashutil.cuh"
 #include "helpers.cuh"
 
+namespace cuckoogpu {
+
 /**
  * @brief Default XOR-based hashing strategy for cuckoo filters.
  * This uses the traditional partial-key cuckoo hashing with XOR operation
@@ -79,7 +81,7 @@ struct XorAltBucketPolicy {
      */
     static size_t calculateNumBuckets(size_t capacity) {
         auto requiredBuckets = std::ceil(static_cast<double>(capacity) / bucketSize);
-        return nextPowerOfTwo(requiredBuckets);
+        return detail::nextPowerOfTwo(requiredBuckets);
     }
 };
 
@@ -348,3 +350,5 @@ struct OffsetAltBucketPolicy {
         return static_cast<size_t>(requiredBuckets);
     }
 };
+
+}  // namespace cuckoogpu

@@ -12,7 +12,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
 static constexpr char SERVER_NAME[] = "benchmark_server";
 static pid_t g_serverPid = -1;
@@ -81,7 +81,7 @@ class IPCCFFixture : public benchmark::Fixture {
         d_output.resize(n);
         generateKeysGPU(d_keys);
 
-        client = std::make_unique<CuckooFilterIPCClient<Config>>(SERVER_NAME);
+        client = std::make_unique<cuckoogpu::FilterIPCClient<Config>>(SERVER_NAME);
 
         size_t requiredBuckets = std::ceil(static_cast<double>(capacity) / Config::bucketSize);
         size_t numBuckets = 1ULL << static_cast<size_t>(std::ceil(std::log2(requiredBuckets)));
@@ -106,7 +106,7 @@ class IPCCFFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilterIPCClient<Config>> client;
+    std::unique_ptr<cuckoogpu::FilterIPCClient<Config>> client;
     GPUTimer timer;
 };
 

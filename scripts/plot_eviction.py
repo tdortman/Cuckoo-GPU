@@ -546,7 +546,9 @@ def plot_histogram_percentiles(
         )
 
     fig_cmp.subplots_adjust(hspace=0.2)
-    compare_output = output_dir / f"eviction_{histogram_csv.stem}_percentiles_compare.pdf"
+    compare_output = (
+        output_dir / f"eviction_{histogram_csv.stem}_percentiles_compare.pdf"
+    )
     pu.save_figure(fig_cmp, compare_output, f"Saved {compare_output}")
 
 

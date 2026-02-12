@@ -12,7 +12,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
 using DMKey = uint64_t;
 using DMValue = uint32_t;

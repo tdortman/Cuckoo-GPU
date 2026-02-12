@@ -5,10 +5,10 @@
 #include <thread>
 #include "CuckooFilterIPC.cuh"
 
-using Config = CuckooConfig<uint32_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint32_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 static constexpr char SERVER_NAME[] = "benchmark_server";
 
-CuckooFilterIPCServer<Config>* g_server = nullptr;
+cuckoogpu::FilterIPCServer<Config>* g_server = nullptr;
 
 void handleSignal(int signal) {
     (void)signal;
@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
         // Unlink any old shared memory just in case
         shm_unlink(("/cuckoo_filter_" + std::string(SERVER_NAME)).c_str());
 
-        CuckooFilterIPCServer<Config> server(SERVER_NAME, capacity);
+        cuckoogpu::FilterIPCServer<Config> server(SERVER_NAME, capacity);
         g_server = &server;
         server.start();
 

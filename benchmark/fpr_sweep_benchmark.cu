@@ -21,7 +21,8 @@ constexpr size_t FPR_TEST_SIZE = 10'000'000;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 
 template <size_t bitsPerTag>
-using GPUCuckooConfig = CuckooConfig<uint64_t, bitsPerTag, 500, 128, 16, XorAltBucketPolicy>;
+using GPUCuckooConfig =
+    cuckoogpu::Config<uint64_t, bitsPerTag, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
 size_t getQFSizeHost(QF* d_qf) {
     QF h_qf;
@@ -94,7 +95,7 @@ static void GCF_FPR_Sweep(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(FIXED_CAPACITY);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
     size_t filterMemory = filter->sizeInBytes();
     adaptiveInsert(*filter, d_keys);
 
@@ -148,7 +149,7 @@ static void GCF_Insert_Sweep(bm::State& state) {
     size_t filterMemory = 0;
 
     for (auto _ : state) {
-        auto filter = std::make_unique<CuckooFilter<Config>>(FIXED_CAPACITY);
+        auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
         filterMemory = filter->sizeInBytes();
 
         timer.start();
@@ -183,7 +184,7 @@ static void GCF_PositiveQuery_Sweep(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(FIXED_CAPACITY);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
     size_t filterMemory = filter->sizeInBytes();
     adaptiveInsert(*filter, d_keys);
 
@@ -226,7 +227,7 @@ static void GCF_Delete_Sweep(bm::State& state) {
     size_t filterMemory = 0;
 
     for (auto _ : state) {
-        auto filter = std::make_unique<CuckooFilter<Config>>(FIXED_CAPACITY);
+        auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
         filterMemory = filter->sizeInBytes();
         adaptiveInsert(*filter, d_keys);
 
@@ -823,18 +824,18 @@ static void GQF_Delete_Sweep(bm::State& state) {
 
 #if GQF_BITS == 8
 
-    #define REGISTER_GCF_FOR_LOAD_FACTOR(LF)                           \
-        BENCHMARK(GCF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;              \
-        BENCHMARK(GCF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;             \
-        BENCHMARK(GCF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;             \
-        BENCHMARK(GCF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(GCF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
-        BENCHMARK(GCF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;          \
-        BENCHMARK(GCF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;    \
-        BENCHMARK(GCF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG;   \
-        BENCHMARK(GCF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG;   \
-        BENCHMARK(GCF_Delete_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(GCF_Delete_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
+    #define REGISTER_GCF_FOR_LOAD_FACTOR(LF)                         \
+        BENCHMARK(GCF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;            \
+        BENCHMARK(GCF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(GCF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(GCF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
+        BENCHMARK(GCF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
+        BENCHMARK(GCF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;        \
+        BENCHMARK(GCF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;  \
+        BENCHMARK(GCF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG; \
+        BENCHMARK(GCF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG; \
+        BENCHMARK(GCF_Delete_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
+        BENCHMARK(GCF_Delete_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
         BENCHMARK(GCF_Delete_Sweep<32, LF>) FPR_SWEEP_CONFIG;
 
 REGISTER_GCF_FOR_LOAD_FACTOR(35)
@@ -845,15 +846,15 @@ REGISTER_GCF_FOR_LOAD_FACTOR(85)
 REGISTER_GCF_FOR_LOAD_FACTOR(90)
 REGISTER_GCF_FOR_LOAD_FACTOR(95)
 
-    #define REGISTER_BBF_FOR_LOAD_FACTOR(LF)                           \
-        BENCHMARK(BBF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;              \
-        BENCHMARK(BBF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;             \
-        BENCHMARK(BBF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;             \
-        BENCHMARK(BBF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;           \
-        BENCHMARK(BBF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;          \
-        BENCHMARK(BBF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;          \
-        BENCHMARK(BBF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;    \
-        BENCHMARK(BBF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG;   \
+    #define REGISTER_BBF_FOR_LOAD_FACTOR(LF)                         \
+        BENCHMARK(BBF_FPR_Sweep<8, LF>) FPR_SWEEP_CONFIG;            \
+        BENCHMARK(BBF_FPR_Sweep<16, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(BBF_FPR_Sweep<32, LF>) FPR_SWEEP_CONFIG;           \
+        BENCHMARK(BBF_Insert_Sweep<8, LF>) FPR_SWEEP_CONFIG;         \
+        BENCHMARK(BBF_Insert_Sweep<16, LF>) FPR_SWEEP_CONFIG;        \
+        BENCHMARK(BBF_Insert_Sweep<32, LF>) FPR_SWEEP_CONFIG;        \
+        BENCHMARK(BBF_PositiveQuery_Sweep<8, LF>) FPR_SWEEP_CONFIG;  \
+        BENCHMARK(BBF_PositiveQuery_Sweep<16, LF>) FPR_SWEEP_CONFIG; \
         BENCHMARK(BBF_PositiveQuery_Sweep<32, LF>) FPR_SWEEP_CONFIG;
 
 REGISTER_BBF_FOR_LOAD_FACTOR(35)

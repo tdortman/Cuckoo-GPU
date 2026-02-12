@@ -8,7 +8,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16, cuckoogpu::XorAltBucketPolicy>;
 
 static constexpr double LOAD_FACTOR = 0.95;
 
@@ -26,7 +26,7 @@ class LoadWidthFixture : public benchmark::Fixture {
         d_output.resize(n);
         generateKeysGPU(d_keys);
 
-        filter = std::make_unique<CuckooFilter<Config>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
         filterMemory = filter->sizeInBytes();
 
         // Pre-insert keys to measure query performance
@@ -51,7 +51,7 @@ class LoadWidthFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilter<Config>> filter;
+    std::unique_ptr<cuckoogpu::Filter<Config>> filter;
     GPUTimer timer;
 };
 

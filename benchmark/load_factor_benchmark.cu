@@ -36,7 +36,7 @@ size_t getQFSizeHost(QF* d_qf) {
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 
 #ifdef __x86_64__
@@ -70,7 +70,7 @@ class GCFFixtureLF : public benchmark::Fixture {
         generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
         generateKeysGPURange(d_keysNegative, n, uint64_t(UINT32_MAX) + 1, UINT64_MAX);
 
-        filter = std::make_unique<CuckooFilter<Config>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -94,7 +94,7 @@ class GCFFixtureLF : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint64_t> d_keysNegative;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilter<Config>> filter;
+    std::unique_ptr<cuckoogpu::Filter<Config>> filter;
     GPUTimer timer;
 };
 

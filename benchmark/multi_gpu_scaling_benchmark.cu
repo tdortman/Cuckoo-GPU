@@ -10,7 +10,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
 
 static constexpr size_t CAPACITY_PER_GPU = 1ULL << 30;
 static constexpr double LOAD_FACTOR = 0.95;
@@ -38,7 +38,7 @@ class WeakScalingFixture : public benchmark::Fixture {
 
         h_output.resize(n);
 
-        filter = std::make_unique<CuckooFilterMultiGPU<ConfigType>>(numGPUs, totalCapacity);
+        filter = std::make_unique<cuckoogpu::FilterMultiGPU<ConfigType>>(numGPUs, totalCapacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -66,7 +66,7 @@ class WeakScalingFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::host_vector<KeyType> h_keys;
     thrust::host_vector<bool> h_output;
-    std::unique_ptr<CuckooFilterMultiGPU<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::FilterMultiGPU<ConfigType>> filter;
     CPUTimer timer;
 };
 
@@ -93,7 +93,7 @@ class StrongScalingFixture : public benchmark::Fixture {
 
         h_output.resize(n);
 
-        filter = std::make_unique<CuckooFilterMultiGPU<ConfigType>>(numGPUs, totalCapacity);
+        filter = std::make_unique<cuckoogpu::FilterMultiGPU<ConfigType>>(numGPUs, totalCapacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -121,7 +121,7 @@ class StrongScalingFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::host_vector<KeyType> h_keys;
     thrust::host_vector<bool> h_output;
-    std::unique_ptr<CuckooFilterMultiGPU<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::FilterMultiGPU<ConfigType>> filter;
     CPUTimer timer;
 };
 

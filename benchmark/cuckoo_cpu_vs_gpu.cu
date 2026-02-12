@@ -11,7 +11,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16>;
 constexpr size_t CPU_BITS_PER_ITEM = Config::bitsPerTag;
 
 using GCFFixture = CuckooFilterFixture<Config>;
@@ -161,7 +161,7 @@ static void GCF_FPR(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys);
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
     adaptiveInsert(*filter, d_keys);
 

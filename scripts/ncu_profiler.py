@@ -6,12 +6,12 @@ from typing import Optional
 import pandas as pd
 import typer
 
-FILTERS = ["cuckoo", "bloom", "tcf", 'gqf']
+FILTERS = ["cuckoo", "bloom", "tcf", "gqf"]
 OPERATIONS = {
     "cuckoo": ["insert", "query", "delete"],
     "bloom": ["insert", "query"],
     "tcf": ["insert", "query", "delete"],
-    "gqf": ["insert", "query", "delete"]
+    "gqf": ["insert", "query", "delete"],
 }
 
 KERNEL_PATTERNS = {

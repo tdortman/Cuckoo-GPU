@@ -15,7 +15,7 @@
 #include <string>
 #include "benchmark_common.cuh"
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 using BloomFilter = cuco::bloom_filter<uint64_t>;
 
@@ -41,7 +41,7 @@ void benchmarkCuckooInsert(size_t capacity, double loadFactor) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys);
 
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
 
     filter.insertMany(d_keys);
     cudaDeviceSynchronize();
@@ -59,7 +59,7 @@ void benchmarkCuckooQuery(size_t capacity, double loadFactor) {
     thrust::device_vector<uint8_t> d_output(n);
     generateKeysGPU(d_keys);
 
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
     filter.insertMany(d_keys);
     cudaDeviceSynchronize();
 
@@ -74,7 +74,7 @@ void benchmarkCuckooDelete(size_t capacity, double loadFactor) {
     thrust::device_vector<uint8_t> d_output(n);
     generateKeysGPU(d_keys);
 
-    CuckooFilter<Config> filter(capacity);
+    cuckoogpu::Filter<Config> filter(capacity);
     filter.insertMany(d_keys);
     cudaDeviceSynchronize();
 

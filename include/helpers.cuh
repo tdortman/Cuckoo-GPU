@@ -6,6 +6,8 @@
 #include <cstring>
 #include <iostream>
 
+namespace cuckoogpu::detail {
+
 /**
  * @brief Checks if a number is a power of two.
  * @param n Number to check.
@@ -233,3 +235,5 @@ constexpr size_t maxOccupancyGridSize(int32_t blockSize, Kernel kernel, size_t d
 
     return maxActiveBlocksPerSM * numSM;
 }
+
+}  // namespace cuckoogpu::detail

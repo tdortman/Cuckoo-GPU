@@ -10,7 +10,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16>;
 
 template <typename ConfigType, double loadFactor = 0.95>
 class MultiGPUFixture_ : public benchmark::Fixture {
@@ -36,7 +36,7 @@ class MultiGPUFixture_ : public benchmark::Fixture {
 
         h_output.resize(n);
 
-        filter = std::make_unique<CuckooFilterMultiGPU<ConfigType>>(numGPUs, capacity);
+        filter = std::make_unique<cuckoogpu::FilterMultiGPU<ConfigType>>(numGPUs, capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -59,7 +59,7 @@ class MultiGPUFixture_ : public benchmark::Fixture {
     size_t filterMemory;
     thrust::host_vector<KeyType> h_keys;
     thrust::host_vector<bool> h_output;
-    std::unique_ptr<CuckooFilterMultiGPU<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::FilterMultiGPU<ConfigType>> filter;
     CPUTimer timer;
 };
 

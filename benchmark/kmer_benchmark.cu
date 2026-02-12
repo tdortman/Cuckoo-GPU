@@ -17,7 +17,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 using BloomFilter = cuco::bloom_filter<uint64_t>;
 
@@ -73,7 +73,7 @@ static void GCF_Insert(bm::State& state) {
     size_t n = g_kmerData.size();
     auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
 
     for (auto _ : state) {
@@ -98,7 +98,7 @@ static void GCF_Query(bm::State& state) {
     size_t n = g_kmerData.size();
     auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
 
     adaptiveInsert(*filter, *g_deviceKeys);
@@ -125,7 +125,7 @@ static void GCF_Delete(bm::State& state) {
     size_t n = g_kmerData.size();
     auto capacity = static_cast<size_t>(n / LOAD_FACTOR);
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
 
     adaptiveInsert(*filter, *g_deviceKeys);

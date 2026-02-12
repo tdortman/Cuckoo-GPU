@@ -27,7 +27,7 @@
 
 namespace bm = benchmark;
 
-using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 using BloomFilter = cuco::bloom_filter<uint64_t>;
 
@@ -74,7 +74,7 @@ static void GCF_FPR(bm::State& state) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
 
-    auto filter = std::make_unique<CuckooFilter<Config>>(capacity);
+    auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
     adaptiveInsert(*filter, d_keys);
 

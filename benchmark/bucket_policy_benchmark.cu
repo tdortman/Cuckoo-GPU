@@ -12,9 +12,11 @@ namespace bm = benchmark;
 constexpr size_t FIXED_CAPACITY = 1ULL << 28;
 constexpr double LOAD_FACTOR = 0.95;
 
-using XorConfig = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
-using AddSubConfig = CuckooConfig<uint64_t, 16, 500, 128, 16, AddSubAltBucketPolicy>;
-using OffsetConfig = CuckooConfig<uint64_t, 16, 500, 128, 16, OffsetAltBucketPolicy>;
+using XorConfig = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
+using AddSubConfig =
+    cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::AddSubAltBucketPolicy>;
+using OffsetConfig =
+    cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::OffsetAltBucketPolicy>;
 
 template <typename ConfigType>
 class PolicyBenchmarkFixture : public benchmark::Fixture {
@@ -34,7 +36,7 @@ class PolicyBenchmarkFixture : public benchmark::Fixture {
         generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
         generateKeysGPURange(d_keysNegative, n, uint64_t(UINT32_MAX) + 1, UINT64_MAX);
 
-        filter = std::make_unique<CuckooFilter<ConfigType>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<ConfigType>>(capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -61,7 +63,7 @@ class PolicyBenchmarkFixture : public benchmark::Fixture {
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint64_t> d_keysNegative;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilter<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::Filter<ConfigType>> filter;
     GPUTimer timer;
 };
 

@@ -7,7 +7,7 @@
 #include <vector>
 #include "CuckooFilterIPC.cuh"
 
-using Config = CuckooConfig<uint64_t, 16, 500, 256, 16>;
+using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
 
 void runServer(const std::string& name, size_t capacity, bool forceShutdown = false) {
     std::cout << std::format("Starting server with capacity: {}\n", capacity);
@@ -16,7 +16,7 @@ void runServer(const std::string& name, size_t capacity, bool forceShutdown = fa
     }
 
     try {
-        CuckooFilterIPCServer<Config> server(name, capacity);
+        cuckoogpu::FilterIPCServer<Config> server(name, capacity);
         server.start();
 
         std::cout << "Server running. Press Enter to stop...\n";
@@ -42,7 +42,7 @@ void runClient(const std::string& name, int clientId, size_t numKeys) {
     try {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        CuckooFilterIPCClient<Config> client(name);
+        cuckoogpu::FilterIPCClient<Config> client(name);
 
         thrust::host_vector<uint64_t> h_keys(numKeys);
         std::random_device rd;

@@ -3,6 +3,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
+#include <bucket_policies.cuh>
 #include <chrono>
 #include <CLI/CLI.hpp>
 #include <cstdint>
@@ -10,7 +11,6 @@
 #include <CuckooFilter.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
-#include <bucket_policies.cuh>
 #include <helpers.cuh>
 #include <iostream>
 #include <random>
@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 
     CLI11_PARSE(app, argc, argv);
 
-    using Config = CuckooConfig<uint64_t, 16, 500, 128, 16, XorAltBucketPolicy>;
+    using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
     size_t capacity = 1ULL << exponent;
     size_t n = capacity * targetLoadFactor;
@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
         }
     );
 
-    auto filter = CuckooFilter<Config>(capacity);
+    auto filter = cuckoogpu::Filter<Config>(capacity);
 
     auto start = std::chrono::high_resolution_clock::now();
     size_t count = filter.insertMany(d_input);
@@ -76,7 +76,9 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> output = d_output;
 
-    size_t found = countOnes(reinterpret_cast<bool*>(thrust::raw_pointer_cast(output.data())), n);
+    size_t found = cuckoogpu::detail::countOnes(
+        reinterpret_cast<bool*>(thrust::raw_pointer_cast(output.data())), n
+    );
     std::cout << std::format("Found {} / {} items in {} ms\n", found, n, duration);
 
     // size_t occupiedSlots = filter.countOccupiedSlots();
@@ -107,8 +109,9 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> fprOutput = d_fprOutput;
 
-    size_t falsePositives =
-        countOnes(reinterpret_cast<bool*>(thrust::raw_pointer_cast(fprOutput.data())), fprTestSize);
+    size_t falsePositives = cuckoogpu::detail::countOnes(
+        reinterpret_cast<bool*>(thrust::raw_pointer_cast(fprOutput.data())), fprTestSize
+    );
 
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
     double theoreticalFPR =
@@ -138,7 +141,7 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> deleteOutput = d_deleteOutput;
 
-    size_t deleted = countOnes(
+    size_t deleted = cuckoogpu::detail::countOnes(
         reinterpret_cast<bool*>(thrust::raw_pointer_cast(deleteOutput.data())), deleteCount
     );
 
@@ -152,7 +155,7 @@ int main(int argc, char** argv) {
 
     filter.containsMany(d_deleteKeys, d_deleteOutput);
     deleteOutput = d_deleteOutput;
-    size_t stillFound = countOnes(
+    size_t stillFound = cuckoogpu::detail::countOnes(
         reinterpret_cast<bool*>(thrust::raw_pointer_cast(deleteOutput.data())), deleteCount
     );
     std::cout << std::format(
@@ -167,7 +170,7 @@ int main(int argc, char** argv) {
 
     filter.containsMany(d_nonDeletedKeys, d_nonDeletedOutput);
     thrust::host_vector<uint8_t> nonDeletedOutput = d_nonDeletedOutput;
-    size_t nonDeletedFound = countOnes(
+    size_t nonDeletedFound = cuckoogpu::detail::countOnes(
         reinterpret_cast<bool*>(thrust::raw_pointer_cast(nonDeletedOutput.data())), nonDeletedCount
     );
     std::cout << std::format(

@@ -16,7 +16,7 @@ class BucketSizeFixture : public benchmark::Fixture {
     using benchmark::Fixture::TearDown;
 
    public:
-    using Config = CuckooConfig<uint64_t, 16, 500, 128, bucketSize>;
+    using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, bucketSize>;
     static constexpr double TARGET_LOAD_FACTOR = 0.95;
 
     void SetUp(const benchmark::State& state) override {
@@ -28,7 +28,7 @@ class BucketSizeFixture : public benchmark::Fixture {
         d_output.resize(n);
         generateKeysGPU(d_keys);
 
-        filter = std::make_unique<CuckooFilter<Config>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -50,7 +50,7 @@ class BucketSizeFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilter<Config>> filter;
+    std::unique_ptr<cuckoogpu::Filter<Config>> filter;
     GPUTimer timer;
 };
 

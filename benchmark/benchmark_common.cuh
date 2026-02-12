@@ -119,7 +119,7 @@ inline size_t getGPUL2CacheSize() {
 
 template <typename FilterConfig>
 inline size_t adaptiveInsert(
-    CuckooFilter<FilterConfig>& filter,
+    cuckoogpu::Filter<FilterConfig>& filter,
     thrust::device_vector<typename FilterConfig::KeyType>& d_keys
 ) {
     return filter.insertMany(d_keys);
@@ -349,7 +349,7 @@ class CuckooFilterFixture : public benchmark::Fixture {
         d_output.resize(n);
         generateKeysGPU(d_keys);
 
-        filter = std::make_unique<CuckooFilter<ConfigType>>(capacity);
+        filter = std::make_unique<cuckoogpu::Filter<ConfigType>>(capacity);
         filterMemory = filter->sizeInBytes();
     }
 
@@ -370,7 +370,7 @@ class CuckooFilterFixture : public benchmark::Fixture {
     size_t filterMemory;
     thrust::device_vector<KeyType> d_keys;
     thrust::device_vector<uint8_t> d_output;
-    std::unique_ptr<CuckooFilter<ConfigType>> filter;
+    std::unique_ptr<cuckoogpu::Filter<ConfigType>> filter;
     GPUTimer timer;
 };
 
