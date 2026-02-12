@@ -87,10 +87,10 @@ filter.insertMany(d_keys, numKeys);
 filter.insertManySorted(d_keys, numKeys);
 
 // Check membership
-filter.containsMany(d_keys, d_results, numKeys);
+filter.containsMany(d_keys, numKeys, d_results);
 
 // Delete keys
-filter.deleteMany(d_keys, d_results, numKeys);
+filter.deleteMany(d_keys, numKeys, d_results);
 ```
 
 ### Configuration Options
