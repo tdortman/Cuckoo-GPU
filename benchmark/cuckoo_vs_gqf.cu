@@ -5,11 +5,11 @@
 #include <thrust/reduce.h>
 #include <cstddef>
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
 #include <cuda/std/cstdint>
 
-#include <bucket_policies.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/bucket_policies.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <random>
 #include "benchmark_common.cuh"
 

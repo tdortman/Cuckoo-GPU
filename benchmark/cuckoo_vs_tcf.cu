@@ -7,12 +7,12 @@
 #include <thrust/reduce.h>
 #include <thrust/remove.h>
 #include <thrust/sort.h>
-#include <bucket_policies.cuh>
 #include <bulk_tcf_host.cuh>
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/bucket_policies.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <cuda/std/cstdint>
-#include <helpers.cuh>
 #include <random>
 #include "benchmark_common.cuh"
 

@@ -4,7 +4,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
 #include <bulk_tcf_host.cuh>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
 #include <cuco/bloom_filter.cuh>
 #include <cuda/std/cstdint>
 #include <gqf.cuh>

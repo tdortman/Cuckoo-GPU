@@ -11,8 +11,8 @@
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 #ifdef __x86_64__

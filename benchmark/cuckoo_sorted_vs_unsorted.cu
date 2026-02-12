@@ -3,8 +3,8 @@
 #include <thrust/device_vector.h>
 #include <cstdint>
 #include <cub/cub.cuh>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 namespace bm = benchmark;

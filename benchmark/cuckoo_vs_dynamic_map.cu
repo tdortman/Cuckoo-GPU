@@ -2,11 +2,11 @@
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/transform.h>
-#include <bucket_policies.cuh>
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/bucket_policies.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <cuco/dynamic_map.cuh>
-#include <helpers.cuh>
 #include <limits>
 #include "benchmark_common.cuh"
 

@@ -7,15 +7,15 @@
 #include <CLI/CLI.hpp>
 #include <cstdint>
 #include <ctime>
+#include <cuckoogpu/bucket_policies.cuh>
+#include <cuckoogpu/CuckooFilterMultiGPU.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
 #include <format>
 #include <iostream>
 #include <random>
 #include <string_view>
-#include "bucket_policies.cuh"
-#include "CuckooFilterMultiGPU.cuh"
-#include "helpers.cuh"
 
 int main(int argc, char** argv) {
     CLI::App app{"Multi-GPU Cuckoo Filter Benchmark"};

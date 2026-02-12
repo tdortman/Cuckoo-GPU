@@ -4,8 +4,8 @@
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
 #include <cstdint>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 namespace bm = benchmark;

@@ -5,9 +5,9 @@
 #include <thrust/host_vector.h>
 #include <unistd.h>
 #include <cstdint>
-#include <CuckooFilter.cuh>
-#include <CuckooFilterIPC.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilterIPC.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 namespace bm = benchmark;

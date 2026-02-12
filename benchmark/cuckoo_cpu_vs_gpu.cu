@@ -4,8 +4,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <cstdint>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <random>
 #include "benchmark_common.cuh"
 

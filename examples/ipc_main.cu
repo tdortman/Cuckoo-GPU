@@ -1,11 +1,11 @@
 #include <thrust/host_vector.h>
 #include <chrono>
 #include <CLI/CLI.hpp>
+#include <cuckoogpu/CuckooFilterIPC.cuh>
 #include <iostream>
 #include <random>
 #include <thread>
 #include <vector>
-#include "CuckooFilterIPC.cuh"
 
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
 

@@ -6,10 +6,10 @@
 #include <thrust/device_vector.h>
 #include <algorithm>
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <filesystem>
 #include <fstream>
-#include <helpers.cuh>
 #include <map>
 #include <string>
 #include <tuple>

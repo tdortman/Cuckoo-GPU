@@ -2,8 +2,8 @@
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <cstdint>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 namespace bm = benchmark;

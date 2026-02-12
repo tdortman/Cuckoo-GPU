@@ -1,9 +1,9 @@
 #include <chrono>
 #include <csignal>
+#include <cuckoogpu/CuckooFilterIPC.cuh>
 #include <iostream>
 #include <string>
 #include <thread>
-#include "CuckooFilterIPC.cuh"
 
 using Config = cuckoogpu::Config<uint32_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 static constexpr char SERVER_NAME[] = "benchmark_server";

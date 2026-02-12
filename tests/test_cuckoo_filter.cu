@@ -1,8 +1,8 @@
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 #include <thrust/device_vector.h>
-#include <CuckooFilter.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <random>
 #include <unordered_set>
 #include <vector>

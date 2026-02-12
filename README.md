@@ -72,7 +72,7 @@ meson setup build -DBUILD_BENCHMARKS=false -DBUILD_TESTS=false
 ## Usage
 
 ```cpp
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
 
 // Configure the filter: key type, fingerprint bits, max evictions, block size, bucket size
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 256, 16>;
@@ -113,7 +113,7 @@ The `Config` template accepts the following parameters:
 For workloads that exceed single GPU capacity:
 
 ```cpp
-#include <CuckooFilterMultiGPU.cuh>
+#include <cuckoogpu/CuckooFilterMultiGPU.cuh>
 
 cuckoogpu::FilterMultiGPU<Config> filter(numGPUs, totalCapacity);
 filter.insertMany(h_keys, numKeys);

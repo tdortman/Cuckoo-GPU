@@ -3,9 +3,9 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <cstdint>
-#include <CuckooFilter.cuh>
-#include <CuckooFilterMultiGPU.cuh>
-#include <helpers.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilterMultiGPU.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include "benchmark_common.cuh"
 
 namespace bm = benchmark;

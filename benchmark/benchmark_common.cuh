@@ -5,10 +5,10 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
-#include <bucket_policies.cuh>
+#include <cuckoogpu/bucket_policies.cuh>
 #include <chrono>
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
 #include <fstream>
 #include <limits>
 #include <random>

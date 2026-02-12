@@ -9,9 +9,9 @@
 #include <gqf_int.cuh>
 
 #include <cstdint>
-#include <CuckooFilter.cuh>
+#include <cuckoogpu/CuckooFilter.cuh>
+#include <cuckoogpu/helpers.cuh>
 #include <fstream>
-#include <helpers.cuh>
 
 #include "benchmark_common.cuh"
 
