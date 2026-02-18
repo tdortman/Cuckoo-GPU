@@ -21,14 +21,14 @@ if [ ! -f "$BUILD_DIR/subprojects/kmc/kmc" ]; then
     exit 1
 fi
 
-if [ ! -f "$BUILD_DIR/kmc_to_binary" ]; then
-    echo "Error: kmc_to_binary not found at $BUILD_DIR/kmc_to_binary"
+if [ ! -f "$BUILD_DIR/benchmark/kmc_to_binary" ]; then
+    echo "Error: kmc_to_binary not found at $BUILD_DIR/benchmark/kmc_to_binary"
     echo "Please run: meson setup build && ninja -C build"
     exit 1
 fi
 
 KMC="$BUILD_DIR/subprojects/kmc/kmc"
-KMC_TO_BINARY="$BUILD_DIR/kmc_to_binary"
+KMC_TO_BINARY="$BUILD_DIR/benchmark/kmc_to_binary"
 
 echo "Using KMC from: $KMC"
 echo "K values: ${K_VALUES[*]}"

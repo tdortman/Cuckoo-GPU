@@ -27,14 +27,6 @@ cuckoogpu_dep = declare_dependency(
 
 cli11_dep = subproject('cli11').get_variable('CLI11_dep')
 gossip_dep = subproject('gossip').get_variable('gossip_dep')
-kmc_api_dep = subproject('kmc').get_variable('kmc_api_dep')
-
-executable(
-    'kmc_to_binary',
-    'src/kmc_to_binary.cpp',
-    dependencies: [kmc_api_dep, cli11_dep],
-    install: true,
-)
 
 subdir('examples')
 
