@@ -1,0 +1,4 @@
+[wrap-git]
+url = https://github.com/owensgroup/BGHT.git
+revision = 7584547fcba6e980e8c80beb1694e52310ade16c
+depth = 1

@@ -8,7 +8,6 @@
 #   "typer",
 # ]
 # ///
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -26,10 +25,17 @@ def parse_benchmark_name(name: str) -> pd.Series:
     # Pattern: BSFixture<BucketSize>/<Operation>/<InputSize>/min_time:<MinTime>/repeats:<Repetitions>_<stat>
     # Example: BSFixture4/Insert/65536/min_time:0.500/repeats:5_median
     # Note: bucket_size is already in the CSV, so we don't need to extract it
-    match = re.match(r"BSFixture\d+/(\w+)/(\d+)", name)
-    if match:
-        operation = match.group(1)
-        input_size = int(match.group(2))
+    parsed = pu.parse_fixture_benchmark_name(name)
+    if parsed is not None:
+        filter_key, operation, input_size = parsed
+        if filter_key != "bs":
+            return pd.Series(
+                {
+                    "operation": None,
+                    "input_size": None,
+                    "exponent": None,
+                }
+            )
         return pd.Series(
             {
                 "operation": operation,

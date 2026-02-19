@@ -8,8 +8,6 @@
 # ]
 # ///
 """Plot bucket policy benchmark results as clustered bar charts."""
-
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -32,18 +30,22 @@ def load_policy_data(csv_path: Path) -> tuple[dict[str, dict[str, float]], int |
 
     data: dict[str, dict[str, float]] = {}
     capacity: int | None = None
+    policy_name_map = {
+        "xor": "Xor",
+        "addsub": "AddSub",
+        "offset": "Offset",
+    }
 
     for _, row in df.iterrows():
         name = row["name"]
-        # Parse: "XorFixture/Insert/.../<capacity>" -> policy="Xor", operation="Insert"
-        match = re.match(r"(\w+)Fixture/(\w+)/(\d+)", name)
-        if not match:
+        parsed = pu.parse_fixture_benchmark_name(name)
+        if parsed is None:
             continue
 
-        policy = match.group(1)
-        operation = match.group(2)
+        policy_key, operation, parsed_capacity = parsed
+        policy = policy_name_map.get(policy_key, policy_key.capitalize())
         if capacity is None:
-            capacity = int(match.group(3))
+            capacity = parsed_capacity
 
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
@@ -93,7 +95,7 @@ def main(
     )
 
     # Get handles and labels from axis, then create figure legend above
-    handles, labels = ax.get_legend_handles_labels()  # ty:ignore[possibly-missing-attribute]
+    handles, labels = ax.get_legend_handles_labels()  # ty:ignore[unresolved-attribute]
     fig.legend(
         handles,
         labels,

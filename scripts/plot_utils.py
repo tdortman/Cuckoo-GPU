@@ -5,6 +5,7 @@ multiple plotting scripts to reduce code duplication and ensure visual consisten
 """
 
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -21,7 +22,8 @@ FILTER_STYLES = {
     "tcf": {"color": "#C73E1D", "marker": "^"},
     "gqf": {"color": "#F18F01", "marker": "D"},
     "pcf": {"color": "#6A994E", "marker": "D"},
-    "dm":  {"color": "#9932CC", "marker": "*"},
+    "dm": {"color": "#9932CC", "marker": "*"},
+    "bght": {"color": "#264653", "marker": "X"},
 }
 
 FILTER_COLORS = {
@@ -32,6 +34,7 @@ FILTER_COLORS = {
     "GPU Quotient": FILTER_STYLES["gqf"]["color"],
     "Partitioned Cuckoo": FILTER_STYLES["pcf"]["color"],
     "Dynamic Map": FILTER_STYLES["dm"]["color"],
+    "Cuckoo Hash Table": FILTER_STYLES["bght"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
@@ -42,6 +45,7 @@ FILTER_DISPLAY_NAMES = {
     "pcf": "Partitioned Cuckoo",
     "bbf": "Blocked Bloom",
     "dm": "Dynamic Map",
+    "bght": "Cuckoo Hash Table",
 }
 
 OPERATION_COLORS = {
@@ -332,9 +336,46 @@ def normalize_benchmark_name(name: str) -> str:
     if parts:
         # Split on underscore to get filter name: "GPUCuckoo_5" → "GPUCuckoo"
         base = parts[0].split("_")[0]
-        return base.lower()
+        normalized = base.lower()
+        if normalized.endswith("fixture"):
+            normalized = normalized.removesuffix("fixture")
+        return normalized
 
     return name.lower()
+
+
+def parse_fixture_benchmark_name(name: str) -> Optional[tuple[str, str, int]]:
+    """Parse benchmark names in fixture format.
+
+    Expected format: ``<FixtureName>/<Operation>/<Size>/...``
+    Examples:
+        ``GCFFixture/Insert/65536/...``
+        ``BGHTFixture/Query/1048576/...``
+
+    Args:
+        name: Raw benchmark name from Google Benchmark CSV.
+
+    Returns:
+        Tuple ``(filter_key, operation, size)`` on success, else ``None``.
+        ``filter_key`` is normalized to lowercase and stripped of a trailing
+        ``Fixture`` suffix and optional numeric postfix.
+    """
+    parts = name.split("/")
+    if len(parts) < 3:
+        return None
+
+    first_part = parts[0].strip('"')
+    operation = parts[1]
+    size_str = parts[2]
+
+    if not size_str.isdigit():
+        return None
+
+    fixture_match = re.match(r"^(?P<base>.+?)Fixture\d*$", first_part)
+    if fixture_match is None:
+        return None
+
+    return fixture_match.group("base").lower(), operation, int(size_str)
 
 
 POLICY_COLORS = {

@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
+import plot_utils as pu
 import typer
 
 app = typer.Typer(help="Compute speedups of Cuckoo Filter vs other filters")
@@ -43,6 +44,8 @@ def parse_benchmark_data(
         if "/" not in name:
             continue
 
+        fixture_parsed = pu.parse_fixture_benchmark_name(name)
+
         parts = name.split("/")
         if len(parts) < 3:
             continue
@@ -51,13 +54,13 @@ def parse_benchmark_data(
 
         # Handle load factor format: "CF_50/Insert/268435456/..."
         # or Fixture format: "CFFixture/Insert/65536/..."
-        if first_part.endswith("Fixture"):
+        if fixture_parsed is not None:
             # Fixture format (no load factor)
             if load_factor is not None:
                 continue  # Skip if user wants specific load factor
-            filter_name = first_part[:-7]
-            operation = parts[1]
-            size_str = parts[2]
+            filter_key, operation = fixture_parsed[0], fixture_parsed[1]
+            size = fixture_parsed[2]
+            filter_name = filter_key.upper()
             lf = None
         elif "_" in first_part:
             # Load factor format: "CF_50/Insert/..." or old format "CF_Insert/..."
@@ -87,7 +90,8 @@ def parse_benchmark_data(
             continue
 
         try:
-            size = int(size_str)
+            if fixture_parsed is None:
+                size = int(size_str)
             items_per_second = row.get("items_per_second")
             if pd.notna(items_per_second):
                 data[filter_name][operation][size] = items_per_second

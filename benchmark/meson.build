@@ -13,6 +13,15 @@ cuco_opts.add_cmake_defines({
 })
 cuco_dep = cmake.subproject('cuco', options: cuco_opts).dependency('cuco')
 
+bght_opts = cmake.subproject_options()
+bght_opts.add_cmake_defines({
+    'CMAKE_BUILD_TYPE': 'Release',
+    'build_tests': 'OFF',
+    'build_benchmarks': 'OFF',
+    'build_examples': 'OFF',
+})
+bght_dep = cmake.subproject('BGHT', options: bght_opts).dependency('bght')
+
 is_x86_64 = host_machine.cpu_family() == 'x86_64'
 
 if is_x86_64
@@ -70,6 +79,10 @@ benchmarks = {
         'src': 'cuckoo_vs_dynamic_map.cu',
         'deps': [cuco_dep],
         'extra_args': ['-w'],
+    },
+    'cuckoo-vs-bght': {
+        'src': 'cuckoo_vs_bght.cu',
+        'deps': [bght_dep],
     },
     'load-factor': {
         'src': 'load_factor_benchmark.cu',
