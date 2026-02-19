@@ -1198,7 +1198,7 @@ struct Filter {
         size_t currentBucket = startBucket;
 
         for (size_t evictions = 0; evictions < maxEvictions; ++evictions) {
-            auto evictSlot = (currentFp + evictions * 7) & (bucketSize - 1);
+            auto evictSlot = (currentFp + (evictions + 1) * 0x9E3779B1UL) & (bucketSize - 1);
 
             size_t evictWord = evictSlot / Bucket::tagsPerWord;
             size_t evictTagIdx = evictSlot & (Bucket::tagsPerWord - 1);
@@ -1239,10 +1239,10 @@ struct Filter {
      * @brief Inserts a fingerprint using repeated shallow breadth-first attempts.
      *
      * Each round scans a handful of candidate eviction slots in the current bucket and tries to
-     * place one candidate in its alternate bucket. If no shallow move succeeds, it evicts one
-     * pseudo-random slot from the current bucket and restarts the same BFS round from that
-     * evicted tag's alternate bucket. This repeats until insertion succeeds or maxEvictions is
-     * reached.
+     * place one candidate in its alternate bucket. If no shallow move succeeds, it evicts the
+     * last scanned candidate slot from the current bucket and restarts the same BFS round from
+     * that evicted tag's alternate bucket. This repeats until insertion succeeds or maxEvictions
+     * is reached.
      *
      * @param fp Fingerprint to insert
      * @param evictionAttempts Optional pointer to a counter for eviction attempts
@@ -1259,14 +1259,19 @@ struct Filter {
         size_t evictions = 0;
         while (evictions < maxEvictions) {
             Bucket& bucket = d_buckets[currentBucket];
+            size_t restartWord = 0;
+            size_t restartTagIdx = 0;
 
             for (size_t i = 0; i < numCandidates; ++i) {
-                size_t slot = (currentFp + i * 7) & (bucketSize - 1);
-                size_t atomicIdx = slot / Bucket::tagsPerWord;
-                size_t tagIdx = slot & (Bucket::tagsPerWord - 1);
+                size_t evictSlot = (currentFp + i * 0x9E3779B1UL + (evictions + 1) * 0x85EBCA77) &
+                                   (bucketSize - 1);
+                size_t evictWord = evictSlot / Bucket::tagsPerWord;
+                size_t evictTagIdx = evictSlot & (Bucket::tagsPerWord - 1);
+                restartWord = evictWord;
+                restartTagIdx = evictTagIdx;
 
-                auto packed = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-                TagType candidateFp = bucket.extractTag(packed, tagIdx);
+                auto packed = bucket.packedTags[evictWord].load(cuda::memory_order_relaxed);
+                TagType candidateFp = bucket.extractTag(packed, evictTagIdx);
 
                 if (candidateFp == EMPTY) {
                     if (tryInsertAtBucket(currentBucket, currentFp)) {
@@ -1280,13 +1285,13 @@ struct Filter {
                 if (tryInsertAtBucket(altBucket, altFp)) {
                     // Successfully inserted the evicted tag at its alternate location
                     // Now atomically swap in our tag at the original location
-                    auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+                    auto expected = bucket.packedTags[evictWord].load(cuda::memory_order_relaxed);
 
                     // Verify the tag is still there and try to replace it
-                    if (bucket.extractTag(expected, tagIdx) == candidateFp) {
-                        auto desired = bucket.replaceTag(expected, tagIdx, currentFp);
+                    if (bucket.extractTag(expected, evictTagIdx) == candidateFp) {
+                        auto desired = bucket.replaceTag(expected, evictTagIdx, currentFp);
 
-                        if (bucket.packedTags[atomicIdx].compare_exchange_strong(
+                        if (bucket.packedTags[evictWord].compare_exchange_strong(
                                 expected,
                                 desired,
                                 cuda::memory_order_relaxed,
@@ -1307,21 +1312,15 @@ struct Filter {
                 }
             }
 
-            // Evict a pseudo-random tag and continue from its alternate location
-            size_t evictSlot = (static_cast<size_t>(currentFp) * 0x9E3779B1UL +
-                                (evictions + 1) * 0x85EBCA77UL + currentBucket * 0xC2B2AE3DUL) &
-                               (bucketSize - 1);
-            size_t evictWord = evictSlot / Bucket::tagsPerWord;
-            size_t evictTagIdx = evictSlot & (Bucket::tagsPerWord - 1);
-
-            auto expected = bucket.packedTags[evictWord].load(cuda::memory_order_relaxed);
+            // Evict the last scanned candidate and continue from its alternate location.
+            auto expected = bucket.packedTags[restartWord].load(cuda::memory_order_relaxed);
             typename Bucket::WordType desired;
             TagType evictedFp;
 
             do {
-                evictedFp = bucket.extractTag(expected, evictTagIdx);
-                desired = bucket.replaceTag(expected, evictTagIdx, currentFp);
-            } while (!bucket.packedTags[evictWord].compare_exchange_strong(
+                evictedFp = bucket.extractTag(expected, restartTagIdx);
+                desired = bucket.replaceTag(expected, restartTagIdx, currentFp);
+            } while (!bucket.packedTags[restartWord].compare_exchange_strong(
                 expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
             ));
 
