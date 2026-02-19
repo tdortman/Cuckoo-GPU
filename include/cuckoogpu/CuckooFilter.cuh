@@ -20,7 +20,7 @@ namespace cuckoogpu {
  * @brief Eviction policy for the Cuckoo Filter.
  */
 enum class EvictionPolicy {
-    BFS,  ///< Breadth-first search with DFS fallback (default)
+    BFS,  ///< Breadth-first search (default)
     DFS   ///< Pure depth-first search
 };
 
@@ -1236,11 +1236,13 @@ struct Filter {
     }
 
     /**
-     * @brief Inserts a fingerprint into the filter by evicting existing fingerprints using a
-     * very shallow breadth-first search. It tries multiple random random eviction targets and
-     * checks if there is an empty slot in their alternate buckets. If there is, it inserts the
-     * existing fingerprint into its alternate bucket and places the new fingerprint in the
-     * original location.
+     * @brief Inserts a fingerprint using repeated shallow breadth-first attempts.
+     *
+     * Each round scans a handful of candidate eviction slots in the current bucket and tries to
+     * place one candidate in its alternate bucket. If no shallow move succeeds, it evicts one
+     * pseudo-random slot from the current bucket and restarts the same BFS round from that
+     * evicted tag's alternate bucket. This repeats until insertion succeeds or maxEvictions is
+     * reached.
      *
      * @param fp Fingerprint to insert
      * @param evictionAttempts Optional pointer to a counter for eviction attempts
@@ -1251,57 +1253,97 @@ struct Filter {
     insertWithEvictionBFS(TagType fp, size_t startBucket, uint32_t* evictionAttempts = nullptr) {
         constexpr size_t numCandidates = std::max(1UL, bucketSize / 2);
 
-        Bucket& bucket = d_buckets[startBucket];
+        TagType currentFp = fp;
+        size_t currentBucket = startBucket;
 
-        for (size_t i = 0; i < numCandidates; ++i) {
-            size_t slot = (fp + i * 7) & (bucketSize - 1);
-            size_t atomicIdx = slot / Bucket::tagsPerWord;
-            size_t tagIdx = slot & (Bucket::tagsPerWord - 1);
+        size_t evictions = 0;
+        while (evictions < maxEvictions) {
+            Bucket& bucket = d_buckets[currentBucket];
 
-            auto packed = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-            TagType candidateFp = bucket.extractTag(packed, tagIdx);
+            for (size_t i = 0; i < numCandidates; ++i) {
+                size_t slot = (currentFp + i * 7) & (bucketSize - 1);
+                size_t atomicIdx = slot / Bucket::tagsPerWord;
+                size_t tagIdx = slot & (Bucket::tagsPerWord - 1);
 
-            if (candidateFp == EMPTY) {
-                if (tryInsertAtBucket(startBucket, fp)) {
-                    return true;
-                }
-                continue;
-            }
+                auto packed = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+                TagType candidateFp = bucket.extractTag(packed, tagIdx);
 
-            auto [altBucket, altFp] =
-                getAlternateBucketWithNewFp(startBucket, candidateFp, numBuckets);
-            if (tryInsertAtBucket(altBucket, altFp)) {
-                // Successfully inserted the evicted tag at its alternate location
-                // Now atomically swap in our tag at the original location
-                auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
-
-                // Verify the tag is still there and try to replace it
-                if (bucket.extractTag(expected, tagIdx) == candidateFp) {
-                    auto desired = bucket.replaceTag(expected, tagIdx, fp);
-
-                    if (bucket.packedTags[atomicIdx].compare_exchange_strong(
-                            expected,
-                            desired,
-                            cuda::memory_order_relaxed,
-                            cuda::memory_order_relaxed
-                        )) {
-#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
-                        d_numEvictions->fetch_add(1, cuda::memory_order_relaxed);
-                        if (evictionAttempts != nullptr) {
-                            (*evictionAttempts)++;
-                        }
-#endif
+                if (candidateFp == EMPTY) {
+                    if (tryInsertAtBucket(currentBucket, currentFp)) {
                         return true;
                     }
+                    continue;
                 }
 
-                // Failed to swap, clean up the tag we inserted to avoid duplicates
-                tryRemoveAtBucket(altBucket, candidateFp);
+                auto [altBucket, altFp] =
+                    getAlternateBucketWithNewFp(currentBucket, candidateFp, numBuckets);
+                if (tryInsertAtBucket(altBucket, altFp)) {
+                    // Successfully inserted the evicted tag at its alternate location
+                    // Now atomically swap in our tag at the original location
+                    auto expected = bucket.packedTags[atomicIdx].load(cuda::memory_order_relaxed);
+
+                    // Verify the tag is still there and try to replace it
+                    if (bucket.extractTag(expected, tagIdx) == candidateFp) {
+                        auto desired = bucket.replaceTag(expected, tagIdx, currentFp);
+
+                        if (bucket.packedTags[atomicIdx].compare_exchange_strong(
+                                expected,
+                                desired,
+                                cuda::memory_order_relaxed,
+                                cuda::memory_order_relaxed
+                            )) {
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+                            d_numEvictions->fetch_add(1, cuda::memory_order_relaxed);
+                            if (evictionAttempts != nullptr) {
+                                (*evictionAttempts)++;
+                            }
+#endif
+                            return true;
+                        }
+                    }
+
+                    // Failed to swap, clean up the tag we inserted to avoid duplicates
+                    tryRemoveAtBucket(altBucket, candidateFp);
+                }
             }
+
+            // Evict a pseudo-random tag and continue from its alternate location
+            size_t evictSlot = (static_cast<size_t>(currentFp) * 0x9E3779B1UL +
+                                (evictions + 1) * 0x85EBCA77UL + currentBucket * 0xC2B2AE3DUL) &
+                               (bucketSize - 1);
+            size_t evictWord = evictSlot / Bucket::tagsPerWord;
+            size_t evictTagIdx = evictSlot & (Bucket::tagsPerWord - 1);
+
+            auto expected = bucket.packedTags[evictWord].load(cuda::memory_order_relaxed);
+            typename Bucket::WordType desired;
+            TagType evictedFp;
+
+            do {
+                evictedFp = bucket.extractTag(expected, evictTagIdx);
+                desired = bucket.replaceTag(expected, evictTagIdx, currentFp);
+            } while (!bucket.packedTags[evictWord].compare_exchange_strong(
+                expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
+            ));
+
+            if (evictedFp == EMPTY) {
+                return true;
+            }
+
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+            d_numEvictions->fetch_add(1, cuda::memory_order_relaxed);
+            if (evictionAttempts != nullptr) {
+                (*evictionAttempts)++;
+            }
+#endif
+
+            evictions++;
+            auto [altBucket, altFp] =
+                getAlternateBucketWithNewFp(currentBucket, evictedFp, numBuckets);
+            currentBucket = altBucket;
+            currentFp = altFp;
         }
 
-        // fall back to greedy DFS
-        return insertWithEvictionDFS(fp, startBucket, evictionAttempts);
+        return false;
     }
 
     /**

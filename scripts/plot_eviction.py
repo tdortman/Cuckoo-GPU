@@ -304,9 +304,9 @@ def weighted_percentile(bin_values: np.ndarray, counts: np.ndarray, q: float) ->
 def plot_histogram_percentiles(
     histogram_csv: Path,
     output_dir: Path,
-    quantiles: tuple[float, ...] = (0.50, 0.90, 0.99),
+    quantiles: tuple[float, ...] = (0.90, 0.95, 0.99),
 ) -> None:
-    """Plot percentile curves (p50/p90/p99) over load factor from histogram bins."""
+    """Plot percentile curves (p90/p95/p99) over load factor from histogram bins."""
     try:
         df = load_histogram_csv(histogram_csv)
     except ValueError as exc:
@@ -349,8 +349,8 @@ def plot_histogram_percentiles(
 
     fig, ax = plt.subplots(figsize=(11, 6))
     quantile_styles = {
-        0.50: {"color": "#4C78A8", "marker": "o", "linestyle": "-"},
-        0.90: {"color": "#F58518", "marker": "s", "linestyle": "--"},
+        0.90: {"color": "#4C78A8", "marker": "o", "linestyle": "-"},
+        0.95: {"color": "#F58518", "marker": "s", "linestyle": "--"},
         0.99: {"color": "#54A24B", "marker": "D", "linestyle": "-."},
     }
     policy_styles = {
@@ -590,7 +590,7 @@ def main(
     histogram_percentiles: bool = typer.Option(
         True,
         "--histogram-percentiles/--no-histogram-percentiles",
-        help="Generate p50/p90/p99 curves from histogram data",
+        help="Generate p90/p95/p99 curves from histogram data",
     ),
 ):
     """
