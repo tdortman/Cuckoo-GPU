@@ -86,7 +86,7 @@ benchmarks = {
     },
     'load-factor': {
         'src': 'load_factor_benchmark.cu',
-        'deps': [cuco_dep, tcf_dep, gqf_dep] + (is_x86_64 ? [partitioned_dep] : []),
+        'deps': [cuco_dep, tcf_dep, gqf_dep, bght_dep] + (is_x86_64 ? [partitioned_dep] : []),
         'extra_args': ['-w'],
     },
     'fpr': {

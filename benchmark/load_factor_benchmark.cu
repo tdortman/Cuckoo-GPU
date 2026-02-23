@@ -1,9 +1,12 @@
 #include <benchmark/benchmark.h>
+#include <bght/bcht.hpp>
+#include <bght/pair.cuh>
 #include <cuckoofilter.h>
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
+#include <thrust/transform.h>
 #include <bulk_tcf_host.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -196,6 +199,85 @@ class TCFFixture : public benchmark::Fixture {
     uint64_t* d_misses = nullptr;
     thrust::device_vector<uint64_t> d_keys;
     thrust::device_vector<uint64_t> d_keysNegative;
+    GPUTimer timer;
+};
+
+template <double loadFactor>
+class BGHTFixtureLF : public benchmark::Fixture {
+    using benchmark::Fixture::SetUp;
+    using benchmark::Fixture::TearDown;
+
+   public:
+    using KeyType = uint64_t;
+    using ValueType = uint8_t;
+    using PairType = bght::pair<KeyType, ValueType>;
+    using TableType = bght::bcht<KeyType, ValueType>;
+
+    static constexpr KeyType sentinelKey() {
+        return std::numeric_limits<KeyType>::max();
+    }
+
+    static constexpr ValueType sentinelValue() {
+        return std::numeric_limits<ValueType>::max();
+    }
+
+    static size_t memoryBytesForCapacity(size_t requestedCapacity) {
+        constexpr size_t bucketSize = TableType::bucket_size;
+        const size_t roundedCapacity = SDIV(requestedCapacity, bucketSize) * bucketSize;
+        return roundedCapacity * sizeof(typename TableType::atomic_pair_type) + sizeof(bool);
+    }
+
+    void SetUp(const benchmark::State& state) override {
+        auto [cap, num] = calculateCapacityAndSize(state.range(0), loadFactor);
+        capacity = cap;
+        n = num;
+
+        d_keys.resize(n);
+        d_keysNegative.resize(n);
+        d_pairs.resize(n);
+        d_output.resize(n);
+
+        generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
+        generateKeysGPURange(d_keysNegative, n, uint64_t(UINT32_MAX) + 1, UINT64_MAX);
+
+        thrust::transform(
+            d_keys.begin(), d_keys.end(), d_pairs.begin(), [] __device__(KeyType key) {
+                return PairType{key, static_cast<ValueType>(1)};
+            }
+        );
+
+        tableMemory = memoryBytesForCapacity(capacity);
+        resetTable();
+    }
+
+    void TearDown(const benchmark::State&) override {
+        table.reset();
+        d_keys.clear();
+        d_keys.shrink_to_fit();
+        d_keysNegative.clear();
+        d_keysNegative.shrink_to_fit();
+        d_pairs.clear();
+        d_pairs.shrink_to_fit();
+        d_output.clear();
+        d_output.shrink_to_fit();
+    }
+
+    void setCounters(benchmark::State& state) const {
+        setCommonCounters(state, tableMemory, n);
+    }
+
+    void resetTable() {
+        table = std::make_unique<TableType>(capacity, sentinelKey(), sentinelValue());
+    }
+
+    size_t capacity;
+    size_t n;
+    size_t tableMemory;
+    thrust::device_vector<KeyType> d_keys;
+    thrust::device_vector<KeyType> d_keysNegative;
+    thrust::device_vector<PairType> d_pairs;
+    thrust::device_vector<ValueType> d_output;
+    std::unique_ptr<TableType> table;
     GPUTimer timer;
 };
 
@@ -629,6 +711,59 @@ class GQFFixtureLF : public benchmark::Fixture {
     BENCHMARK_REGISTER_F(TCF_##ID, Query) BENCHMARK_CONFIG_LF;                                \
     BENCHMARK_REGISTER_F(TCF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                        \
     BENCHMARK_REGISTER_F(TCF_##ID, Delete) BENCHMARK_CONFIG_LF;                               \
+                                                                                              \
+    /* BGHT */                                                                                \
+    using BGHT_##ID = BGHTFixtureLF<(LF) * 0.01>;                                             \
+    BENCHMARK_DEFINE_F(BGHT_##ID, Insert)(bm::State & state) {                                \
+        for (auto _ : state) {                                                                \
+            resetTable();                                                                      \
+            cudaDeviceSynchronize();                                                          \
+            timer.start();                                                                    \
+            bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                    \
+            state.SetIterationTime(timer.elapsed());                                          \
+            bm::DoNotOptimize(inserted);                                                      \
+            if (!inserted) {                                                                  \
+                state.SkipWithError("BGHT BCHT insertion failed.");                           \
+                break;                                                                        \
+            }                                                                                 \
+        }                                                                                     \
+        setCounters(state);                                                                   \
+    }                                                                                         \
+    BENCHMARK_DEFINE_F(BGHT_##ID, Query)(bm::State & state) {                                 \
+        resetTable();                                                                         \
+        bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                        \
+        if (!inserted) {                                                                      \
+            state.SkipWithError("BGHT BCHT insertion failed during query setup.");            \
+            return;                                                                           \
+        }                                                                                     \
+        cudaDeviceSynchronize();                                                              \
+        for (auto _ : state) {                                                                \
+            timer.start();                                                                    \
+            table->find(d_keys.begin(), d_keys.end(), d_output.begin());                      \
+            state.SetIterationTime(timer.elapsed());                                          \
+            bm::DoNotOptimize(d_output.data().get());                                         \
+        }                                                                                     \
+        setCounters(state);                                                                   \
+    }                                                                                         \
+    BENCHMARK_DEFINE_F(BGHT_##ID, QueryNegative)(bm::State & state) {                         \
+        resetTable();                                                                         \
+        bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                        \
+        if (!inserted) {                                                                      \
+            state.SkipWithError("BGHT BCHT insertion failed during query setup.");            \
+            return;                                                                           \
+        }                                                                                     \
+        cudaDeviceSynchronize();                                                              \
+        for (auto _ : state) {                                                                \
+            timer.start();                                                                    \
+            table->find(d_keysNegative.begin(), d_keysNegative.end(), d_output.begin());      \
+            state.SetIterationTime(timer.elapsed());                                          \
+            bm::DoNotOptimize(d_output.data().get());                                         \
+        }                                                                                     \
+        setCounters(state);                                                                   \
+    }                                                                                         \
+    BENCHMARK_REGISTER_F(BGHT_##ID, Insert) BENCHMARK_CONFIG_LF;                              \
+    BENCHMARK_REGISTER_F(BGHT_##ID, Query) BENCHMARK_CONFIG_LF;                               \
+    BENCHMARK_REGISTER_F(BGHT_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                       \
                                                                                               \
     /* GQF */                                                                                 \
     using GQF_##ID = GQFFixtureLF<(LF) * 0.01>;                                               \
