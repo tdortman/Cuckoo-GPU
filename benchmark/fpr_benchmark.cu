@@ -287,7 +287,7 @@ static void PCF_FPR(bm::State& state) {
 
 #define FPR_CONFIG                   \
     ->RangeMultiplier(2)             \
-        ->Range(1 << 15, 1ULL << 28) \
+        ->Range(1 << 16, 1ULL << 30) \
         ->Unit(bm::kMillisecond)     \
         ->UseManualTime()            \
         ->Iterations(10)             \
