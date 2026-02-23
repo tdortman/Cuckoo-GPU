@@ -5,9 +5,10 @@ GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 FULL_PATH_NAMES        = NO
 PREDEFINED             = CUCKOO_FILTER_COUNT_EVICTIONS
+USE_MDFILE_AS_MAINPAGE = README.md
 
 # Inputs
-INPUT                  = include
+INPUT                  = include, README.md
 FILE_PATTERNS          = *.cuh
 RECURSIVE              = YES
 EXTENSION_MAPPING      = cuh=C++
