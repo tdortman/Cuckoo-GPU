@@ -6,7 +6,6 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
-#include <thrust/transform.h>
 #include <bulk_tcf_host.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -49,7 +48,7 @@ using PartitionedCuckooFilter =
     filters::Filter<filters::FilterType::Cuckoo, CPUFilterParam, Config::bitsPerTag, CPUOptimParam>;
 #endif
 
-constexpr size_t FIXED_CAPACITY = 1ULL << 28;
+constexpr size_t FIXED_CAPACITY = 1ULL << 22;
 const size_t L2_CACHE_SIZE = getL2CacheSize();
 
 template <double loadFactor>
@@ -105,6 +104,19 @@ template <typename Filter>
 size_t cucoNumBlocks(size_t n) {
     constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
     return SDIV(n * Config::bitsPerTag, Filter::words_per_block * bitsPerWord);
+}
+
+template <typename PairType, typename KeyType, typename ValueType>
+__global__ void makePairsKernel(
+    const KeyType* keys,
+    PairType* pairs,
+    size_t n,
+    ValueType value
+) {
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        pairs[idx] = PairType{keys[idx], value};
+    }
 }
 
 template <double loadFactor>
@@ -240,11 +252,15 @@ class BGHTFixtureLF : public benchmark::Fixture {
         generateKeysGPURange(d_keys, n, uint64_t(0), uint64_t(UINT32_MAX));
         generateKeysGPURange(d_keysNegative, n, uint64_t(UINT32_MAX) + 1, UINT64_MAX);
 
-        thrust::transform(
-            d_keys.begin(), d_keys.end(), d_pairs.begin(), [] __device__(KeyType key) {
-                return PairType{key, static_cast<ValueType>(1)};
-            }
+        constexpr int threadsPerBlock = 256;
+        const int numBlocks = static_cast<int>(SDIV(n, static_cast<size_t>(threadsPerBlock)));
+        makePairsKernel<<<numBlocks, threadsPerBlock>>>(
+            thrust::raw_pointer_cast(d_keys.data()),
+            thrust::raw_pointer_cast(d_pairs.data()),
+            n,
+            static_cast<ValueType>(1)
         );
+        CUDA_CALL(cudaDeviceSynchronize());
 
         tableMemory = memoryBytesForCapacity(capacity);
         resetTable();
