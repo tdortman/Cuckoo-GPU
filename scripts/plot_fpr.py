@@ -119,7 +119,7 @@ def main(
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.12),
-        ncol=len(labels),
+        ncol=len(labels) // 2,
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
@@ -167,7 +167,7 @@ def main(
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.12),
-        ncol=len(labels),
+        ncol=len(labels) // 2,
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
