@@ -117,7 +117,7 @@ def main(
     )
 
     # Get handles and labels from axis, then create figure legend above
-    handles, labels = ax.get_legend_handles_labels()  # ty:ignore[possibly-missing-attribute]
+    handles, labels = ax.get_legend_handles_labels()  # ty:ignore[unresolved-attribute]
     fig.legend(
         handles,
         labels,

@@ -59,6 +59,7 @@ DEFAULT_FONT_SIZE = 12
 AXIS_LABEL_FONT_SIZE = 14
 TITLE_FONT_SIZE = 16
 LEGEND_FONT_SIZE = 14
+BAR_FONT_SIZE = 11
 LINE_WIDTH = 2
 MARKER_SIZE = 6
 GRID_ALPHA = 0.3
@@ -454,7 +455,7 @@ def clustered_bar_chart(
                         f"{val:.0f}",
                         ha="center",
                         va="bottom",
-                        fontsize=LEGEND_FONT_SIZE,
+                        fontsize=BAR_FONT_SIZE,
                         fontweight="bold",
                     )
 
