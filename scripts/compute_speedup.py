@@ -25,7 +25,7 @@ FILTER_NAMES = {
     "GQF": "GPU Quotient",
     "PCF": "Partitioned Cuckoo",
     "CCF": "CPU Cuckoo",
-    "BGHT": "Cuckoo Hash Table",
+    "BCHT": "Cuckoo Hash Table",
 }
 
 

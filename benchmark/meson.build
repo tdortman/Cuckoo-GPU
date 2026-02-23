@@ -80,8 +80,8 @@ benchmarks = {
         'deps': [cuco_dep],
         'extra_args': ['-w'],
     },
-    'cuckoo-vs-bght': {
-        'src': 'cuckoo_vs_bght.cu',
+    'cuckoo-vs-bcht': {
+        'src': 'cuckoo_vs_bcht.cu',
         'deps': [bght_dep],
     },
     'load-factor': {

@@ -115,8 +115,8 @@ def get_filter_styles() -> dict:
         "Partitioned Cuckoo": pu.FILTER_STYLES.get(
             "pcf", {"color": "#6A994E", "marker": "D"}
         ),
-        "Cuckoo Hash Table": pu.FILTER_STYLES.get(
-            "bght", {"color": "#264653", "marker": "X"}
+        "BCHT": pu.FILTER_STYLES.get(
+            "bcht", {"color": "#264653", "marker": "X"}
         ),
     }
 

@@ -61,7 +61,7 @@ class CuckooFilterUniqueFixture : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-class BGHTFixture : public benchmark::Fixture {
+class BCHTFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
     using benchmark::Fixture::TearDown;
 
@@ -136,7 +136,7 @@ class BGHTFixture : public benchmark::Fixture {
 
 using GCFFixture = CuckooFilterUniqueFixture<FilterConfig, LOAD_FACTOR>;
 
-BENCHMARK_DEFINE_F(BGHTFixture, Insert)(bm::State& state) {
+BENCHMARK_DEFINE_F(BCHTFixture, Insert)(bm::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         resetTable();
@@ -151,7 +151,7 @@ BENCHMARK_DEFINE_F(BGHTFixture, Insert)(bm::State& state) {
         bm::DoNotOptimize(inserted);
         if (!inserted) {
             state.SkipWithError(
-                "BGHT BCHT insertion failed. Try lower load factor or smaller capacity."
+                "BCHTBCHT insertion failed. Try lower load factor or smaller capacity."
             );
             break;
         }
@@ -159,10 +159,10 @@ BENCHMARK_DEFINE_F(BGHTFixture, Insert)(bm::State& state) {
     setCounters(state);
 }
 
-BENCHMARK_DEFINE_F(BGHTFixture, Query)(bm::State& state) {
+BENCHMARK_DEFINE_F(BCHTFixture, Query)(bm::State& state) {
     bool inserted = table->insert(d_pairs.begin(), d_pairs.end());
     if (!inserted) {
-        state.SkipWithError("BGHT BCHT insertion failed during query setup.");
+        state.SkipWithError("BCHTBCHT insertion failed during query setup.");
         return;
     }
     cudaDeviceSynchronize();
@@ -180,7 +180,7 @@ BENCHMARK_DEFINE_F(BGHTFixture, Query)(bm::State& state) {
 
 DEFINE_INSERT_QUERY(GCFFixture)
 
-#define BGHT_BENCHMARK_CONFIG \
+#define BCHT_BENCHMARK_CONFIG \
     ->RangeMultiplier(2)                 \
         ->Range(1 << 16, 1ULL << 26)     \
         ->Unit(benchmark::kMillisecond)  \
@@ -189,9 +189,9 @@ DEFINE_INSERT_QUERY(GCFFixture)
         ->Repetitions(5)                 \
         ->ReportAggregatesOnly(true)
 
-BENCHMARK_REGISTER_F(GCFFixture, Insert) BGHT_BENCHMARK_CONFIG;
-BENCHMARK_REGISTER_F(GCFFixture, Query) BGHT_BENCHMARK_CONFIG;
-BENCHMARK_REGISTER_F(BGHTFixture, Insert) BGHT_BENCHMARK_CONFIG;
-BENCHMARK_REGISTER_F(BGHTFixture, Query) BGHT_BENCHMARK_CONFIG;
+BENCHMARK_REGISTER_F(GCFFixture, Insert) BCHT_BENCHMARK_CONFIG;
+BENCHMARK_REGISTER_F(GCFFixture, Query) BCHT_BENCHMARK_CONFIG;
+BENCHMARK_REGISTER_F(BCHTFixture, Insert) BCHT_BENCHMARK_CONFIG;
+BENCHMARK_REGISTER_F(BCHTFixture, Query) BCHT_BENCHMARK_CONFIG;
 
 STANDARD_BENCHMARK_MAIN();

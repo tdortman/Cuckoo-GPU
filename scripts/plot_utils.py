@@ -23,7 +23,7 @@ FILTER_STYLES = {
     "gqf": {"color": "#F18F01", "marker": "D"},
     "pcf": {"color": "#6A994E", "marker": "D"},
     "dm": {"color": "#9932CC", "marker": "*"},
-    "bght": {"color": "#264653", "marker": "X"},
+    "bcht": {"color": "#264653", "marker": "X"},
 }
 
 FILTER_COLORS = {
@@ -34,7 +34,7 @@ FILTER_COLORS = {
     "GPU Quotient": FILTER_STYLES["gqf"]["color"],
     "Partitioned Cuckoo": FILTER_STYLES["pcf"]["color"],
     "Dynamic Map": FILTER_STYLES["dm"]["color"],
-    "Cuckoo Hash Table": FILTER_STYLES["bght"]["color"],
+    "BCHT": FILTER_STYLES["bcht"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
@@ -45,7 +45,7 @@ FILTER_DISPLAY_NAMES = {
     "pcf": "Partitioned Cuckoo",
     "bbf": "Blocked Bloom",
     "dm": "Dynamic Map",
-    "bght": "Cuckoo Hash Table",
+    "bcht": "BCHT",
 }
 
 OPERATION_COLORS = {
@@ -351,7 +351,7 @@ def parse_fixture_benchmark_name(name: str) -> Optional[tuple[str, str, int]]:
     Expected format: ``<FixtureName>/<Operation>/<Size>/...``
     Examples:
         ``GCFFixture/Insert/65536/...``
-        ``BGHTFixture/Query/1048576/...``
+        ``BCHTFixture/Query/1048576/...``
 
     Args:
         name: Raw benchmark name from Google Benchmark CSV.

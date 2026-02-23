@@ -215,7 +215,7 @@ class TCFFixture : public benchmark::Fixture {
 };
 
 template <double loadFactor>
-class BGHTFixtureLF : public benchmark::Fixture {
+class BCHTFixtureLF : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
     using benchmark::Fixture::TearDown;
 
@@ -728,9 +728,9 @@ class GQFFixtureLF : public benchmark::Fixture {
     BENCHMARK_REGISTER_F(TCF_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                        \
     BENCHMARK_REGISTER_F(TCF_##ID, Delete) BENCHMARK_CONFIG_LF;                               \
                                                                                               \
-    /* BGHT */                                                                                \
-    using BGHT_##ID = BGHTFixtureLF<(LF) * 0.01>;                                             \
-    BENCHMARK_DEFINE_F(BGHT_##ID, Insert)(bm::State & state) {                                \
+    /* BCHT */                                                                                \
+    using BCHT_##ID = BCHTFixtureLF<(LF) * 0.01>;                                             \
+    BENCHMARK_DEFINE_F(BCHT_##ID, Insert)(bm::State & state) {                                \
         for (auto _ : state) {                                                                \
             resetTable();                                                                      \
             cudaDeviceSynchronize();                                                          \
@@ -739,17 +739,17 @@ class GQFFixtureLF : public benchmark::Fixture {
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(inserted);                                                      \
             if (!inserted) {                                                                  \
-                state.SkipWithError("BGHT BCHT insertion failed.");                           \
+                state.SkipWithError("BCHT BCHT insertion failed.");                           \
                 break;                                                                        \
             }                                                                                 \
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(BGHT_##ID, Query)(bm::State & state) {                                 \
+    BENCHMARK_DEFINE_F(BCHT_##ID, Query)(bm::State & state) {                                 \
         resetTable();                                                                         \
         bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                        \
         if (!inserted) {                                                                      \
-            state.SkipWithError("BGHT BCHT insertion failed during query setup.");            \
+            state.SkipWithError("BCHT BCHT insertion failed during query setup.");            \
             return;                                                                           \
         }                                                                                     \
         cudaDeviceSynchronize();                                                              \
@@ -761,11 +761,11 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_DEFINE_F(BGHT_##ID, QueryNegative)(bm::State & state) {                         \
+    BENCHMARK_DEFINE_F(BCHT_##ID, QueryNegative)(bm::State & state) {                         \
         resetTable();                                                                         \
         bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                        \
         if (!inserted) {                                                                      \
-            state.SkipWithError("BGHT BCHT insertion failed during query setup.");            \
+            state.SkipWithError("BCHT BCHT insertion failed during query setup.");            \
             return;                                                                           \
         }                                                                                     \
         cudaDeviceSynchronize();                                                              \
@@ -777,9 +777,9 @@ class GQFFixtureLF : public benchmark::Fixture {
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
-    BENCHMARK_REGISTER_F(BGHT_##ID, Insert) BENCHMARK_CONFIG_LF;                              \
-    BENCHMARK_REGISTER_F(BGHT_##ID, Query) BENCHMARK_CONFIG_LF;                               \
-    BENCHMARK_REGISTER_F(BGHT_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                       \
+    BENCHMARK_REGISTER_F(BCHT_##ID, Insert) BENCHMARK_CONFIG_LF;                              \
+    BENCHMARK_REGISTER_F(BCHT_##ID, Query) BENCHMARK_CONFIG_LF;                               \
+    BENCHMARK_REGISTER_F(BCHT_##ID, QueryNegative) BENCHMARK_CONFIG_LF;                       \
                                                                                               \
     /* GQF */                                                                                 \
     using GQF_##ID = GQFFixtureLF<(LF) * 0.01>;                                               \
