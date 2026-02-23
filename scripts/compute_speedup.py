@@ -4,6 +4,7 @@
 # dependencies = [
 #   "pandas",
 #   "typer",
+#   "matplotlib",
 # ]
 # ///
 
@@ -18,10 +19,13 @@ import typer
 app = typer.Typer(help="Compute speedups of Cuckoo Filter vs other filters")
 
 FILTER_NAMES = {
-    "CF": "GPU Cuckoo",
+    "GCF": "GPU Cuckoo",
     "BBF": "Blocked Bloom",
-    "TCF": "TCF",
-    "GQF": "GQF",
+    "TCF": "Two-Choice",
+    "GQF": "GPU Quotient",
+    "PCF": "Partitioned Cuckoo",
+    "CCF": "CPU Cuckoo",
+    "BGHT": "Cuckoo Hash Table",
 }
 
 
@@ -104,7 +108,7 @@ def parse_benchmark_data(
 @app.command()
 def main(
     csv_file: Path = typer.Argument(..., help="Path to benchmark CSV file"),
-    baseline: str = typer.Option("CF", "--baseline", "-b", help="Baseline filter name"),
+    baseline: str = typer.Option("GCF", "--baseline", "-b", help="Baseline filter name"),
     load_factor: int = typer.Option(
         None,
         "--load-factor",
