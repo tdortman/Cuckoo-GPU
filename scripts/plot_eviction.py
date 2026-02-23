@@ -281,7 +281,7 @@ def plot_metric_separate(
 
         ax.legend(
             fontsize=pu.LEGEND_FONT_SIZE,
-            loc="upper left",
+            loc="upper right",
             framealpha=pu.LEGEND_FRAME_ALPHA,
         )
 
@@ -639,11 +639,12 @@ def main(
         "DFS": {**pu.FILTER_STYLES["bbf"], "linestyle": "--"},
     }
 
-    plot_metric_figure(
+    plot_metric_separate(
         datasets,
         metric_key="throughput_data",
         y_label="Throughput [M ops/s]",
-        output_file=output_dir / "eviction_throughput.pdf",
+        output_stem="eviction_throughput",
+        output_dir=output_dir,
         policy_styles=policy_styles,
         value_scale=1e6,
     )
