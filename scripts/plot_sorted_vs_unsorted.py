@@ -10,7 +10,7 @@
 """
 Plot sorted vs unsorted insertion benchmark results.
 
-Compares three insertion methods:
+Compares three insertion methods across two hardware platforms:
 - Unsorted: Direct insertion without sorting
 - Sorted: Insertion with inline sorting (sort time included)
 - Presorted: Insertion with pre-sorted keys (sort time excluded)
@@ -55,6 +55,33 @@ def extract_benchmark_data(df: pd.DataFrame) -> dict[str, dict[int, float]]:
     return benchmark_data
 
 
+def load_benchmark_data(csv_file: Path, hardware_label: str) -> dict[str, dict[int, float]]:
+    """Load and extract benchmark data from one hardware CSV."""
+    df = pu.load_csv(csv_file)
+
+    required_columns = {"name", "items_per_second"}
+    missing_columns = required_columns - set(df.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        typer.secho(
+            f"CSV for {hardware_label} is missing required columns ({missing}): {csv_file}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    benchmark_data = extract_benchmark_data(df)
+    if not benchmark_data:
+        typer.secho(
+            f"No benchmark data found in {hardware_label} CSV: {csv_file}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    return benchmark_data
+
+
 # Display name mapping for prettier labels
 DISPLAY_NAMES = {
     "InsertUnsorted": "Unsorted",
@@ -69,12 +96,22 @@ COLORS = {
     "InsertPresorted": "#2ECC71",  # Green
 }
 
+HARDWARE_STYLES = {
+    "HBM3": {"linestyle": "-", "alpha": 1.0, "hollow_marker": False},
+    "GDDR7": {"linestyle": "--", "alpha": 0.9, "hollow_marker": True},
+}
+
 
 @app.command()
 def main(
-    csv_file: Path = typer.Argument(
+    hbm3_csv: Path = typer.Argument(
         ...,
-        help="Path to benchmark CSV file",
+        help="Path to HBM3 benchmark CSV file",
+        exists=True,
+    ),
+    gddr7_csv: Path = typer.Argument(
+        ...,
+        help="Path to GDDR7 benchmark CSV file",
         exists=True,
     ),
     output_dir: Optional[Path] = typer.Option(
@@ -87,22 +124,17 @@ def main(
     """
     Generate a throughput comparison plot for sorted vs unsorted insertion methods.
 
-    The plot shows throughput (G ops/s) vs input size for:
+    The plot overlays both hardware platforms on one axis:
+    - HBM3
+    - GDDR7
+
+    Each insertion method keeps one color across platforms:
     - Unsorted: Direct insertion
     - Sorted: Insertion with sorting (sort time included in measurement)
     - Presorted: Insertion with pre-sorted keys (sort time excluded)
     """
-    try:
-        df = pd.read_csv(csv_file)
-    except Exception as e:
-        typer.secho(f"Error reading CSV: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-
-    benchmark_data = extract_benchmark_data(df)
-
-    if not benchmark_data:
-        typer.secho("No benchmark data found in CSV", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+    hbm3_data = load_benchmark_data(hbm3_csv, "HBM3")
+    gddr7_data = load_benchmark_data(gddr7_csv, "GDDR7")
 
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
 
@@ -120,28 +152,41 @@ def main(
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Define plotting order (unsorted first, then sorted variants)
+    datasets = {"HBM3": hbm3_data, "GDDR7": gddr7_data}
+
+    # Define plotting order (unsorted first, then sorted variants).
     plot_order = ["InsertUnsorted", "InsertSorted", "InsertPresorted"]
 
     for bench_name in plot_order:
-        if bench_name not in benchmark_data:
-            continue
-
-        sizes = sorted(benchmark_data[bench_name].keys())
-        throughput = [benchmark_data[bench_name][size] for size in sizes]
-
         display_name = DISPLAY_NAMES.get(bench_name, bench_name)
         color = COLORS.get(bench_name, None)
 
-        ax.plot(
-            sizes,
-            throughput,
-            "o-",
-            label=display_name,
-            color=color,
-            linewidth=pu.LINE_WIDTH,
-            markersize=pu.MARKER_SIZE,
-        )
+        for hardware_label in ["HBM3", "GDDR7"]:
+            benchmark_data = datasets[hardware_label]
+            if bench_name not in benchmark_data:
+                continue
+
+            style = HARDWARE_STYLES[hardware_label]
+            sizes = sorted(benchmark_data[bench_name].keys())
+            throughput = [benchmark_data[bench_name][size] for size in sizes]
+
+            marker_face_color = color
+            if style["hollow_marker"]:
+                marker_face_color = "none"
+
+            ax.plot(
+                sizes,
+                throughput,
+                marker="o",
+                linestyle=style["linestyle"],
+                label=f"{display_name} ({hardware_label})",
+                color=color,
+                alpha=style["alpha"],
+                linewidth=pu.LINE_WIDTH,
+                markersize=pu.MARKER_SIZE,
+                markerfacecolor=marker_face_color,
+                markeredgewidth=1.5,
+            )
 
     ax.set_xlabel(
         "Capacity (elements)", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
@@ -151,17 +196,18 @@ def main(
     )
     ax.set_xscale("log", base=2)
 
-    handles, labels = ax.get_legend_handles_labels()
+    _, labels = ax.get_legend_handles_labels()
+    legend_columns = min(3, max(1, len(labels)))
     ax.legend(
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.12),
-        ncol=len(labels),
+        bbox_to_anchor=(0.5, 1.20),
+        ncol=legend_columns,
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
 
-    plt.tight_layout(rect=(0, 0, 1, 0.92))
+    plt.tight_layout(rect=(0, 0, 1, 0.88))
 
     output_file = output_dir / "sorted_vs_unsorted.pdf"
     pu.save_figure(None, output_file, f"Plot saved to {output_file}")

@@ -337,10 +337,10 @@ def sweep(
 
 # (label, hatch_pattern, alpha)
 BAR_OPERATIONS = [
-    ("Insert", "//", pu.HATCHED_BAR_ALPHA),
+    ("Insert", "//", 1.0),
     ("Query (+)", None, 1.0),
-    ("Query (\u2212)", r"\\", pu.HATCHED_BAR_ALPHA),
-    ("Delete", "--", pu.HATCHED_BAR_ALPHA),
+    ("Query (\u2212)", r"\\", 1.0),
+    ("Delete", "--", 1.0),
 ]
 
 _SINGLE_BAR_WIDTH = 0.24
