@@ -115,9 +115,7 @@ def get_filter_styles() -> dict:
         "Partitioned Cuckoo": pu.FILTER_STYLES.get(
             "pcf", {"color": "#6A994E", "marker": "D"}
         ),
-        "BCHT": pu.FILTER_STYLES.get(
-            "bcht", {"color": "#264653", "marker": "X"}
-        ),
+        "BCHT": pu.FILTER_STYLES.get("bcht", {"color": "#264653", "marker": "X"}),
     }
 
     # Generate styles for both positive and negative variants
@@ -337,7 +335,6 @@ def sweep(
         )
 
 
-
 # (label, hatch_pattern, alpha)
 BAR_OPERATIONS = [
     ("Insert", "//", pu.HATCHED_BAR_ALPHA),
@@ -345,6 +342,19 @@ BAR_OPERATIONS = [
     ("Query (\u2212)", r"\\", pu.HATCHED_BAR_ALPHA),
     ("Delete", "--", pu.HATCHED_BAR_ALPHA),
 ]
+
+_SINGLE_BAR_WIDTH = 0.24
+_SINGLE_OP_STRIDE = _SINGLE_BAR_WIDTH
+_PAIRED_BAR_WIDTH = 0.145
+_PAIRED_OP_STRIDE = 0.30
+_PAIRED_MEM_OFFSET = 0.075
+_PAIRED_FILTER_SPACING = 1.36
+_GDDR7_PAIRED_ALPHA_SCALE = 0.55
+_GDDR7_PAIRED_ALPHA_FLOOR = 0.35
+_X_AXIS_MARGIN_LEFT = _SINGLE_BAR_WIDTH
+_X_AXIS_MARGIN_RIGHT = _SINGLE_BAR_WIDTH
+_CPU_CUCKOO_FILTER = "CPU Cuckoo"
+_PCF_FILTER = "Partitioned Cuckoo"
 
 
 def extract_fixed_lf_data(
@@ -383,48 +393,155 @@ def extract_fixed_lf_data(
     return dict(result)
 
 
+def drop_filters(
+    lf_data: dict[str, dict[str, float]], excluded_filters: set[str]
+) -> dict[str, dict[str, float]]:
+    """Remove excluded filters from a fixed-load-factor data map."""
+    return {
+        filter_name: op_data
+        for filter_name, op_data in lf_data.items()
+        if filter_name not in excluded_filters
+    }
+
+
+def apply_single_filter_override(
+    primary_data: dict[str, dict[str, float]],
+    secondary_data: dict[str, dict[str, float]],
+    override_data: dict[str, dict[str, float]],
+    filter_name: str,
+) -> bool:
+    """Override one filter in *primary_data* and remove it from *secondary_data*.
+
+    Returns:
+        True if override data for ``filter_name`` existed and was applied.
+    """
+    override_values = override_data.get(filter_name)
+    if not override_values:
+        return False
+
+    primary_data[filter_name] = override_values
+    secondary_data.pop(filter_name, None)
+    return True
+
+
 def plot_bar_on_axis(
     ax: plt.Axes,
     data: dict[str, dict[str, float]],
     filter_order: list[str],
     title: Optional[str] = None,
     show_ylabel: bool = True,
+    bg_data: Optional[dict[str, dict[str, float]]] = None,
+    single_source_filters: Optional[set[str]] = None,
 ) -> list[Patch]:
     """Plot a clustered bar chart of filter throughput on *ax*.
 
     Each filter occupies a position on the x-axis with up to four
     sub-bars (one per operation), distinguished by hatch pattern.
 
+    If `bg_data` is provided, HBM3 and GDDR7 are rendered as
+    side-by-side paired bars.
+
     Returns:
-        Legend patch elements (filter colours + operation hatches).
+        Legend patch elements (filter colours + operation hatches + memory systems).
     """
     n_ops = len(BAR_OPERATIONS)
-    bar_width = 0.18
+    has_bg = bg_data is not None and len(bg_data) > 0
+    single_source_filters = single_source_filters or set()
 
-    for filter_idx, filter_name in enumerate(filter_order):
-        filter_data = data.get(filter_name, {})
+    if has_bg:
+        # Side-by-side memory-system bars for direct comparison without occlusion.
+        bg_data_asserted = bg_data or {}
+        for filter_idx, filter_name in enumerate(filter_order):
+            filter_center = filter_idx * _PAIRED_FILTER_SPACING
+            hbm_data = data.get(filter_name, {})
+            gddr_data = bg_data_asserted.get(filter_name, {})
+            single_source = filter_name in single_source_filters
 
-        for op_idx, (op_label, hatch, alpha) in enumerate(BAR_OPERATIONS):
-            tp = filter_data.get(op_label, 0)
-            if tp <= 0:
-                continue
+            for op_idx, (op_label, hatch, alpha) in enumerate(BAR_OPERATIONS):
+                cluster_center = (
+                    filter_center + (op_idx - (n_ops - 1) / 2) * _PAIRED_OP_STRIDE
+                )
+                hbm_tp = hbm_data.get(op_label, 0)
+                gddr_tp = gddr_data.get(op_label, 0)
 
-            x = filter_idx + (op_idx - (n_ops - 1) / 2) * bar_width
-            ax.bar(
-                x,
-                tp,
-                bar_width,
-                color=pu.FILTER_COLORS.get(filter_name, "#333333"),
-                edgecolor="black",
-                linewidth=pu.BAR_EDGE_WIDTH,
-                hatch=hatch,
-                alpha=alpha,
-                zorder=3,
-            )
+                if hbm_tp > 0:
+                    hbm_x = (
+                        cluster_center
+                        if single_source
+                        else cluster_center - _PAIRED_MEM_OFFSET
+                    )
+                    ax.bar(
+                        hbm_x,
+                        hbm_tp,
+                        _PAIRED_BAR_WIDTH,
+                        color=pu.FILTER_COLORS.get(filter_name, "#333333"),
+                        edgecolor="black",
+                        linewidth=pu.BAR_EDGE_WIDTH,
+                        hatch=hatch,
+                        alpha=alpha,
+                        zorder=3,
+                    )
+
+                if gddr_tp > 0 and not single_source:
+                    gddr_alpha = max(
+                        _GDDR7_PAIRED_ALPHA_FLOOR, alpha * _GDDR7_PAIRED_ALPHA_SCALE
+                    )
+                    ax.bar(
+                        cluster_center + _PAIRED_MEM_OFFSET,
+                        gddr_tp,
+                        _PAIRED_BAR_WIDTH,
+                        color=pu.FILTER_COLORS.get(filter_name, "#333333"),
+                        edgecolor="#666666",
+                        linewidth=pu.BAR_EDGE_WIDTH,
+                        hatch=hatch,
+                        alpha=gddr_alpha,
+                        zorder=2,
+                    )
+    else:
+        # Single-system bars.
+        for filter_idx, filter_name in enumerate(filter_order):
+            filter_data = data.get(filter_name, {})
+            for op_idx, (op_label, hatch, alpha) in enumerate(BAR_OPERATIONS):
+                tp = filter_data.get(op_label, 0)
+                if tp <= 0:
+                    continue
+
+                x = filter_idx + (op_idx - (n_ops - 1) / 2) * _SINGLE_OP_STRIDE
+                ax.bar(
+                    x,
+                    tp,
+                    _SINGLE_BAR_WIDTH,
+                    color=pu.FILTER_COLORS.get(filter_name, "#333333"),
+                    edgecolor="black",
+                    linewidth=pu.BAR_EDGE_WIDTH,
+                    hatch=hatch,
+                    alpha=alpha,
+                    zorder=3,
+                )
 
     ax.set_yscale("log")
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA, zorder=0)
     ax.set_xticks([])
+    if filter_order:
+        if has_bg:
+            pair_half_span = (
+                ((n_ops - 1) / 2) * _PAIRED_OP_STRIDE
+                + _PAIRED_MEM_OFFSET
+                + (_PAIRED_BAR_WIDTH / 2)
+            )
+            x_min = -pair_half_span - _X_AXIS_MARGIN_LEFT
+            x_max = (
+                (len(filter_order) - 1) * _PAIRED_FILTER_SPACING
+                + pair_half_span
+                + _X_AXIS_MARGIN_RIGHT
+            )
+        else:
+            single_half_span = ((n_ops - 1) / 2) * _SINGLE_OP_STRIDE + (
+                _SINGLE_BAR_WIDTH / 2
+            )
+            x_min = -single_half_span - _X_AXIS_MARGIN_LEFT
+            x_max = len(filter_order) - 1 + single_half_span + _X_AXIS_MARGIN_RIGHT
+        ax.set_xlim(x_min, x_max)
     ax.set_xlabel("")
 
     if title:
@@ -437,7 +554,7 @@ def plot_bar_on_axis(
             fontweight="bold",
         )
 
-    # Build legend elements: filter colours, then operation hatches
+    # Build legend elements: filter colours, then operation hatches, then memory systems
     legend_elements: list[Patch] = [
         Patch(
             facecolor=pu.FILTER_COLORS.get(name, "#333333"),
@@ -459,18 +576,60 @@ def plot_bar_on_axis(
             )
         )
 
+    # Add memory system legend entries in paired-memory mode.
+    if has_bg:
+        legend_elements.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="black",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=1.0,
+                label="HBM3",
+            )
+        )
+        gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
+        legend_elements.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="#666666",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=gddr_alpha,
+                label="GDDR7",
+            )
+        )
+
     return legend_elements
 
 
 @app.command("bar")
 def bar(
-    csv_left: Path = typer.Argument(
+    csv_hbm3_left: Path = typer.Argument(
         ...,
-        help="Path to CSV file for left subplot",
+        help="Path to HBM3 CSV for left subplot (e.g., gh200_28.csv)",
     ),
-    csv_right: Path = typer.Argument(
+    csv_hbm3_right: Path = typer.Argument(
         ...,
-        help="Path to CSV file for right subplot",
+        help="Path to HBM3 CSV for right subplot (e.g., gh200_22.csv)",
+    ),
+    csv_gddr7_left: Optional[Path] = typer.Option(
+        None,
+        "--bg-left",
+        help="Path to GDDR7 CSV for left subplot (e.g., mon02_28.csv)",
+    ),
+    csv_gddr7_right: Optional[Path] = typer.Option(
+        None,
+        "--bg-right",
+        help="Path to GDDR7 CSV for right subplot (e.g., mon02_22.csv)",
+    ),
+    csv_pcf_left: Optional[Path] = typer.Option(
+        None,
+        "--pcf-left",
+        help="Path to PCF-only CSV for left subplot (single-series override).",
+    ),
+    csv_pcf_right: Optional[Path] = typer.Option(
+        None,
+        "--pcf-right",
+        help="Path to PCF-only CSV for right subplot (single-series override).",
     ),
     output_dir: Optional[Path] = typer.Option(
         None,
@@ -482,7 +641,7 @@ def bar(
         95,
         "--load-factor",
         "-l",
-        help="Load factor as a percentage (e.g. 95 for 95%%)",
+        help="Load factor as a percentage (e.g. 95 for 95%)",
     ),
 ):
     """
@@ -492,30 +651,110 @@ def bar(
     filters are on the x-axis and operations (Insert, Query+, Query-, Delete)
     are shown as clustered bars with distinct hatch patterns.
 
+    If --bg-left and/or --bg-right are provided, those CSVs are treated as
+    GDDR7 data and compared against HBM3 using side-by-side paired bars.
+    If --pcf-left and/or --pcf-right are provided, the Partitioned Cuckoo
+    results for that subplot are taken from those CSVs and plotted as a
+    single system (no HBM3/GDDR7 pair).
+
     Examples:
-        plot_load_factor.py bar gh200_22.csv gh200_28.csv
-        plot_load_factor.py bar gh200_22.csv gh200_28.csv --load-factor 90
+        plot_load_factor.py bar gh200_28.csv gh200_22.csv
+        plot_load_factor.py bar gh200_28.csv gh200_22.csv --bg-left mon02_28.csv --bg-right mon02_22.csv
+        plot_load_factor.py bar gh200_22.csv gh200_28.csv --bg-left mon02_22.csv --bg-right mon02_28.csv --pcf-left mon03_22_95.csv --pcf-right mon03_28_95.csv
     """
     load_factor = load_factor_pct / 100.0
 
-    data_left = load_csv_data(csv_left)
-    data_right = load_csv_data(csv_right)
+    # Load foreground (HBM3) data
+    data_hbm3_left = load_csv_data(csv_hbm3_left)
+    data_hbm3_right = load_csv_data(csv_hbm3_right)
 
-    if not data_left or not data_right:
+    if not data_hbm3_left or not data_hbm3_right:
         typer.secho(
-            "No data found in one or both CSV files",
+            "No data found in one or both HBM3 CSV files",
             fg=typer.colors.RED,
             err=True,
         )
         raise typer.Exit(1)
 
+    # Load background (GDDR7) data if provided
+    data_gddr7_left = None
+    data_gddr7_right = None
+
+    if csv_gddr7_left:
+        data_gddr7_left = load_csv_data(csv_gddr7_left)
+
+    if csv_gddr7_right:
+        data_gddr7_right = load_csv_data(csv_gddr7_right)
+
+    # Optional PCF-only override inputs (e.g., different CPU system)
+    data_pcf_left = load_csv_data(csv_pcf_left) if csv_pcf_left else None
+    data_pcf_right = load_csv_data(csv_pcf_right) if csv_pcf_right else None
+
     output_dir_resolved = pu.resolve_output_dir(output_dir, Path(__file__))
 
     # Extract data at the fixed load factor
-    lf_left = extract_fixed_lf_data(data_left, load_factor)
-    lf_right = extract_fixed_lf_data(data_right, load_factor)
+    lf_hbm3_left = extract_fixed_lf_data(data_hbm3_left, load_factor)
+    lf_hbm3_right = extract_fixed_lf_data(data_hbm3_right, load_factor)
 
-    if not lf_left and not lf_right:
+    lf_gddr7_left = (
+        extract_fixed_lf_data(data_gddr7_left, load_factor) if data_gddr7_left else {}
+    )
+    lf_gddr7_right = (
+        extract_fixed_lf_data(data_gddr7_right, load_factor) if data_gddr7_right else {}
+    )
+    lf_pcf_left = (
+        extract_fixed_lf_data(data_pcf_left, load_factor) if data_pcf_left else {}
+    )
+    lf_pcf_right = (
+        extract_fixed_lf_data(data_pcf_right, load_factor) if data_pcf_right else {}
+    )
+
+    # Always drop CPU Cuckoo from this chart.
+    excluded_filters = {_CPU_CUCKOO_FILTER}
+    lf_hbm3_left = drop_filters(lf_hbm3_left, excluded_filters)
+    lf_hbm3_right = drop_filters(lf_hbm3_right, excluded_filters)
+    lf_gddr7_left = drop_filters(lf_gddr7_left, excluded_filters)
+    lf_gddr7_right = drop_filters(lf_gddr7_right, excluded_filters)
+    lf_pcf_left = drop_filters(lf_pcf_left, excluded_filters)
+    lf_pcf_right = drop_filters(lf_pcf_right, excluded_filters)
+
+    # Per-subplot filters that should be single-system in paired mode.
+    single_source_filters_left: set[str] = set()
+    single_source_filters_right: set[str] = set()
+
+    if csv_pcf_left:
+        if apply_single_filter_override(
+            lf_hbm3_left,
+            lf_gddr7_left,
+            lf_pcf_left,
+            _PCF_FILTER,
+        ):
+            single_source_filters_left.add(_PCF_FILTER)
+        else:
+            typer.secho(
+                f"No {_PCF_FILTER} data found at load factor {load_factor_pct}% in {csv_pcf_left}",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+
+    if csv_pcf_right:
+        if apply_single_filter_override(
+            lf_hbm3_right,
+            lf_gddr7_right,
+            lf_pcf_right,
+            _PCF_FILTER,
+        ):
+            single_source_filters_right.add(_PCF_FILTER)
+        else:
+            typer.secho(
+                f"No {_PCF_FILTER} data found at load factor {load_factor_pct}% in {csv_pcf_right}",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+
+    has_bg = bool(lf_gddr7_left) or bool(lf_gddr7_right)
+
+    if not lf_hbm3_left and not lf_hbm3_right:
         typer.secho(
             f"No data found at load factor {load_factor_pct}%. "
             "Available load factors (in the left CSV): "
@@ -523,7 +762,7 @@ def bar(
                 sorted(
                     {
                         str(lf)
-                        for ops in data_left.values()
+                        for ops in data_hbm3_left.values()
                         for lfs in ops.values()
                         for lf in lfs
                     }
@@ -534,44 +773,62 @@ def bar(
         )
         raise typer.Exit(1)
 
-    # Determine filter order (union of both, in canonical order)
-    all_filters = set(lf_left.keys()) | set(lf_right.keys())
+    # Determine filter order (union of all filters across all datasets)
+    all_filters = set(lf_hbm3_left.keys()) | set(lf_hbm3_right.keys())
+    if has_bg:
+        all_filters |= set(lf_gddr7_left.keys()) | set(lf_gddr7_right.keys())
     filter_order = [
-        name for name in pu.FILTER_DISPLAY_NAMES.values() if name in all_filters
+        name
+        for name in pu.FILTER_DISPLAY_NAMES.values()
+        if name in all_filters and name != _CPU_CUCKOO_FILTER
     ]
 
-    fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+    # Scale figure width with filter count so bars can use horizontal space even
+    # when the top filter legend becomes very wide.
+    fig_width = max(12.0, 2.1 * len(filter_order) + 1.5)
+    fig, (ax_left, ax_right) = plt.subplots(
+        1, 2, figsize=(fig_width, 5), sharey=True, gridspec_kw={"wspace": 0.04}
+    )
 
     legend_left = plot_bar_on_axis(
         ax_left,
-        lf_left,
+        lf_hbm3_left,
         filter_order,
         title=None,
         show_ylabel=True,
+        bg_data=lf_gddr7_left if lf_gddr7_left else None,
+        single_source_filters=single_source_filters_left,
     )
     legend_right = plot_bar_on_axis(
         ax_right,
-        lf_right,
+        lf_hbm3_right,
         filter_order,
         title=None,
         show_ylabel=False,
+        bg_data=lf_gddr7_right if lf_gddr7_right else None,
+        single_source_filters=single_source_filters_right,
     )
 
-    # Use the legend with more entries (covers superset of filters/ops)
+    # Use the legend with more entries
     legend_elements = (
         legend_left if len(legend_left) >= len(legend_right) else legend_right
     )
 
-    # Split legend into two rows: filters on top, operations below
+    # Split legend into rows: filters | operations | (optional: memory systems)
     n_filters = len(filter_order)
+    n_ops = len(BAR_OPERATIONS)
     filter_handles = legend_elements[:n_filters]
-    op_handles = legend_elements[n_filters:]
+    op_handles = legend_elements[n_filters : n_filters + n_ops]
+    mem_handles = legend_elements[n_filters + n_ops :] if has_bg else []
+
+    legend_y_top = 0.99
+    legend_row_step = 0.075
 
     fig.legend(
         handles=filter_handles,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.0),
+        bbox_to_anchor=(0.5, legend_y_top),
         ncol=len(filter_handles),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
@@ -579,12 +836,26 @@ def bar(
         handles=op_handles,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.94),
+        bbox_to_anchor=(0.5, legend_y_top - legend_row_step),
         ncol=len(op_handles),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
+    if mem_handles:
+        mem_legend_y = legend_y_top - (2 * legend_row_step)
+        fig.legend(
+            handles=mem_handles,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, mem_legend_y),
+            ncol=len(mem_handles),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
+        )
+        axes_top = mem_legend_y - 0.10
+    else:
+        axes_top = (legend_y_top - legend_row_step) - 0.10
 
-    plt.tight_layout(rect=(0, 0, 1, 0.88))
+    # Reserve explicit space for figure-level legends to avoid overlap with axes.
+    fig.subplots_adjust(left=0.06, right=0.995, bottom=0.08, top=axes_top, wspace=0.04)
 
     lf_str = (
         str(int(load_factor_pct))
