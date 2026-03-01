@@ -49,8 +49,8 @@ def extract_benchmark_data(df: pd.DataFrame) -> dict[str, dict[int, float]]:
 
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
-            throughput_mops = items_per_second / 1_000_000  # Convert to M ops/s
-            benchmark_data[bench_name][size] = throughput_mops
+            throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
+            benchmark_data[bench_name][size] = throughput_beps
 
     return benchmark_data
 
@@ -192,7 +192,7 @@ def main(
         "Capacity (elements)", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.set_ylabel(
-        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.set_xscale("log", base=2)
 

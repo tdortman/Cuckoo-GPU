@@ -50,7 +50,7 @@ def load_policy_data(csv_path: Path) -> tuple[dict[str, dict[str, float]], int |
     """Load and parse policy benchmark data from CSV.
 
     Returns:
-        Tuple of (nested dict {policy: {operation: throughput_mops}}, capacity)
+        Tuple of (nested dict {policy: {operation: throughput_beps}}, capacity)
     """
     df = pu.load_csv(csv_path)
     df = df[df["name"].str.endswith("_median")]
@@ -76,10 +76,10 @@ def load_policy_data(csv_path: Path) -> tuple[dict[str, dict[str, float]], int |
 
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
-            throughput_mops = items_per_second / 1_000_000
+            throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
             if policy not in data:
                 data[policy] = {}
-            data[policy][operation] = throughput_mops
+            data[policy][operation] = throughput_beps
 
     return data, capacity
 
@@ -112,15 +112,15 @@ def main(
     # Determine small/large dataset by parsed benchmark capacity (if available).
     if capacity_a is not None and capacity_b is not None and capacity_a != capacity_b:
         if capacity_a > capacity_b:
-            large_data = data_a,
-            small_data = data_b,
+            large_data = data_a
+            small_data = data_b
         else:
-            large_data = data_b, 
-            small_data = data_a, 
+            large_data = data_b
+            small_data = data_a
     else:
         # Fallback: preserve input order if capacities are equal/missing.
-        small_data = data_a, capacity_a
-        large_data = data_b, capacity_b
+        small_data = data_a
+        large_data = data_b
         typer.secho(
             "Warning: Could not infer unique small/large capacities from inputs; "
             "using first CSV as small and second CSV as large.",
@@ -185,7 +185,7 @@ def main(
     ax.set_xticklabels(operation_labels, fontsize=pu.DEFAULT_FONT_SIZE)  # type: ignore
     ax.set_xlabel("Operation", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")  # type: ignore
     ax.set_ylabel(  # type: ignore
-        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA, zorder=0)  # type: ignore
 

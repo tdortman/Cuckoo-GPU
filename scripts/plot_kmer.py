@@ -45,12 +45,12 @@ def load_csv_data(csv_path: Path) -> pd.DataFrame:
 
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
-            throughput_mops = int(items_per_second / 1_000_000)
+            throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
             results.append(
                 {
                     "filter": filter_type,
                     "operation": operation,
-                    "throughput": throughput_mops,
+                    "throughput": throughput_beps,
                 }
             )
 
@@ -106,13 +106,15 @@ def main(
         data=data,
         colors=colors,
         bar_width=0.18,
+        show_values=True,
+        value_decimals=2,
         labels={f: pu.get_filter_display_name(f) for f in filters},
     )
 
     pu.format_axis(
         ax,  # ty:ignore[invalid-argument-type]
         "Operation",
-        "Throughput [M ops/s]",
+        pu.THROUGHPUT_LABEL,
         xscale=None,
     )
 

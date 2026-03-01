@@ -36,6 +36,19 @@ def extract_filter_type(name: str) -> Optional[str]:
     return None
 
 
+def sort_filters_by_descending_fpr(
+    fpr_data: dict[str, dict[float, float]],
+) -> list[str]:
+    """Sort filters by highest observed FPR (descending)."""
+
+    def fpr_sort_key(filter_type: str) -> tuple[float, str]:
+        values = fpr_data.get(filter_type, {}).values()
+        max_fpr = max(values) if values else float("-inf")
+        return (-max_fpr, pu.get_filter_display_name(filter_type))
+
+    return sorted(fpr_data.keys(), key=fpr_sort_key)
+
+
 @app.command()
 def main(
     csv_file: Path = typer.Argument(
@@ -86,12 +99,14 @@ def main(
         typer.secho("No FPR data found in CSV", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
+    fpr_sorted_filters = sort_filters_by_descending_fpr(dict(fpr_data))
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Plot 1: FPR vs Memory Size
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    for filter_type in sorted(fpr_data.keys()):
+    for filter_type in fpr_sorted_filters:
         memory_sizes = sorted(fpr_data[filter_type].keys())
         fpr_values = [fpr_data[filter_type][mem] for mem in memory_sizes]
 
@@ -119,7 +134,7 @@ def main(
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.12),
-        ncol=len(labels) // 2,
+        ncol=len(labels),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 
@@ -142,7 +157,11 @@ def main(
     # Plot 2: Bits per Item vs Memory Size
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    for filter_type in sorted(bits_per_item_data.keys()):
+    bits_filter_order = [
+        f for f in fpr_sorted_filters if f in bits_per_item_data
+    ] + sorted(set(bits_per_item_data.keys()) - set(fpr_sorted_filters))
+
+    for filter_type in bits_filter_order:
         memory_sizes = sorted(bits_per_item_data[filter_type].keys())
         bits_values = [bits_per_item_data[filter_type][mem] for mem in memory_sizes]
 
@@ -167,7 +186,7 @@ def main(
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.12),
-        ncol=len(labels) // 2,
+        ncol=len(labels),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
 

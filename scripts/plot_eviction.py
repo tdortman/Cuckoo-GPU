@@ -642,11 +642,11 @@ def main(
     plot_metric_separate(
         datasets,
         metric_key="throughput_data",
-        y_label="Throughput [M ops/s]",
+        y_label=pu.THROUGHPUT_LABEL,
         output_stem="eviction_throughput",
         output_dir=output_dir,
         policy_styles=policy_styles,
-        value_scale=1e6,
+        value_scale=pu.THROUGHPUT_SCALE,
     )
 
     plot_metric_separate(

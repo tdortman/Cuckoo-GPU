@@ -42,7 +42,7 @@ def main(
     """
     Generate throughput and memory comparison plots from benchmark CSV results.
 
-    Plots throughput [M ops/s] and memory usage [MiB] vs input size for
+    Plots throughput [B elem/s] and memory usage [MiB] vs input size for
     various benchmarks in a single figure with two y-axes.
 
     Examples:
@@ -89,8 +89,8 @@ def main(
         try:
             items_per_second = row.get("items_per_second")
             if pd.notna(items_per_second):
-                throughput_mops = items_per_second / 1_000_000
-                throughput_data[base_name][size] = throughput_mops
+                throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
+                throughput_data[base_name][size] = throughput_beps
 
             memory_bytes = row.get("memory_bytes")
             if pd.notna(memory_bytes):
@@ -192,7 +192,7 @@ def main(
         "Input Size", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax_throughput.set_ylabel(
-        "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax_memory.set_ylabel(
         "Memory Usage [MiB]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"

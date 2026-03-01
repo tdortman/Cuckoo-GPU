@@ -93,34 +93,20 @@ def load_csv_data(csv_path: Path) -> dict:
 
         items_per_second = row.get("items_per_second")
         if pd.notna(items_per_second):
-            throughput_mops = items_per_second / 1_000_000
-            benchmark_data[operation_type][filter_key][load_factor] = throughput_mops
+            throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
+            benchmark_data[operation_type][filter_key][load_factor] = throughput_beps
 
     return benchmark_data
 
 
 def get_filter_styles() -> dict:
     """Define colors and markers for each filter type, with positive/negative variants."""
-    # Use the standardized filter styles from plot_utils as base
-    base_styles = {
-        "GPU Cuckoo": pu.FILTER_STYLES.get("gcf", {"color": "#2E86AB", "marker": "o"}),
-        "CPU Cuckoo": pu.FILTER_STYLES.get("ccf", {"color": "#00B4D8", "marker": "o"}),
-        "Blocked Bloom": pu.FILTER_STYLES.get(
-            "bbf", {"color": "#A23B72", "marker": "s"}
-        ),
-        "Two-Choice": pu.FILTER_STYLES.get("tcf", {"color": "#C73E1D", "marker": "v"}),
-        "GPU Quotient": pu.FILTER_STYLES.get(
-            "gqf", {"color": "#F18F01", "marker": "^"}
-        ),
-        "Partitioned Cuckoo": pu.FILTER_STYLES.get(
-            "pcf", {"color": "#6A994E", "marker": "D"}
-        ),
-        "BCHT": pu.FILTER_STYLES.get("bcht", {"color": "#264653", "marker": "X"}),
-    }
-
     # Generate styles for both positive and negative variants
     filter_styles = {}
-    for filter_name, base_style in base_styles.items():
+    for short_key, filter_name in pu.FILTER_DISPLAY_NAMES.items():
+        base_style = pu.FILTER_STYLES.get(short_key)
+        if base_style is None:
+            continue
         # Base style (for non-query operations)
         filter_styles[filter_name] = {
             "color": base_style["color"],
@@ -194,7 +180,7 @@ def plot_operation_on_axis(
         )
     if show_ylabel:
         ax.set_ylabel(
-            "Throughput [M ops/s]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+            pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
         )
     ax.set_xlim(0.0, 1.0)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
@@ -356,7 +342,7 @@ _DDR5_EDGE_COLOR = "#1F2937"
 _X_AXIS_MARGIN_LEFT = _SINGLE_BAR_WIDTH
 _X_AXIS_MARGIN_RIGHT = _SINGLE_BAR_WIDTH
 _CPU_CUCKOO_FILTER = "CPU Cuckoo"
-_PCF_FILTER = "Partitioned Cuckoo"
+_PCF_FILTER = "PCF"
 
 
 def extract_fixed_lf_data(
@@ -370,7 +356,7 @@ def extract_fixed_lf_data(
         load_factor: The load factor to extract (e.g. 0.95).
 
     Returns:
-        ``{filter_name: {operation_label: throughput_mops}}`` where
+        ``{filter_name: {operation_label: throughput_beps}}`` where
         *operation_label* matches the labels in :data:`BAR_OPERATIONS`.
     """
     result: dict[str, dict[str, float]] = defaultdict(dict)
@@ -564,7 +550,7 @@ def plot_bar_on_axis(
 
     if show_ylabel:
         ax.set_ylabel(
-            "Throughput [M ops/s]",
+            pu.THROUGHPUT_LABEL,
             fontsize=pu.AXIS_LABEL_FONT_SIZE,
             fontweight="bold",
         )

@@ -27,31 +27,31 @@ FILTER_STYLES = {
 }
 
 FILTER_COLORS = {
-    "GPU Cuckoo": FILTER_STYLES["gcf"]["color"],
+    "Cuckoo-GPU": FILTER_STYLES["gcf"]["color"],
     "CPU Cuckoo": FILTER_STYLES["ccf"]["color"],
-    "Blocked Bloom": FILTER_STYLES["bbf"]["color"],
-    "Two-Choice": FILTER_STYLES["tcf"]["color"],
-    "GPU Quotient": FILTER_STYLES["gqf"]["color"],
-    "Partitioned Cuckoo": FILTER_STYLES["pcf"]["color"],
+    "BBF": FILTER_STYLES["bbf"]["color"],
+    "TCF": FILTER_STYLES["tcf"]["color"],
+    "GQF": FILTER_STYLES["gqf"]["color"],
+    "PCF": FILTER_STYLES["pcf"]["color"],
     "Dynamic Map": FILTER_STYLES["dm"]["color"],
     "BCHT": FILTER_STYLES["bcht"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
-    "gcf": "GPU Cuckoo",
+    "gcf": "Cuckoo-GPU",
     "ccf": "CPU Cuckoo",
-    "tcf": "Two-Choice",
-    "gqf": "GPU Quotient",
-    "pcf": "Partitioned Cuckoo",
-    "bbf": "Blocked Bloom",
+    "tcf": "TCF",
+    "gqf": "GQF",
+    "pcf": "PCF",
+    "bbf": "BBF",
     "dm": "Dynamic Map",
     "bcht": "BCHT",
 }
 
 OPERATION_COLORS = {
-    "Insert": FILTER_COLORS["GPU Cuckoo"],
-    "Query": FILTER_COLORS["Blocked Bloom"],
-    "Delete": FILTER_COLORS["GPU Quotient"],
+    "Insert": FILTER_COLORS["Cuckoo-GPU"],
+    "Query": FILTER_COLORS["BBF"],
+    "Delete": FILTER_COLORS["GQF"],
 }
 
 
@@ -69,6 +69,8 @@ LEGEND_FRAME_ALPHA = 0
 LEGEND_FRAME_ALPHA_SOLID = 0.9
 HATCHED_BAR_ALPHA = 0.7
 SCALING_BAR_ALPHA = 0.8
+THROUGHPUT_SCALE = 1_000_000_000
+THROUGHPUT_LABEL = "Throughput [B elem/s]"
 
 
 def get_filter_display_name(filter_type: str) -> str:
@@ -78,7 +80,7 @@ def get_filter_display_name(filter_type: str) -> str:
         filter_type: Internal filter identifier (e.g., 'gcf', 'bbf')
 
     Returns:
-        Display name (e.g., 'GPU Cuckoo', 'Blocked Bloom')
+        Display name (e.g., 'Cuckoo-GPU', 'BBF')
     """
     normalized = filter_type.lower()
     return FILTER_DISPLAY_NAMES.get(normalized, filter_type.capitalize())
@@ -112,6 +114,11 @@ def format_capacity_title(base_title: str, capacity: Optional[int]) -> str:
     if capacity is not None and capacity > 0:
         return f"{base_title} {format_power_of_two(capacity)}"
     return base_title
+
+
+def to_billion_elems_per_sec(items_per_second: float) -> float:
+    """Convert items-per-second throughput into billions of elements per second."""
+    return float(items_per_second) / THROUGHPUT_SCALE
 
 
 def load_csv(csv_path: Path) -> pd.DataFrame:
@@ -405,6 +412,7 @@ def clustered_bar_chart(
     colors: dict[str, str],
     bar_width: float = 0.25,
     show_values: bool = True,
+    value_decimals: int = 0,
     hatches: Optional[dict[str, str]] = None,
     alphas: Optional[dict[str, float]] = None,
     labels: Optional[dict[str, str]] = None,
@@ -419,6 +427,7 @@ def clustered_bar_chart(
         colors: Dict mapping group names to colors
         bar_width: Width of each bar
         show_values: Whether to show values on top of bars
+        value_decimals: Number of decimal places for bar value labels
         hatches: Optional dict mapping group names to hatch patterns
         alphas: Optional dict mapping group names to alpha values
         labels: Optional dict mapping group names to display labels for legend
@@ -452,7 +461,7 @@ def clustered_bar_chart(
                     ax.text(
                         bar.get_x() + bar.get_width() / 2,
                         bar.get_height(),
-                        f"{val:.0f}",
+                        f"{val:.{value_decimals}f}",
                         ha="center",
                         va="bottom",
                         fontsize=BAR_FONT_SIZE,
