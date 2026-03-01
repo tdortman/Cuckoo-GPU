@@ -28,9 +28,11 @@ _OPERATION_LABELS = {
     "Delete": "Delete",
 }
 _POLICY_ORDER = ["Xor", "AddSub", "Offset"]
-_POLICY_STRIDE = 0.24
-_SIZE_OFFSET = 0.055
-_BAR_WIDTH = 0.10
+_BAR_WIDTH = 0.2
+_PAIR_GAP = 0.0
+_GROUP_GAP = 0.0
+_SIZE_OFFSET = (_BAR_WIDTH + _PAIR_GAP) / 2
+_POLICY_STRIDE = (2 * _SIZE_OFFSET) + _BAR_WIDTH + _GROUP_GAP
 _SMALL_ALPHA = 0.35
 _X_MARGIN = 0.06
 
@@ -145,50 +147,66 @@ def main(
 
     operations = _OPERATION_ORDER
     operation_labels = [_OPERATION_LABELS.get(op, op) for op in operations]
+    operation_label_map = {op: _OPERATION_LABELS.get(op, op) for op in operations}
+
+    def relabel_operations(
+        data: dict[str, dict[str, float]],
+    ) -> dict[str, dict[str, float]]:
+        return {
+            policy: {
+                operation_label_map[op]: value
+                for op, value in op_data.items()
+                if op in operation_label_map
+            }
+            for policy, op_data in data.items()
+        }
+
+    large_data_labeled = relabel_operations(large_data)
+    small_data_labeled = relabel_operations(small_data)
 
     fig, ax = pu.setup_figure(figsize=(10, 6))
 
-    n_policies = len(policies)
-    for op_idx, operation in enumerate(operations):
-        for policy_idx, policy in enumerate(policies):
-            cluster_center = (
-                op_idx + (policy_idx - (n_policies - 1) / 2) * _POLICY_STRIDE
-            )
-            large_tp = large_data.get(policy, {}).get(operation, 0.0)
-            small_tp = small_data.get(policy, {}).get(operation, 0.0)
-            color = pu.POLICY_COLORS.get(policy, "#333333")
+    pu.clustered_bar_chart(
+        ax,  # type: ignore[invalid-argument-type]
+        categories=operation_labels,
+        groups=policies,
+        data=large_data_labeled,
+        colors=pu.POLICY_COLORS,
+        bar_width=_BAR_WIDTH,
+        group_stride=_POLICY_STRIDE,
+        show_values=True,
+        value_decimals=2,
+        labels={policy: pu.get_policy_display_name(policy) for policy in policies},
+        series=["large", "small"],
+        series_data={
+            "large": large_data_labeled,
+            "small": small_data_labeled,
+        },
+        series_styles={
+            "large": {
+                "offset": -_SIZE_OFFSET,
+                "alpha": 1.0,
+                "edgecolor": "black",
+                "linewidth": pu.BAR_EDGE_WIDTH,
+                "zorder": 3,
+            },
+            "small": {
+                "offset": _SIZE_OFFSET,
+                "alpha": _SMALL_ALPHA,
+                "edgecolor": "#666666",
+                "linewidth": pu.BAR_EDGE_WIDTH,
+                "zorder": 2,
+            },
+        },
+    )
 
-            if large_tp > 0:
-                ax.bar(  # type: ignore
-                    cluster_center - _SIZE_OFFSET,
-                    large_tp,
-                    _BAR_WIDTH,
-                    color=color,
-                    edgecolor="black",
-                    linewidth=pu.BAR_EDGE_WIDTH,
-                    alpha=1.0,
-                    zorder=3,
-                )
-            if small_tp > 0:
-                ax.bar(  # type: ignore
-                    cluster_center + _SIZE_OFFSET,
-                    small_tp,
-                    _BAR_WIDTH,
-                    color=color,
-                    edgecolor="#666666",
-                    linewidth=pu.BAR_EDGE_WIDTH,
-                    alpha=_SMALL_ALPHA,
-                    zorder=2,
-                )
-
-    ax.set_xticks(list(range(len(operations))))  # type: ignore
-    ax.set_xticklabels(operation_labels, fontsize=pu.DEFAULT_FONT_SIZE)  # type: ignore
     ax.set_xlabel("Operation", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")  # type: ignore
     ax.set_ylabel(  # type: ignore
         pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA, zorder=0)  # type: ignore
 
+    n_policies = len(policies)
     half_span = (
         ((n_policies - 1) / 2) * _POLICY_STRIDE + _SIZE_OFFSET + (_BAR_WIDTH / 2)
     )

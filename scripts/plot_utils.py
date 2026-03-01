@@ -411,11 +411,15 @@ def clustered_bar_chart(
     data: dict[str, dict[str, float]],
     colors: dict[str, str],
     bar_width: float = 0.25,
+    group_stride: Optional[float] = None,
     show_values: bool = True,
     value_decimals: int = 0,
     hatches: Optional[dict[str, str]] = None,
     alphas: Optional[dict[str, float]] = None,
     labels: Optional[dict[str, str]] = None,
+    series: Optional[list[str]] = None,
+    series_data: Optional[dict[str, dict[str, dict[str, float]]]] = None,
+    series_styles: Optional[dict[str, dict[str, object]]] = None,
 ) -> None:
     """Create a clustered bar chart.
 
@@ -426,47 +430,104 @@ def clustered_bar_chart(
         data: Nested dict {group: {category: value}}
         colors: Dict mapping group names to colors
         bar_width: Width of each bar
+        group_stride: Distance between adjacent groups inside each category
         show_values: Whether to show values on top of bars
         value_decimals: Number of decimal places for bar value labels
         hatches: Optional dict mapping group names to hatch patterns
         alphas: Optional dict mapping group names to alpha values
         labels: Optional dict mapping group names to display labels for legend
+        series: Optional ordered list of series keys when plotting multiple
+            bars per group/category (e.g. ["large", "small"])
+        series_data: Optional nested dict
+            {series: {group: {category: value}}}
+        series_styles: Optional dict mapping series keys to style overrides.
+            Supported keys: offset, alpha, hatch, edgecolor, linewidth,
+            linestyle, zorder.
     """
     n_groups = len(groups)
     x_positions = range(len(categories))
+    cluster_stride = bar_width if group_stride is None else group_stride
+    active_series = (
+        series
+        if series is not None
+        else list(series_data.keys())
+        if series_data is not None
+        else []
+    )
+
+    def annotate_bars(bars, values):
+        if not show_values:
+            return
+        for bar, val in zip(bars, values):
+            if val > 0:
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height(),
+                    f"{val:.{value_decimals}f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=BAR_FONT_SIZE,
+                    fontweight="bold",
+                )
 
     for i, group in enumerate(groups):
-        values = [data.get(group, {}).get(cat, 0) for cat in categories]
-        offset = (i - (n_groups - 1) / 2) * bar_width
+        offset = (i - (n_groups - 1) / 2) * cluster_stride
+        group_hatch = hatches.get(group) if hatches else None
+        group_alpha = alphas.get(group, 1.0) if alphas else 1.0
+        group_label = labels.get(group, group) if labels else group
+        group_color = colors.get(group, "#333333")
 
-        hatch = hatches.get(group) if hatches else None
-        alpha = alphas.get(group, 1.0) if alphas else 1.0
-        label = labels.get(group, group) if labels else group
+        if series_data is None:
+            values = [data.get(group, {}).get(cat, 0) for cat in categories]
+            bars = ax.bar(
+                [x + offset for x in x_positions],
+                values,
+                bar_width,
+                label=group_label,
+                color=group_color,
+                edgecolor="black",
+                linewidth=0.5,
+                hatch=group_hatch,
+                alpha=group_alpha,
+            )
+            annotate_bars(bars, values)
+            continue
 
-        bars = ax.bar(
-            [x + offset for x in x_positions],
-            values,
-            bar_width,
-            label=label,
-            color=colors.get(group, "#333333"),
-            edgecolor="black",
-            linewidth=0.5,
-            hatch=hatch,
-            alpha=alpha,
-        )
+        for series_idx, series_name in enumerate(active_series):
+            values = [
+                series_data.get(series_name, {}).get(group, {}).get(cat, 0)
+                for cat in categories
+            ]
+            style = series_styles.get(series_name, {}) if series_styles else {}
+            series_offset = float(style.get("offset", 0.0))  # type: ignore
+            series_alpha = style.get("alpha")
+            series_hatch = style.get("hatch")
+            edgecolor = str(style.get("edgecolor", "black"))
+            linewidth = float(style.get("linewidth", 0.5))  # type: ignore
+            linestyle = style.get("linestyle")
+            zorder = style.get("zorder")
+            series_label = group_label if series_idx == 0 else "_nolegend_"
 
-        if show_values:
-            for bar, val in zip(bars, values):
-                if val > 0:
-                    ax.text(
-                        bar.get_x() + bar.get_width() / 2,
-                        bar.get_height(),
-                        f"{val:.{value_decimals}f}",
-                        ha="center",
-                        va="bottom",
-                        fontsize=BAR_FONT_SIZE,
-                        fontweight="bold",
-                    )
+            bar_kwargs: dict[str, object] = {
+                "label": series_label,
+                "color": group_color,
+                "edgecolor": edgecolor,
+                "linewidth": linewidth,
+                "hatch": group_hatch if series_hatch is None else series_hatch,
+                "alpha": group_alpha if series_alpha is None else float(series_alpha),  # type: ignore
+            }
+            if linestyle is not None:
+                bar_kwargs["linestyle"] = linestyle
+            if zorder is not None:
+                bar_kwargs["zorder"] = zorder
+
+            bars = ax.bar(
+                [x + offset + series_offset for x in x_positions],
+                values,
+                bar_width,
+                **bar_kwargs,  # type: ignore
+            )
+            annotate_bars(bars, values)
 
     ax.set_xticks(x_positions)
     ax.set_xticklabels(categories, fontsize=DEFAULT_FONT_SIZE)
