@@ -351,6 +351,8 @@ _PAIRED_MEM_OFFSET = 0.075
 _PAIRED_FILTER_SPACING = 1.36
 _GDDR7_PAIRED_ALPHA_SCALE = 0.55
 _GDDR7_PAIRED_ALPHA_FLOOR = 0.35
+_DDR5_ALPHA = 0.75
+_DDR5_EDGE_COLOR = "#1F2937"
 _X_AXIS_MARGIN_LEFT = _SINGLE_BAR_WIDTH
 _X_AXIS_MARGIN_RIGHT = _SINGLE_BAR_WIDTH
 _CPU_CUCKOO_FILTER = "CPU Cuckoo"
@@ -432,6 +434,7 @@ def plot_bar_on_axis(
     show_ylabel: bool = True,
     bg_data: Optional[dict[str, dict[str, float]]] = None,
     single_source_filters: Optional[set[str]] = None,
+    ddr5_filters: Optional[set[str]] = None,
 ) -> list[Patch]:
     """Plot a clustered bar chart of filter throughput on *ax*.
 
@@ -447,6 +450,8 @@ def plot_bar_on_axis(
     n_ops = len(BAR_OPERATIONS)
     has_bg = bg_data is not None and len(bg_data) > 0
     single_source_filters = single_source_filters or set()
+    ddr5_filters = ddr5_filters or set()
+    has_ddr5 = bool(ddr5_filters)
 
     if has_bg:
         # Side-by-side memory-system bars for direct comparison without occlusion.
@@ -456,6 +461,7 @@ def plot_bar_on_axis(
             hbm_data = data.get(filter_name, {})
             gddr_data = bg_data_asserted.get(filter_name, {})
             single_source = filter_name in single_source_filters
+            ddr5_source = filter_name in ddr5_filters
 
             for op_idx, (op_label, hatch, alpha) in enumerate(BAR_OPERATIONS):
                 cluster_center = (
@@ -470,15 +476,19 @@ def plot_bar_on_axis(
                         if single_source
                         else cluster_center - _PAIRED_MEM_OFFSET
                     )
+                    hbm_alpha = _DDR5_ALPHA if ddr5_source else alpha
+                    hbm_edgecolor = _DDR5_EDGE_COLOR if ddr5_source else "black"
+                    hbm_linestyle = "--" if ddr5_source else "-"
                     ax.bar(
                         hbm_x,
                         hbm_tp,
                         _PAIRED_BAR_WIDTH,
                         color=pu.FILTER_COLORS.get(filter_name, "#333333"),
-                        edgecolor="black",
+                        edgecolor=hbm_edgecolor,
                         linewidth=pu.BAR_EDGE_WIDTH,
                         hatch=hatch,
-                        alpha=alpha,
+                        linestyle=hbm_linestyle,
+                        alpha=hbm_alpha,
                         zorder=3,
                     )
 
@@ -501,21 +511,26 @@ def plot_bar_on_axis(
         # Single-system bars.
         for filter_idx, filter_name in enumerate(filter_order):
             filter_data = data.get(filter_name, {})
+            ddr5_source = filter_name in ddr5_filters
             for op_idx, (op_label, hatch, alpha) in enumerate(BAR_OPERATIONS):
                 tp = filter_data.get(op_label, 0)
                 if tp <= 0:
                     continue
 
                 x = filter_idx + (op_idx - (n_ops - 1) / 2) * _SINGLE_OP_STRIDE
+                fg_alpha = _DDR5_ALPHA if ddr5_source else alpha
+                fg_edgecolor = _DDR5_EDGE_COLOR if ddr5_source else "black"
+                fg_linestyle = "--" if ddr5_source else "-"
                 ax.bar(
                     x,
                     tp,
                     _SINGLE_BAR_WIDTH,
                     color=pu.FILTER_COLORS.get(filter_name, "#333333"),
-                    edgecolor="black",
+                    edgecolor=fg_edgecolor,
                     linewidth=pu.BAR_EDGE_WIDTH,
                     hatch=hatch,
-                    alpha=alpha,
+                    linestyle=fg_linestyle,
+                    alpha=fg_alpha,
                     zorder=3,
                 )
 
@@ -576,8 +591,8 @@ def plot_bar_on_axis(
             )
         )
 
-    # Add memory system legend entries in paired-memory mode.
-    if has_bg:
+    # Add memory system legend entries when multiple memory systems are shown.
+    if has_bg or has_ddr5:
         legend_elements.append(
             Patch(
                 facecolor="gray",
@@ -587,16 +602,28 @@ def plot_bar_on_axis(
                 label="HBM3",
             )
         )
-        gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
-        legend_elements.append(
-            Patch(
-                facecolor="gray",
-                edgecolor="#666666",
-                linewidth=pu.BAR_EDGE_WIDTH,
-                alpha=gddr_alpha,
-                label="GDDR7",
+        if has_bg:
+            gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
+            legend_elements.append(
+                Patch(
+                    facecolor="gray",
+                    edgecolor="#666666",
+                    linewidth=pu.BAR_EDGE_WIDTH,
+                    alpha=gddr_alpha,
+                    label="GDDR7",
+                )
             )
-        )
+        if has_ddr5:
+            legend_elements.append(
+                Patch(
+                    facecolor="gray",
+                    edgecolor=_DDR5_EDGE_COLOR,
+                    linewidth=pu.BAR_EDGE_WIDTH,
+                    linestyle="--",
+                    alpha=_DDR5_ALPHA,
+                    label="DDR5",
+                )
+            )
 
     return legend_elements
 
@@ -624,12 +651,12 @@ def bar(
     csv_pcf_left: Optional[Path] = typer.Option(
         None,
         "--pcf-left",
-        help="Path to PCF-only CSV for left subplot (single-series override).",
+        help="Path to PCF-only CSV for left subplot (single-series DDR5 override).",
     ),
     csv_pcf_right: Optional[Path] = typer.Option(
         None,
         "--pcf-right",
-        help="Path to PCF-only CSV for right subplot (single-series override).",
+        help="Path to PCF-only CSV for right subplot (single-series DDR5 override).",
     ),
     output_dir: Optional[Path] = typer.Option(
         None,
@@ -655,7 +682,7 @@ def bar(
     GDDR7 data and compared against HBM3 using side-by-side paired bars.
     If --pcf-left and/or --pcf-right are provided, the Partitioned Cuckoo
     results for that subplot are taken from those CSVs and plotted as a
-    single system (no HBM3/GDDR7 pair).
+    single system on DDR5 (no HBM3/GDDR7 pair for PCF).
 
     Examples:
         plot_load_factor.py bar gh200_28.csv gh200_22.csv
@@ -721,6 +748,8 @@ def bar(
     # Per-subplot filters that should be single-system in paired mode.
     single_source_filters_left: set[str] = set()
     single_source_filters_right: set[str] = set()
+    ddr5_filters_left: set[str] = set()
+    ddr5_filters_right: set[str] = set()
 
     if csv_pcf_left:
         if apply_single_filter_override(
@@ -730,6 +759,7 @@ def bar(
             _PCF_FILTER,
         ):
             single_source_filters_left.add(_PCF_FILTER)
+            ddr5_filters_left.add(_PCF_FILTER)
         else:
             typer.secho(
                 f"No {_PCF_FILTER} data found at load factor {load_factor_pct}% in {csv_pcf_left}",
@@ -745,6 +775,7 @@ def bar(
             _PCF_FILTER,
         ):
             single_source_filters_right.add(_PCF_FILTER)
+            ddr5_filters_right.add(_PCF_FILTER)
         else:
             typer.secho(
                 f"No {_PCF_FILTER} data found at load factor {load_factor_pct}% in {csv_pcf_right}",
@@ -753,6 +784,7 @@ def bar(
             )
 
     has_bg = bool(lf_gddr7_left) or bool(lf_gddr7_right)
+    has_ddr5 = bool(ddr5_filters_left) or bool(ddr5_filters_right)
 
     if not lf_hbm3_left and not lf_hbm3_right:
         typer.secho(
@@ -798,6 +830,7 @@ def bar(
         show_ylabel=True,
         bg_data=lf_gddr7_left if lf_gddr7_left else None,
         single_source_filters=single_source_filters_left,
+        ddr5_filters=ddr5_filters_left,
     )
     legend_right = plot_bar_on_axis(
         ax_right,
@@ -807,6 +840,7 @@ def bar(
         show_ylabel=False,
         bg_data=lf_gddr7_right if lf_gddr7_right else None,
         single_source_filters=single_source_filters_right,
+        ddr5_filters=ddr5_filters_right,
     )
 
     # Use the legend with more entries
@@ -814,12 +848,44 @@ def bar(
         legend_left if len(legend_left) >= len(legend_right) else legend_right
     )
 
-    # Split legend into rows: filters | operations | (optional: memory systems)
+    # Split legend into rows: filters | operations. Memory legend is built globally.
     n_filters = len(filter_order)
     n_ops = len(BAR_OPERATIONS)
     filter_handles = legend_elements[:n_filters]
     op_handles = legend_elements[n_filters : n_filters + n_ops]
-    mem_handles = legend_elements[n_filters + n_ops :] if has_bg else []
+    mem_handles: list[Patch] = []
+    if has_bg or has_ddr5:
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="black",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=1.0,
+                label="HBM3",
+            )
+        )
+    if has_bg:
+        gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="#666666",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=gddr_alpha,
+                label="GDDR7",
+            )
+        )
+    if has_ddr5:
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor=_DDR5_EDGE_COLOR,
+                linewidth=pu.BAR_EDGE_WIDTH,
+                linestyle="--",
+                alpha=_DDR5_ALPHA,
+                label="DDR5",
+            )
+        )
 
     legend_y_top = 0.99
     legend_row_step = 0.075
