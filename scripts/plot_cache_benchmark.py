@@ -114,7 +114,7 @@ def main(
 
         # Common axis labels
         fig.supxlabel(
-            "Filter Capacity (elements)",
+            "Filter Capacity [slots]",
             fontsize=pu.AXIS_LABEL_FONT_SIZE,
             fontweight="bold",
         )

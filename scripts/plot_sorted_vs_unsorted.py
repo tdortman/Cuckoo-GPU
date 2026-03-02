@@ -189,7 +189,7 @@ def main(
             )
 
     ax.set_xlabel(
-        "Capacity (elements)", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        "Capacity [slots]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.set_ylabel(
         pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
