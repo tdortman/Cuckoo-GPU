@@ -108,6 +108,9 @@ def parse_benchmark_data(
 @app.command()
 def main(
     csv_file: Path = typer.Argument(..., help="Path to benchmark CSV file"),
+    pcf_csv_file: Path = typer.Argument(
+        None, help="Optional path to a second CSV file containing PCF results"
+    ),
     baseline: str = typer.Option("GCF", "--baseline", "-b", help="Baseline filter name"),
     load_factor: int = typer.Option(
         None,
@@ -126,7 +129,7 @@ def main(
 
     Examples:
         ./compute_speedup.py benchmark_lf.csv -l 50
-        ./compute_speedup.py benchmark_lf.csv -l 95 -s 67108864
+        ./compute_speedup.py benchmark_lf.csv pcf.csv -l 95 -s 67108864
     """
     try:
         df = pd.read_csv(csv_file)
@@ -135,6 +138,23 @@ def main(
         raise typer.Exit(1)
 
     data = parse_benchmark_data(df, load_factor)
+
+    if pcf_csv_file is not None:
+        try:
+            pcf_df = pd.read_csv(pcf_csv_file)
+        except Exception as e:
+            typer.secho(f"Error reading PCF CSV: {e}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+
+        pcf_data = parse_benchmark_data(pcf_df, load_factor)
+        if "PCF" in pcf_data:
+            data["PCF"] = pcf_data["PCF"]
+        else:
+            typer.secho(
+                "Warning: no PCF data found in second CSV file",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
 
     if not data:
         typer.secho(
