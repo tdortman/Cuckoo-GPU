@@ -29,7 +29,7 @@ FILTER_STYLES = {
 FILTER_COLORS = {
     "Cuckoo-GPU": FILTER_STYLES["gcf"]["color"],
     "CPU Cuckoo": FILTER_STYLES["ccf"]["color"],
-    "BBF": FILTER_STYLES["bbf"]["color"],
+    "GBBF": FILTER_STYLES["bbf"]["color"],
     "TCF": FILTER_STYLES["tcf"]["color"],
     "GQF": FILTER_STYLES["gqf"]["color"],
     "PCF": FILTER_STYLES["pcf"]["color"],
@@ -43,14 +43,14 @@ FILTER_DISPLAY_NAMES = {
     "tcf": "TCF",
     "gqf": "GQF",
     "pcf": "PCF",
-    "bbf": "BBF",
+    "bbf": "GBBF",
     "dm": "Dynamic Map",
     "bcht": "BCHT",
 }
 
 OPERATION_COLORS = {
     "Insert": FILTER_COLORS["Cuckoo-GPU"],
-    "Query": FILTER_COLORS["BBF"],
+    "Query": FILTER_COLORS["GBBF"],
     "Delete": FILTER_COLORS["GQF"],
 }
 
@@ -80,7 +80,7 @@ def get_filter_display_name(filter_type: str) -> str:
         filter_type: Internal filter identifier (e.g., 'gcf', 'bbf')
 
     Returns:
-        Display name (e.g., 'Cuckoo-GPU', 'BBF')
+        Display name (e.g., 'Cuckoo-GPU', 'GBBF')
     """
     normalized = filter_type.lower()
     return FILTER_DISPLAY_NAMES.get(normalized, filter_type.capitalize())
