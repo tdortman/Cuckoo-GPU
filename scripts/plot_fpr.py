@@ -130,16 +130,21 @@ def main(
     ax.set_yscale("log")
     ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+    plt.tight_layout(rect=(0, 0, 1, 0.94))
+
+    axes_box = ax.get_position()
+    legend_center_x = (axes_box.x0 + axes_box.x1) / 2
+    legend_y = axes_box.y1 + 0.01
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(
+    fig.legend(
+        handles,
+        labels,
         fontsize=pu.LEGEND_FONT_SIZE,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.12),
+        loc="lower center",
+        bbox_to_anchor=(legend_center_x, legend_y),
         ncol=len(labels),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
-
-    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "fpr_vs_memory.pdf"
     plt.savefig(
@@ -183,16 +188,21 @@ def main(
     ax.set_xscale("log", base=2)
     ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
+    plt.tight_layout(rect=(0, 0, 1, 0.94))
+
+    axes_box = ax.get_position()
+    legend_center_x = (axes_box.x0 + axes_box.x1) / 2
+    legend_y = axes_box.y1 + 0.01
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(
+    fig.legend(
+        handles,
+        labels,
         fontsize=pu.LEGEND_FONT_SIZE,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.12),
+        loc="lower center",
+        bbox_to_anchor=(legend_center_x, legend_y),
         ncol=len(labels),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
-
-    plt.tight_layout(rect=(0, 0, 1, 0.92))
 
     output_file = output_dir / "bits_per_item_vs_memory.pdf"
     plt.savefig(

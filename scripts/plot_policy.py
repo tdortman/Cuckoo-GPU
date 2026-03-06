@@ -13,6 +13,7 @@ import math
 from pathlib import Path
 from typing import Optional
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import plot_utils as pu
 import typer
@@ -243,17 +244,20 @@ def main(
         ),
     ]
 
-    legend_y_top = 0.99
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
+
+    axes_box = ax.get_position()  # type: ignore[unresolved-attribute]
+    legend_center_x = (axes_box.x0 + axes_box.x1) / 2
+    legend_labels = [str(handle.get_label()) for handle in legend_handles]
     fig.legend(
-        handles=legend_handles,
+        legend_handles,
+        legend_labels,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, legend_y_top),
+        bbox_to_anchor=(legend_center_x, 1.02),
         ncol=len(legend_handles),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
-
-    fig.subplots_adjust(left=0.09, right=0.99, bottom=0.11, top=0.86)
 
     output_file = output_dir / "policy_benchmark.pdf"
     pu.save_figure(fig, output_file, f"Policy benchmark plot saved to {output_file}")

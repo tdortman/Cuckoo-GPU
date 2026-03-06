@@ -118,19 +118,20 @@ def main(
         xscale=None,
     )
 
-    # Get handles and labels from axis, then create figure legend above
     handles, labels = ax.get_legend_handles_labels()  # ty:ignore[unresolved-attribute]
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
+
+    axes_box = ax.get_position()  # ty:ignore[unresolved-attribute]
+    legend_center_x = (axes_box.x0 + axes_box.x1) / 2
     fig.legend(
         handles,
         labels,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.02),
+        bbox_to_anchor=(legend_center_x, 1.02),
         ncol=len(labels),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
-
-    plt.tight_layout(rect=(0, 0, 1, 0.95))
 
     output_file = output_dir / "kmer_benchmark.pdf"
     pu.save_figure(fig, output_file, f"K-mer benchmark plot saved to {output_file}")

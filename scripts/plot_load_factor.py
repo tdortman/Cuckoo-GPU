@@ -876,11 +876,23 @@ def bar(
     legend_y_top = 0.99
     legend_row_step = 0.075
 
+    if mem_handles:
+        mem_legend_y = legend_y_top - (2 * legend_row_step)
+        axes_top = mem_legend_y - 0.10
+    else:
+        axes_top = (legend_y_top - legend_row_step) - 0.10
+
+    fig.subplots_adjust(left=0.06, right=0.995, bottom=0.08, top=axes_top, wspace=0.04)
+
+    axes_left = ax_left.get_position().x0
+    axes_right = ax_right.get_position().x1
+    legend_center_x = (axes_left + axes_right) / 2
+
     fig.legend(
         handles=filter_handles,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, legend_y_top),
+        bbox_to_anchor=(legend_center_x, legend_y_top),
         ncol=len(filter_handles),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
@@ -888,26 +900,19 @@ def bar(
         handles=op_handles,
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper center",
-        bbox_to_anchor=(0.5, legend_y_top - legend_row_step),
+        bbox_to_anchor=(legend_center_x, legend_y_top - legend_row_step),
         ncol=len(op_handles),
         framealpha=pu.LEGEND_FRAME_ALPHA,
     )
     if mem_handles:
-        mem_legend_y = legend_y_top - (2 * legend_row_step)
         fig.legend(
             handles=mem_handles,
             fontsize=pu.LEGEND_FONT_SIZE,
             loc="upper center",
-            bbox_to_anchor=(0.5, mem_legend_y),
+            bbox_to_anchor=(legend_center_x, mem_legend_y),
             ncol=len(mem_handles),
             framealpha=pu.LEGEND_FRAME_ALPHA,
         )
-        axes_top = mem_legend_y - 0.10
-    else:
-        axes_top = (legend_y_top - legend_row_step) - 0.10
-
-    # Reserve explicit space for figure-level legends to avoid overlap with axes.
-    fig.subplots_adjust(left=0.06, right=0.995, bottom=0.08, top=axes_top, wspace=0.04)
 
     lf_str = (
         str(int(load_factor_pct))
