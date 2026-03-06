@@ -27,7 +27,7 @@ _OPERATION_LABELS = {
     "QueryNegative": "Query (\u2212)",
     "Delete": "Delete",
 }
-_POLICY_ORDER = ["Xor", "AddSub", "Offset"]
+_POLICY_ORDER = ["Xor", "Offset"]
 _BAR_WIDTH = 0.2
 _PAIR_GAP = 0.0
 _GROUP_GAP = 0.0
@@ -61,7 +61,6 @@ def load_policy_data(csv_path: Path) -> tuple[dict[str, dict[str, float]], int |
     capacity: int | None = None
     policy_name_map = {
         "xor": "Xor",
-        "addsub": "AddSub",
         "offset": "Offset",
     }
 
@@ -204,6 +203,7 @@ def main(
     ax.set_ylabel(  # type: ignore
         pu.THROUGHPUT_LABEL, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
+    ax.tick_params(axis="both", labelsize=pu.TICK_LABEL_FONT_SIZE)  # type: ignore
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA, zorder=0)  # type: ignore
 
     n_policies = len(policies)
@@ -212,34 +212,38 @@ def main(
     )
     ax.set_xlim(-half_span - _X_MARGIN, len(operations) - 1 + half_span + _X_MARGIN)  # type: ignore
 
-    policy_handles = [
+    legend_handles = [
         Patch(
-            facecolor=pu.POLICY_COLORS.get(policy, "#333333"),
-            edgecolor="black",
-            linewidth=pu.BAR_EDGE_WIDTH,
-            label=pu.get_policy_display_name(policy),
-        )
-        for policy in policies
-    ]
-    size_handles = [
-        Patch(
-            facecolor="gray",
+            facecolor=pu.POLICY_COLORS.get("Xor", "#333333"),
             edgecolor="black",
             linewidth=pu.BAR_EDGE_WIDTH,
             alpha=1.0,
-            label="DRAM-resident",
+            label="XOR DRAM",
         ),
         Patch(
-            facecolor="gray",
+            facecolor=pu.POLICY_COLORS.get("Xor", "#333333"),
             edgecolor="#666666",
             linewidth=pu.BAR_EDGE_WIDTH,
             alpha=_SMALL_ALPHA,
-            label="L2-resident",
+            label="XOR L2",
+        ),
+        Patch(
+            facecolor=pu.POLICY_COLORS.get("Offset", "#333333"),
+            edgecolor="black",
+            linewidth=pu.BAR_EDGE_WIDTH,
+            alpha=1.0,
+            label="Offset DRAM",
+        ),
+        Patch(
+            facecolor=pu.POLICY_COLORS.get("Offset", "#333333"),
+            edgecolor="#666666",
+            linewidth=pu.BAR_EDGE_WIDTH,
+            alpha=_SMALL_ALPHA,
+            label="Offset L2",
         ),
     ]
 
     legend_y_top = 0.99
-    legend_handles = policy_handles + size_handles
     fig.legend(
         handles=legend_handles,
         fontsize=pu.LEGEND_FONT_SIZE,

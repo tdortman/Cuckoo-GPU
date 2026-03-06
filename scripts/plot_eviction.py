@@ -276,6 +276,7 @@ def plot_metric_separate(
         ax.set_xlabel(
             "Load Factor", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
         )
+        ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
         ax.set_ylabel(y_label, fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
         ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
 
@@ -394,6 +395,7 @@ def plot_histogram_percentiles(
 
     ax.set_xlabel("Load Factor", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
     ax.set_ylabel("Evictions", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
+    ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.set_yscale("symlog", linthresh=1.0, linscale=1.0, base=10)
     ax.set_ylim(bottom=0)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
@@ -434,7 +436,7 @@ def plot_histogram_percentiles(
         title="Policy",
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper left",
-        bbox_to_anchor=(0.0, 1.0, 0.2, 0.0),
+        bbox_to_anchor=(0.0, 1.0, 0.22, 0.0),
         mode="expand",
         handlelength=4.0,
         numpoints=2,
@@ -453,7 +455,7 @@ def plot_histogram_percentiles(
         title="Percentile",
         fontsize=pu.LEGEND_FONT_SIZE,
         loc="upper left",
-        bbox_to_anchor=(0.0, 0.82, 0.2, 0.0),
+        bbox_to_anchor=(0.0, 0.78, 0.22, 0.0),
         mode="expand",
         framealpha=pu.LEGEND_FRAME_ALPHA_SOLID,
         facecolor="white",

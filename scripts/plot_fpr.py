@@ -117,17 +117,18 @@ def main(
             label=pu.get_filter_display_name(filter_type),
             linewidth=pu.LINE_WIDTH,
             markersize=pu.MARKER_SIZE,
-            **style,
+            **style,  # type: ignore
         )
 
     ax.set_xlabel(
-        "Memory Size [bytes]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
+        "Filter Size [bytes]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.set_ylabel(
         "False Positive Rate [%]", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold"
     )
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
+    ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(
@@ -172,7 +173,7 @@ def main(
             label=pu.get_filter_display_name(filter_type),
             linewidth=pu.LINE_WIDTH,
             markersize=pu.MARKER_SIZE,
-            **style,
+            **style,  # type: ignore
         )
 
     ax.set_xlabel(
@@ -180,6 +181,7 @@ def main(
     )
     ax.set_ylabel("Bits per Item", fontsize=pu.AXIS_LABEL_FONT_SIZE, fontweight="bold")
     ax.set_xscale("log", base=2)
+    ax.tick_params(axis="both", labelsize=pu.AXIS_LABEL_FONT_SIZE)
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(
