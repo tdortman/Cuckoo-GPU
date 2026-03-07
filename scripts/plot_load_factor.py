@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import plot_utils as pu
 import typer
+from matplotlib.axes import Axes
 from matplotlib.patches import Patch
 
 app = typer.Typer(help="Plot load factor benchmark results")
@@ -69,7 +70,7 @@ def load_csv_data(csv_path: Path) -> dict:
     benchmark_data = defaultdict(lambda: defaultdict(dict))
 
     for _, row in df.iterrows():
-        name = row["name"]
+        name = str(row["name"])
 
         # Extract filter type using standardized approach
         filter_key = pu.normalize_benchmark_name(name)
@@ -92,8 +93,8 @@ def load_csv_data(csv_path: Path) -> dict:
             filter_key = filter_type
 
         items_per_second = row.get("items_per_second")
-        if pd.notna(items_per_second):
-            throughput_beps = pu.to_billion_elems_per_sec(items_per_second)
+        if items_per_second is not None and pd.notna(items_per_second):
+            throughput_beps = pu.to_billion_elems_per_sec(float(items_per_second))
             benchmark_data[operation_type][filter_key][load_factor] = throughput_beps
 
     return benchmark_data
@@ -130,7 +131,7 @@ def get_filter_styles() -> dict:
 
 
 def plot_operation_on_axis(
-    ax: plt.Axes,
+    ax: Axes,
     operation_type: str,
     benchmark_data: dict,
     filter_styles: dict,
@@ -343,10 +344,12 @@ _X_AXIS_MARGIN_LEFT = _SINGLE_BAR_WIDTH
 _X_AXIS_MARGIN_RIGHT = _SINGLE_BAR_WIDTH
 _CPU_CUCKOO_FILTER = "CPU Cuckoo"
 _PCF_FILTER = "PCF"
+_BAR_SUBPLOT_FIGSIZE = (7.2, 3.0)
 
 
 def extract_fixed_lf_data(
-    benchmark_data: dict, load_factor: float
+    benchmark_data: dict,
+    load_factor: float,
 ) -> dict[str, dict[str, float]]:
     """Extract throughput values at a single load factor.
 
@@ -412,8 +415,152 @@ def apply_single_filter_override(
     return True
 
 
+def build_memory_legend_handles(has_bg: bool, has_ddr5: bool) -> list[Patch]:
+    """Build legend handles for memory-system annotations."""
+    mem_handles: list[Patch] = []
+    if has_bg or has_ddr5:
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="black",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=1.0,
+                label="HBM3",
+            )
+        )
+    if has_bg:
+        gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor="#666666",
+                linewidth=pu.BAR_EDGE_WIDTH,
+                alpha=gddr_alpha,
+                label="GDDR7",
+            )
+        )
+    if has_ddr5:
+        mem_handles.append(
+            Patch(
+                facecolor="gray",
+                edgecolor=_DDR5_EDGE_COLOR,
+                linewidth=pu.BAR_EDGE_WIDTH,
+                linestyle="--",
+                alpha=_DDR5_ALPHA,
+                label="DDR5",
+            )
+        )
+
+    return mem_handles
+
+
+def split_bar_legend_elements(
+    legend_elements: list[Patch], filter_order: list[str]
+) -> tuple[list[Patch], list[Patch]]:
+    """Split combined bar-chart legend handles into filter and operation rows."""
+    n_filters = len(filter_order)
+    n_ops = len(BAR_OPERATIONS)
+    filter_handles = legend_elements[:n_filters]
+    op_handles = legend_elements[n_filters : n_filters + n_ops]
+    return filter_handles, op_handles
+
+
+def save_bar_subplot(
+    output_path: Path,
+    data: dict[str, dict[str, float]],
+    filter_order: list[str],
+    show_ylabel: bool,
+    bg_data: Optional[dict[str, dict[str, float]]],
+    single_source_filters: set[str],
+    ddr5_filters: set[str],
+    ylim: tuple[float, float],
+    message: str,
+) -> list[Patch]:
+    """Render and save one independent bar subplot figure."""
+    fig, ax = plt.subplots(1, 1, figsize=_BAR_SUBPLOT_FIGSIZE)
+    legend_elements = plot_bar_on_axis(
+        ax,
+        data,
+        filter_order,
+        title=None,
+        show_ylabel=show_ylabel,
+        bg_data=bg_data,
+        single_source_filters=single_source_filters,
+        ddr5_filters=ddr5_filters,
+    )
+
+    ax.set_ylim(*ylim)
+    left_margin = 0.11 if show_ylabel else 0.065
+    fig.subplots_adjust(left=left_margin, right=0.995, bottom=0.01, top=0.995)
+    fig.savefig(
+        output_path,
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
+    typer.secho(message, fg=typer.colors.GREEN)
+    plt.close(fig)
+    return legend_elements
+
+
+def save_bar_legend_figure(
+    output_path: Path,
+    filter_handles: list[Patch],
+    op_handles: list[Patch],
+    mem_handles: list[Patch],
+    fig_width: float,
+    message: str,
+) -> None:
+    """Render and save a legend-only figure for the split bar charts."""
+    n_rows = 2 + int(bool(mem_handles))
+    legend_fig_height = 0.55 + 0.42 * n_rows
+    fig = plt.figure(figsize=(fig_width, legend_fig_height))
+
+    legend_y_top = 0.9
+    legend_row_step = 0.22
+
+    if filter_handles:
+        fig.legend(
+            handles=filter_handles,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, legend_y_top),
+            ncol=len(filter_handles),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
+        )
+    if op_handles:
+        fig.legend(
+            handles=op_handles,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, legend_y_top - legend_row_step),
+            ncol=len(op_handles),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
+        )
+    if mem_handles:
+        fig.legend(
+            handles=mem_handles,
+            fontsize=pu.LEGEND_FONT_SIZE,
+            loc="upper center",
+            bbox_to_anchor=(0.5, legend_y_top - (2 * legend_row_step)),
+            ncol=len(mem_handles),
+            framealpha=pu.LEGEND_FRAME_ALPHA,
+        )
+
+    fig.savefig(
+        output_path,
+        bbox_inches="tight",
+        pad_inches=0,
+        transparent=True,
+        format="pdf",
+        dpi=600,
+    )
+    typer.secho(message, fg=typer.colors.GREEN)
+    plt.close(fig)
+
+
 def plot_bar_on_axis(
-    ax: plt.Axes,
+    ax: Axes,
     data: dict[str, dict[str, float]],
     filter_order: list[str],
     title: Optional[str] = None,
@@ -660,9 +807,10 @@ def bar(
     """
     Generate a bar chart comparing filter throughput at a fixed load factor.
 
-    Creates a 1x2 figure with one subplot per CSV file.  Within each subplot,
-    filters are on the x-axis and operations (Insert, Query+, Query-, Delete)
-    are shown as clustered bars with distinct hatch patterns.
+    Creates two independent subplot PDF files plus a separate legend PDF.
+    Within each subplot, filters are on the x-axis and operations
+    (Insert, Query+, Query-, Delete) are shown as clustered bars with
+    distinct hatch patterns.
 
     If --bg-left and/or --bg-right are provided, those CSVs are treated as
     GDDR7 data and compared against HBM3 using side-by-side paired bars.
@@ -804,12 +952,17 @@ def bar(
     # Scale figure width with filter count so bars can use horizontal space even
     # when the top filter legend becomes very wide.
     fig_width = max(12.0, 2.1 * len(filter_order) + 1.5)
-    fig, (ax_left, ax_right) = plt.subplots(
-        1, 2, figsize=(fig_width, 5), sharey=True, gridspec_kw={"wspace": 0.04}
+
+    preview_fig, (preview_ax_left, preview_ax_right) = plt.subplots(
+        1,
+        2,
+        figsize=(fig_width, 5),
+        sharey=True,
+        gridspec_kw={"wspace": 0.04},
     )
 
     legend_left = plot_bar_on_axis(
-        ax_left,
+        preview_ax_left,
         lf_hbm3_left,
         filter_order,
         title=None,
@@ -819,7 +972,7 @@ def bar(
         ddr5_filters=ddr5_filters_left,
     )
     legend_right = plot_bar_on_axis(
-        ax_right,
+        preview_ax_right,
         lf_hbm3_right,
         filter_order,
         title=None,
@@ -829,102 +982,59 @@ def bar(
         ddr5_filters=ddr5_filters_right,
     )
 
+    y_min_left, y_max_left = preview_ax_left.get_ylim()
+    y_min_right, y_max_right = preview_ax_right.get_ylim()
+    common_ylim = (min(y_min_left, y_min_right), max(y_max_left, y_max_right))
+    plt.close(preview_fig)
+
     # Use the legend with more entries
     legend_elements = (
         legend_left if len(legend_left) >= len(legend_right) else legend_right
     )
 
-    # Split legend into rows: filters | operations. Memory legend is built globally.
-    n_filters = len(filter_order)
-    n_ops = len(BAR_OPERATIONS)
-    filter_handles = legend_elements[:n_filters]
-    op_handles = legend_elements[n_filters : n_filters + n_ops]
-    mem_handles: list[Patch] = []
-    if has_bg or has_ddr5:
-        mem_handles.append(
-            Patch(
-                facecolor="gray",
-                edgecolor="black",
-                linewidth=pu.BAR_EDGE_WIDTH,
-                alpha=1.0,
-                label="HBM3",
-            )
-        )
-    if has_bg:
-        gddr_alpha = max(_GDDR7_PAIRED_ALPHA_FLOOR, _GDDR7_PAIRED_ALPHA_SCALE)
-        mem_handles.append(
-            Patch(
-                facecolor="gray",
-                edgecolor="#666666",
-                linewidth=pu.BAR_EDGE_WIDTH,
-                alpha=gddr_alpha,
-                label="GDDR7",
-            )
-        )
-    if has_ddr5:
-        mem_handles.append(
-            Patch(
-                facecolor="gray",
-                edgecolor=_DDR5_EDGE_COLOR,
-                linewidth=pu.BAR_EDGE_WIDTH,
-                linestyle="--",
-                alpha=_DDR5_ALPHA,
-                label="DDR5",
-            )
-        )
-
-    legend_y_top = 0.99
-    legend_row_step = 0.075
-
-    if mem_handles:
-        mem_legend_y = legend_y_top - (2 * legend_row_step)
-        axes_top = mem_legend_y - 0.10
-    else:
-        axes_top = (legend_y_top - legend_row_step) - 0.10
-
-    fig.subplots_adjust(left=0.06, right=0.995, bottom=0.08, top=axes_top, wspace=0.04)
-
-    axes_left = ax_left.get_position().x0
-    axes_right = ax_right.get_position().x1
-    legend_center_x = (axes_left + axes_right) / 2
-
-    fig.legend(
-        handles=filter_handles,
-        fontsize=pu.LEGEND_FONT_SIZE,
-        loc="upper center",
-        bbox_to_anchor=(legend_center_x, legend_y_top),
-        ncol=len(filter_handles),
-        framealpha=pu.LEGEND_FRAME_ALPHA,
+    filter_handles, op_handles = split_bar_legend_elements(
+        legend_elements, filter_order
     )
-    fig.legend(
-        handles=op_handles,
-        fontsize=pu.LEGEND_FONT_SIZE,
-        loc="upper center",
-        bbox_to_anchor=(legend_center_x, legend_y_top - legend_row_step),
-        ncol=len(op_handles),
-        framealpha=pu.LEGEND_FRAME_ALPHA,
-    )
-    if mem_handles:
-        fig.legend(
-            handles=mem_handles,
-            fontsize=pu.LEGEND_FONT_SIZE,
-            loc="upper center",
-            bbox_to_anchor=(legend_center_x, mem_legend_y),
-            ncol=len(mem_handles),
-            framealpha=pu.LEGEND_FRAME_ALPHA,
-        )
+    mem_handles = build_memory_legend_handles(has_bg, has_ddr5)
 
     lf_str = (
         str(int(load_factor_pct))
         if load_factor_pct == int(load_factor_pct)
         else str(load_factor_pct).replace(".", "_")
     )
-    output_file = output_dir_resolved / f"load_factor_bar_{lf_str}.pdf"
-    pu.save_figure(
-        fig,
-        output_file,
-        f"Bar chart at {load_factor_pct}% load factor saved to {output_file}",
-        close=True,
+    left_output_file = output_dir_resolved / f"load_factor_bar_{lf_str}_left.pdf"
+    right_output_file = output_dir_resolved / f"load_factor_bar_{lf_str}_right.pdf"
+    legend_output_file = output_dir_resolved / f"load_factor_bar_{lf_str}_legend.pdf"
+
+    save_bar_subplot(
+        left_output_file,
+        lf_hbm3_left,
+        filter_order,
+        show_ylabel=True,
+        bg_data=lf_gddr7_left if lf_gddr7_left else None,
+        single_source_filters=single_source_filters_left,
+        ddr5_filters=ddr5_filters_left,
+        ylim=common_ylim,
+        message=f"Left bar chart at {load_factor_pct}% load factor saved to {left_output_file}",
+    )
+    save_bar_subplot(
+        right_output_file,
+        lf_hbm3_right,
+        filter_order,
+        show_ylabel=False,
+        bg_data=lf_gddr7_right if lf_gddr7_right else None,
+        single_source_filters=single_source_filters_right,
+        ddr5_filters=ddr5_filters_right,
+        ylim=common_ylim,
+        message=f"Right bar chart at {load_factor_pct}% load factor saved to {right_output_file}",
+    )
+    save_bar_legend_figure(
+        legend_output_file,
+        filter_handles,
+        op_handles,
+        mem_handles,
+        fig_width=fig_width,
+        message=f"Bar chart legend at {load_factor_pct}% load factor saved to {legend_output_file}",
     )
 
 

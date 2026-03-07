@@ -82,6 +82,7 @@ def main(
     filter_order = ["GCF", "BBF", "TCF", "GQF"]
     filters = [f for f in filter_order if f in df["filter"].values]
     operations = ["Query", "Insert", "Delete"]
+    operation_labels = {"Query": "Query (+)", "Insert": "Insert", "Delete": "Delete"}
 
     # Reshape data: {filter: {operation: throughput}}
     data: dict[str, dict[str, float]] = {}
@@ -90,7 +91,9 @@ def main(
         for operation in operations:
             subset = df[(df["filter"] == filter_name) & (df["operation"] == operation)]
             if not subset.empty:
-                data[filter_name][operation] = subset["throughput"].values[0]
+                data[filter_name][operation_labels[operation]] = subset[
+                    "throughput"
+                ].values[0]
 
     colors = {
         f: pu.FILTER_COLORS.get(pu.get_filter_display_name(f), "#333333")
@@ -101,7 +104,7 @@ def main(
 
     pu.clustered_bar_chart(
         ax,  # ty:ignore[invalid-argument-type]
-        categories=operations,
+        categories=list(operation_labels.values()),
         groups=filters,
         data=data,
         colors=colors,
