@@ -1,4 +1,4 @@
-# GPU-Accelerated Cuckoo Filter
+# Cuckoo-GPU
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tdortman.github.io/Cuckoo-GPU/)
 
@@ -15,37 +15,42 @@ This library provides a GPU-accelerated Cuckoo Filter implementation optimized f
 - Multiple eviction policies (DFS, BFS)
 - Sorted insertion mode for improved memory coalescing
 - Multi-GPU support via [gossip](https://github.com/Funatiq/gossip)
-- IPC support for cross-process filter sharing
+- Experimental IPC support for cross-process filter sharing
 - Header-only library design
 
 ## Performance
 
-Benchmarks at 80% load factor on an NVIDIA GH200 (H100 HBM3, 3.4 TB/s) with 16-bit fingerprints and equivalent space allocation for the Blocked Bloom Filter.
+![image](./docs/load_factor_bar_95.png)
 
-The GPU Cuckoo Filter is compared against:
+Benchmarks at 95% load factor on an NVIDIA GH200 (H100 HBM3, 3.4 TB/s) with 16-bit fingerprints and equivalent space allocation for the Blocked Bloom Filter. The PCF runs on an Intel Xeon W9-3595X CPU (120 threads).
 
-- [CPU Cuckoo Filter](https://github.com/efficient/cuckoofilter)
-- [Bulk Two-Choice Filter (TCF)](https://github.com/saltsystemslab/gpu-filters/tree/main/bulk-tcf)
+Cuckoo-GPU is compared against:
+
+- [CPU Partitioned Cuckoo Filter (PCF)](https://github.com/tum-db/partitioned-filters)
+- [GPU Bulk Two-Choice Filter (TCF)](https://github.com/saltsystemslab/gpu-filters/tree/main/bulk-tcf)
 - [GPU Counting Quotient Filter (GQF)](https://github.com/saltsystemslab/gpu-filters/tree/main/gqf)
-- [GPU Blocked Bloom Filter](https://github.com/NVIDIA/cuCollections)
+- [GPU Blocked Bloom Filter (GBBF)](https://github.com/NVIDIA/cuCollections)
+- [GPU Bucketed Cuckoo Hash Table (BCHT)](https://github.com/owensgroup/BGHT)
 
 ### L2-Resident (4M items, ~8 MiB)
 
-| Comparison        | Insert        | Query       | Delete      | FPR              |
-| ----------------- | ------------- | ----------- | ----------- | ---------------- |
-| GPU vs CPU Cuckoo | 360× faster   | 973× faster | N/A         | 0.041% vs 0.005% |
-| Cuckoo vs TCF     | 6× faster     | 42× faster  | 100× faster | 0.041% vs 0.305% |
-| Cuckoo vs GQF     | 585× faster   | 6× faster   | 273× faster | 0.041% vs 0.001% |
-| Cuckoo vs Bloom   | 0.6× (slower) | 1.4× faster | N/A         | 0.041% vs 1.336% |
+| Comparison         | Insert         | Query        | Delete      | FPR              |
+| ------------------ | -------------- | ------------ | ----------- | ---------------- |
+| Cuckoo-GPU vs PCF  | 175× faster    | 351× faster  | N/A         | 0.046% vs 0.011% |
+| Cuckoo-GPU vs TCF  | 4× faster      | 35× faster   | 108× faster | 0.046% vs 0.409% |
+| Cuckoo-GPU vs GQF  | 378× faster    | 6× faster    | 258× faster | 0.046% vs 0.001% |
+| Cuckoo-GPU vs GBBF | 0.35× (slower) | 1.2× faster  | N/A         | 0.046% vs 2.503% |
+| Cuckoo-GPU vs BCHT | 11.3× faster   | 40.9× faster | N/A         | 0.046% vs 0%     |
 
 ### DRAM-Resident (268M items, ~512 MiB)
 
-| Comparison        | Insert        | Query        | Delete       | FPR              |
-| ----------------- | ------------- | ------------ | ------------ | ---------------- |
-| GPU vs CPU Cuckoo | 583× faster   | 1504× faster | N/A          | 0.039% vs 0.004% |
-| Cuckoo vs TCF     | 1.9× faster   | 11.3× faster | 35.3× faster | 0.039% vs 0.394% |
-| Cuckoo vs GQF     | 9.6× faster   | 2.6× faster  | 3.8× faster  | 0.039% vs 0.001% |
-| Cuckoo vs Bloom   | 0.7× (slower) | 1.0× (equal) | N/A          | 0.039% vs 4.083% |
+| Comparison         | Insert        | Query         | Delete       | FPR              |
+| ------------------ | ------------- | ------------- | ------------ | ---------------- |
+| Cuckoo-GPU vs PCF  | 69× faster    | 143× faster   | N/A          | 0.044% vs 0.010% |
+| Cuckoo-GPU vs TCF  | 2.1× faster   | 9.9× faster   | 44.9× faster | 0.044% vs 0.467% |
+| Cuckoo-GPU vs GQF  | 10.1× faster  | 2.6× faster   | 3.6× faster  | 0.044% vs 0.001% |
+| Cuckoo-GPU vs GBBF | 0.7× (slower) | 0.9× (slower) | N/A          | 0.044% vs 6.092% |
+| Cuckoo-GPU vs BCHT | 8.5× faster   | 15.9× faster  | N/A          | 0.044% vs 0%     |
 
 > [!NOTE]
 > A much more comprehensive evaluation, including additional systems and analyses, is presented in the [accompanying thesis](https://tdortman.github.io/thesis/thesis.pdf).
