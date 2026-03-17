@@ -1,8 +1,9 @@
 # Cuckoo-GPU
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://tdortman.github.io/Cuckoo-GPU/)
+[![arXiv](https://img.shields.io/badge/arXiv-2603.15486-b31b1b.svg)](https://arxiv.org/abs/2603.15486)
 
-A high-performance CUDA implementation of the Cuckoo Filter data structure, developed as part of the thesis "Design and Evaluation of a GPU-Accelerated Cuckoo Filter".
+A high-performance, lock-free CUDA implementation of the Cuckoo Filter. This library is the companion code for the paper **"Cuckoo-GPU: Accelerating Cuckoo Filters on Modern GPUs"**.
 
 ## Overview
 
