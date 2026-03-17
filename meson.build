@@ -31,7 +31,7 @@ gossip_dep = subproject('gossip').get_variable('gossip_dep')
 subdir('examples')
 
 if get_option('BUILD_BENCHMARKS')
-    subdir('benchmark')
+    subdir('benchmarks')
 endif
 
 if get_option('BUILD_TESTS')

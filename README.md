@@ -136,7 +136,7 @@ include/cuckoogpu/   - Header files
   bucket_policies.cuh        - Alternative bucket policies
   helpers.cuh                - Helper functions
 src/                 - Example applications
-benchmark/           - benchmarks
+benchmarks/          - benchmarks
 tests/               - Unit tests
 scripts/             - Scripts for running/plotting benchmarks
 ```

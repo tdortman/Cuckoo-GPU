@@ -40,7 +40,7 @@ def get_benchmark_dir(script_path: Optional[Path] = None) -> Path:
     Returns:
         Path to the build/benchmark directory
     """
-    return get_build_dir(script_path) / "benchmark"
+    return get_build_dir(script_path) / "benchmarks"
 
 
 def get_examples_dir(script_path: Optional[Path] = None) -> Path:
