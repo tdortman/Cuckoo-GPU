@@ -34,6 +34,15 @@ let
     pkg-config
     doxygen
     graphviz
+
+    cudaPkgs.nsight_systems
+    (cudaPkgs.nsight_compute.overrideAttrs (old: {
+      postInstall = old.postInstall + ''
+        ln -s $out/bin/target/linux-desktop-glibc_*-x64 \
+          $out/bin/target/linux-desktop-glibc_*-x86
+        ln -s $out/sections $out/bin/sections
+      '';
+    }))
   ];
 in
 
