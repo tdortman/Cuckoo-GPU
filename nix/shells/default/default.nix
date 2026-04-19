@@ -30,13 +30,14 @@ let
     llvm.clang-tools
     llvm.lldb
     meson
+    ninja
     uv
     pkg-config
     doxygen
     graphviz
 
     cudaPkgs.nsight_systems
-    cudaPkgs.nsight_compute
+    cudaPkgs.nsight_compute    
   ];
 in
 
