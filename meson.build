@@ -30,10 +30,13 @@ gossip_dep = subproject('gossip').get_variable('gossip_dep')
 
 subdir('examples')
 
-if get_option('BUILD_BENCHMARKS')
+build_benchmarks = get_option('benchmarks').enabled() or (get_option('benchmarks').auto() and not meson.is_subproject())
+build_tests = get_option('tests').enabled() or (get_option('tests').auto() and not meson.is_subproject())
+
+if build_benchmarks
     subdir('benchmarks')
 endif
 
-if get_option('BUILD_TESTS')
+if build_tests
     subdir('tests')
 endif

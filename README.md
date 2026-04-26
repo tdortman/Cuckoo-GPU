@@ -69,10 +69,28 @@ meson setup build
 meson compile -C build
 ```
 
-Benchmarks and tests are built by default. To disable them:
+Benchmarks and tests are built automatically when this is a standalone project, but skipped when it is used as a subproject. You can override this with Meson feature options:
+
+| Option | Behavior |
+|--------|----------|
+| `-Dbenchmarks=auto` (default) | Build benchmarks when standalone, skip when subproject |
+| `-Dbenchmarks=enabled` | Always build benchmarks |
+| `-Dbenchmarks=disabled` | Never build benchmarks |
+| `-Dtests=auto` (default) | Build tests when standalone, skip when subproject |
+| `-Dtests=enabled` | Always build tests |
+| `-Dtests=disabled` | Never build tests |
+
+Examples:
 
 ```bash
-meson setup build -DBUILD_BENCHMARKS=false -DBUILD_TESTS=false
+# Standalone: build everything (default)
+meson setup build
+
+# Standalone: skip benchmarks and tests
+meson setup build -Dbenchmarks=disabled -Dtests=disabled
+
+# Subproject: force benchmarks and tests on
+meson setup build -Dbenchmarks=enabled -Dtests=enabled
 ```
 
 ## Usage
