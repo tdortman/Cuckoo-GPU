@@ -24,7 +24,7 @@ class WeakScalingFixture : public benchmark::Fixture {
     using KeyType = typename ConfigType::KeyType;
 
     void SetUp(const benchmark::State&) override {
-        CUDA_CALL(cudaGetDeviceCount(&deviceCount));
+        CUCKOO_CUDA_CALL(cudaGetDeviceCount(&deviceCount));
         numGPUs = static_cast<size_t>(deviceCount);
 
         // Weak scaling: total capacity grows with GPU count
@@ -79,7 +79,7 @@ class StrongScalingFixture : public benchmark::Fixture {
     using KeyType = typename ConfigType::KeyType;
 
     void SetUp(const benchmark::State&) override {
-        CUDA_CALL(cudaGetDeviceCount(&deviceCount));
+        CUCKOO_CUDA_CALL(cudaGetDeviceCount(&deviceCount));
         numGPUs = static_cast<size_t>(deviceCount);
 
         // Strong scaling: total capacity is fixed

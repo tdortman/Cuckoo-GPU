@@ -47,7 +47,7 @@ BENCHMARK_DEFINE_F(GCF, InsertSorted)(bm::State& state) {
 
 BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
     PackedTagType* d_packedTags;
-    CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
+    CUCKOO_CUDA_CALL(cudaMalloc(&d_packedTags, n * sizeof(PackedTagType)));
 
     size_t numBlocks = SDIV(n, Config::blockSize);
     cuckoogpu::detail::computePackedTagsKernel<Config><<<numBlocks, Config::blockSize>>>(
@@ -59,11 +59,11 @@ BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
 
     cub::DeviceRadixSort::SortKeys(d_tempStorage, tempStorageBytes, d_packedTags, d_packedTags, n);
 
-    CUDA_CALL(cudaMalloc(&d_tempStorage, tempStorageBytes));
+    CUCKOO_CUDA_CALL(cudaMalloc(&d_tempStorage, tempStorageBytes));
 
     cub::DeviceRadixSort::SortKeys(d_tempStorage, tempStorageBytes, d_packedTags, d_packedTags, n);
 
-    CUDA_CALL(cudaFree(d_tempStorage));
+    CUCKOO_CUDA_CALL(cudaFree(d_tempStorage));
     cudaDeviceSynchronize();
 
     for (auto _ : state) {
@@ -80,7 +80,7 @@ BENCHMARK_DEFINE_F(GCF, InsertPresorted)(bm::State& state) {
         bm::DoNotOptimize(filter->occupiedSlots());
     }
 
-    CUDA_CALL(cudaFree(d_packedTags));
+    CUCKOO_CUDA_CALL(cudaFree(d_packedTags));
     setCounters(state);
 }
 

@@ -263,7 +263,7 @@ class FilterIPCServer {
         bool hasKeys = memcmp(&req->keysHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
 
         if (hasKeys) {
-            CUDA_CALL(cudaIpcOpenMemHandle(
+            CUCKOO_CUDA_CALL(cudaIpcOpenMemHandle(
                 (void**)&d_keys, req->keysHandle, cudaIpcMemLazyEnablePeerAccess
             ));
         }
@@ -274,7 +274,7 @@ class FilterIPCServer {
                 memcmp(&req->outputHandle, &zeroHandle, sizeof(cudaIpcMemHandle_t)) != 0;
 
             if (handleValid) {
-                CUDA_CALL(cudaIpcOpenMemHandle(
+                CUCKOO_CUDA_CALL(cudaIpcOpenMemHandle(
                     (void**)&d_output, req->outputHandle, cudaIpcMemLazyEnablePeerAccess
                 ));
                 hasOutput = true;
@@ -301,10 +301,10 @@ class FilterIPCServer {
         }
 
         if (hasKeys) {
-            CUDA_CALL(cudaIpcCloseMemHandle(d_keys));
+            CUCKOO_CUDA_CALL(cudaIpcCloseMemHandle(d_keys));
         }
         if (hasOutput) {
-            CUDA_CALL(cudaIpcCloseMemHandle(d_output));
+            CUCKOO_CUDA_CALL(cudaIpcCloseMemHandle(d_output));
         }
     }
 
@@ -671,13 +671,13 @@ class FilterIPCClient {
         }
 
         if (d_keys != nullptr) {
-            CUDA_CALL(cudaIpcGetMemHandle(&req->keysHandle, const_cast<T*>(d_keys)));
+            CUCKOO_CUDA_CALL(cudaIpcGetMemHandle(&req->keysHandle, const_cast<T*>(d_keys)));
         } else {
             memset(&req->keysHandle, 0, sizeof(cudaIpcMemHandle_t));
         }
 
         if (d_output != nullptr) {
-            CUDA_CALL(cudaIpcGetMemHandle(&req->outputHandle, d_output));
+            CUCKOO_CUDA_CALL(cudaIpcGetMemHandle(&req->outputHandle, d_output));
         } else {
             memset(&req->outputHandle, 0, sizeof(cudaIpcMemHandle_t));
         }

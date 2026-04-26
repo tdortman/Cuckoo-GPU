@@ -406,10 +406,10 @@ struct Filter {
      * @param capacity Desired capacity (number of items) for the filter.
      */
     explicit Filter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
-        CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
+        CUCKOO_CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
-        CUDA_CALL(cudaMalloc(&d_numEvictions, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMalloc(&d_numEvictions, sizeof(cuda::std::atomic<size_t>)));
 #endif
 
         clear();
@@ -422,14 +422,14 @@ struct Filter {
      */
     ~Filter() {
         if (d_buckets) {
-            CUDA_CALL(cudaFree(d_buckets));
+            CUCKOO_CUDA_CALL(cudaFree(d_buckets));
         }
         if (d_numOccupied) {
-            CUDA_CALL(cudaFree(d_numOccupied));
+            CUCKOO_CUDA_CALL(cudaFree(d_numOccupied));
         }
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
         if (d_numEvictions) {
-            CUDA_CALL(cudaFree(d_numEvictions));
+            CUCKOO_CUDA_CALL(cudaFree(d_numEvictions));
         }
 #endif
     }
@@ -454,7 +454,7 @@ struct Filter {
         detail::insertKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, nullptr);
 
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
@@ -482,7 +482,7 @@ struct Filter {
         detail::insertKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this, d_evictionAttempts);
 
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
@@ -507,7 +507,7 @@ struct Filter {
     ) {
         PackedTagType* d_packedTags;
 
-        CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
+        CUCKOO_CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
 
         size_t numBlocks = SDIV(n, blockSize);
 
@@ -528,7 +528,7 @@ struct Filter {
             stream
         );
 
-        CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
+        CUCKOO_CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
 
         cub::DeviceRadixSort::SortKeys(
             d_tempStorage,
@@ -541,13 +541,13 @@ struct Filter {
             stream
         );
 
-        CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
+        CUCKOO_CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
         detail::insertKernelSorted<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_packedTags, d_output, n, this, nullptr);
 
-        CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
@@ -573,7 +573,7 @@ struct Filter {
     ) {
         PackedTagType* d_packedTags;
 
-        CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
+        CUCKOO_CUDA_CALL(cudaMallocAsync(&d_packedTags, n * sizeof(PackedTagType), stream));
 
         size_t numBlocks = SDIV(n, blockSize);
 
@@ -594,7 +594,7 @@ struct Filter {
             stream
         );
 
-        CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
+        CUCKOO_CUDA_CALL(cudaMallocAsync(&d_tempStorage, tempStorageBytes, stream));
 
         cub::DeviceRadixSort::SortKeys(
             d_tempStorage,
@@ -607,14 +607,14 @@ struct Filter {
             stream
         );
 
-        CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
+        CUCKOO_CUDA_CALL(cudaFreeAsync(d_tempStorage, stream));
 
         detail::insertKernelSorted<Config><<<numBlocks, blockSize, 0, stream>>>(
             d_packedTags, d_output, n, this, d_evictionAttempts
         );
 
-        CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaFreeAsync(d_packedTags, stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
@@ -633,7 +633,7 @@ struct Filter {
         detail::containsKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
 
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
     }
 
     /**
@@ -657,7 +657,7 @@ struct Filter {
         detail::deleteKernel<Config>
             <<<numBlocks, blockSize, 0, stream>>>(d_keys, d_output, n, this);
 
-        CUDA_CALL(cudaStreamSynchronize(stream));
+        CUCKOO_CUDA_CALL(cudaStreamSynchronize(stream));
 
         return occupiedSlots();
     }
@@ -956,10 +956,10 @@ struct Filter {
      * @brief Clears the filter, removing all items.
      */
     void clear() {
-        CUDA_CALL(cudaMemset(d_buckets, 0, numBuckets * sizeof(Bucket)));
-        CUDA_CALL(cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_buckets, 0, numBuckets * sizeof(Bucket)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>)));
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
-        CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
 #endif
         h_numOccupied = 0;
     }
@@ -980,7 +980,7 @@ struct Filter {
      * @return size_t Number of occupied slots.
      */
     size_t occupiedSlots() {
-        CUDA_CALL(
+        CUCKOO_CUDA_CALL(
             cudaMemcpy(&h_numOccupied, d_numOccupied, sizeof(size_t), cudaMemcpyDeviceToHost)
         );
         return h_numOccupied;
@@ -996,7 +996,9 @@ struct Filter {
      */
     size_t evictionCount() {
         size_t count;
-        CUDA_CALL(cudaMemcpy(&count, d_numEvictions, sizeof(size_t), cudaMemcpyDeviceToHost));
+        CUCKOO_CUDA_CALL(
+            cudaMemcpy(&count, d_numEvictions, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
         return count;
     }
 
@@ -1004,7 +1006,7 @@ struct Filter {
      * @brief Resets the eviction counter to zero.
      */
     void resetEvictionCount() {
-        CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
     }
 #endif
 
@@ -1042,7 +1044,7 @@ struct Filter {
     size_t countOccupiedSlots() {
         std::vector<Bucket> h_buckets(numBuckets);
 
-        CUDA_CALL(cudaMemcpy(
+        CUCKOO_CUDA_CALL(cudaMemcpy(
             h_buckets.data(), d_buckets, numBuckets * sizeof(Bucket), cudaMemcpyDeviceToHost
         ));
 

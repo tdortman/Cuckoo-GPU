@@ -22,7 +22,7 @@ class MultiGPUFixture_ : public benchmark::Fixture {
 
     void SetUp(const benchmark::State& state) override {
         int deviceCount;
-        CUDA_CALL(cudaGetDeviceCount(&deviceCount));
+        CUCKOO_CUDA_CALL(cudaGetDeviceCount(&deviceCount));
         numGPUs = static_cast<size_t>(deviceCount);
 
         auto [cap, num] = calculateCapacityAndSize(state.range(0), loadFactor);

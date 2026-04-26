@@ -201,7 +201,7 @@ __device__ __forceinline__ void load256BitGlobalNC(const T* ptr, T* out) {
  * @brief Macro for checking CUDA errors.
  * Prints error message and exits if an error occurs.
  */
-#define CUDA_CALL(err)                                                      \
+#define CUCKOO_CUDA_CALL(err)                                               \
     do {                                                                    \
         cudaError_t err_ = (err);                                           \
         if (err_ == cudaSuccess) [[likely]] {                               \

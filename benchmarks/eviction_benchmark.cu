@@ -299,13 +299,13 @@ BENCHMARK_DEFINE_F(BFSFixture, Evictions)(bm::State& state) {
             if (h_insertSuccess.size() != d_insertSuccess.size()) {
                 h_insertSuccess.resize(d_insertSuccess.size());
             }
-            CUDA_CALL(cudaMemcpy(
+            CUCKOO_CUDA_CALL(cudaMemcpy(
                 h_evictionAttempts.data(),
                 thrust::raw_pointer_cast(d_evictionAttempts.data()),
                 d_evictionAttempts.size() * sizeof(uint32_t),
                 cudaMemcpyDeviceToHost
             ));
-            CUDA_CALL(cudaMemcpy(
+            CUCKOO_CUDA_CALL(cudaMemcpy(
                 h_insertSuccess.data(),
                 thrust::raw_pointer_cast(d_insertSuccess.data()),
                 d_insertSuccess.size() * sizeof(uint8_t),
@@ -370,13 +370,13 @@ BENCHMARK_DEFINE_F(DFSFixture, Evictions)(bm::State& state) {
             if (h_insertSuccess.size() != d_insertSuccess.size()) {
                 h_insertSuccess.resize(d_insertSuccess.size());
             }
-            CUDA_CALL(cudaMemcpy(
+            CUCKOO_CUDA_CALL(cudaMemcpy(
                 h_evictionAttempts.data(),
                 thrust::raw_pointer_cast(d_evictionAttempts.data()),
                 d_evictionAttempts.size() * sizeof(uint32_t),
                 cudaMemcpyDeviceToHost
             ));
-            CUDA_CALL(cudaMemcpy(
+            CUCKOO_CUDA_CALL(cudaMemcpy(
                 h_insertSuccess.data(),
                 thrust::raw_pointer_cast(d_insertSuccess.data()),
                 d_insertSuccess.size() * sizeof(uint8_t),

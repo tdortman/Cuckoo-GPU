@@ -85,7 +85,7 @@ class FilterMultiGPU {
         std::vector<size_t> freeMem(numGPUs);
         parallelForGPUs([&](size_t gpuId) {
             size_t free, total;
-            CUDA_CALL(cudaMemGetInfo(&free, &total));
+            CUCKOO_CUDA_CALL(cudaMemGetInfo(&free, &total));
             freeMem[gpuId] = free;
         });
         return freeMem;
@@ -106,19 +106,19 @@ class FilterMultiGPU {
 
         parallelForGPUs([&](size_t gpuId) {
             size_t freeMem, totalMem;
-            CUDA_CALL(cudaMemGetInfo(&freeMem, &totalMem));
+            CUCKOO_CUDA_CALL(cudaMemGetInfo(&freeMem, &totalMem));
 
             // Calculate max keys this GPU can buffer
             auto availableBytes = static_cast<size_t>(freeMem * memoryFactor);
             size_t maxKeys = availableBytes / bytesPerKey;
 
             // Allocate key buffers
-            CUDA_CALL(cudaMalloc(&srcBuffers[gpuId], maxKeys * sizeof(T)));
-            CUDA_CALL(cudaMalloc(&dstBuffers[gpuId], maxKeys * sizeof(T)));
+            CUCKOO_CUDA_CALL(cudaMalloc(&srcBuffers[gpuId], maxKeys * sizeof(T)));
+            CUCKOO_CUDA_CALL(cudaMalloc(&dstBuffers[gpuId], maxKeys * sizeof(T)));
 
             // Allocate result buffers
-            CUDA_CALL(cudaMalloc(&resultSrcBuffers[gpuId], maxKeys * sizeof(bool)));
-            CUDA_CALL(cudaMalloc(&resultDstBuffers[gpuId], maxKeys * sizeof(bool)));
+            CUCKOO_CUDA_CALL(cudaMalloc(&resultSrcBuffers[gpuId], maxKeys * sizeof(bool)));
+            CUCKOO_CUDA_CALL(cudaMalloc(&resultDstBuffers[gpuId], maxKeys * sizeof(bool)));
 
             bufferCapacities[gpuId] = maxKeys;
             totalBufferCapacity += maxKeys;
@@ -203,7 +203,7 @@ class FilterMultiGPU {
             // Copy input data to source buffers on each GPU
             parallelForGPUs([&](size_t gpuId) {
                 if (inputLens[gpuId] > 0) {
-                    CUDA_CALL(cudaMemcpy(
+                    CUCKOO_CUDA_CALL(cudaMemcpy(
                         srcBuffers[gpuId],
                         h_keys + processed + inputOffsets[gpuId],
                         inputLens[gpuId] * sizeof(T),
@@ -294,7 +294,7 @@ class FilterMultiGPU {
                         return;
                     }
 
-                    CUDA_CALL(cudaMemcpy(
+                    CUCKOO_CUDA_CALL(cudaMemcpy(
                         h_output + processed + inputOffsets[gpuId],
                         resultDstBuffers[gpuId],
                         localCount * sizeof(bool),
@@ -340,9 +340,9 @@ class FilterMultiGPU {
         filters.resize(numGPUs);
 
         for (size_t i = 0; i < numGPUs; ++i) {
-            CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
+            CUCKOO_CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
             Filter<Config>* filter;
-            CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
+            CUCKOO_CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
             new (filter) Filter<Config>(capacityPerGPU);
             filters[i] = filter;
         }
@@ -405,9 +405,9 @@ class FilterMultiGPU {
         filters.resize(numGPUs);
 
         for (size_t i = 0; i < numGPUs; ++i) {
-            CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
+            CUCKOO_CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
             Filter<Config>* filter;
-            CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
+            CUCKOO_CUDA_CALL(cudaMallocManaged(&filter, sizeof(Filter<Config>)));
             new (filter) Filter<Config>(capacityPerGPU);
             filters[i] = filter;
         }
@@ -424,9 +424,9 @@ class FilterMultiGPU {
     ~FilterMultiGPU() {
         freeBuffers();
         for (size_t i = 0; i < numGPUs; ++i) {
-            CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
+            CUCKOO_CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
             filters[i]->~Filter<Config>();
-            CUDA_CALL(cudaFree(filters[i]));
+            CUCKOO_CUDA_CALL(cudaFree(filters[i]));
         }
     }
 
@@ -541,7 +541,7 @@ class FilterMultiGPU {
         std::vector<std::thread> threads;
         for (size_t i = 0; i < numGPUs; ++i) {
             threads.emplace_back([=, this]() {
-                CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
+                CUCKOO_CUDA_CALL(cudaSetDevice(gossipContext.get_device_id(i)));
                 func(i);
             });
         }

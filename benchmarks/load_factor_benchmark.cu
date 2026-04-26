@@ -1,11 +1,11 @@
 #include <benchmark/benchmark.h>
-#include <bght/bcht.hpp>
-#include <bght/pair.cuh>
 #include <cuckoofilter.h>
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/reduce.h>
+#include <bght/bcht.hpp>
+#include <bght/pair.cuh>
 #include <bulk_tcf_host.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -107,12 +107,7 @@ size_t cucoNumBlocks(size_t n) {
 }
 
 template <typename PairType, typename KeyType, typename ValueType>
-__global__ void makePairsKernel(
-    const KeyType* keys,
-    PairType* pairs,
-    size_t n,
-    ValueType value
-) {
+__global__ void makePairsKernel(const KeyType* keys, PairType* pairs, size_t n, ValueType value) {
     const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         pairs[idx] = PairType{keys[idx], value};
@@ -260,7 +255,7 @@ class BCHTFixtureLF : public benchmark::Fixture {
             n,
             static_cast<ValueType>(1)
         );
-        CUDA_CALL(cudaDeviceSynchronize());
+        CUCKOO_CUDA_CALL(cudaDeviceSynchronize());
 
         tableMemory = memoryBytesForCapacity(capacity);
         resetTable();
@@ -732,7 +727,7 @@ class GQFFixtureLF : public benchmark::Fixture {
     using BCHT_##ID = BCHTFixtureLF<(LF) * 0.01>;                                             \
     BENCHMARK_DEFINE_F(BCHT_##ID, Insert)(bm::State & state) {                                \
         for (auto _ : state) {                                                                \
-            resetTable();                                                                      \
+            resetTable();                                                                     \
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             bool inserted = table->insert(d_pairs.begin(), d_pairs.end());                    \

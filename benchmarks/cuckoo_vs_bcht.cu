@@ -180,13 +180,13 @@ BENCHMARK_DEFINE_F(BCHTFixture, Query)(bm::State& state) {
 
 DEFINE_INSERT_QUERY(GCFFixture)
 
-#define BCHT_BENCHMARK_CONFIG \
-    ->RangeMultiplier(2)                 \
-        ->Range(1 << 16, 1ULL << 26)     \
-        ->Unit(benchmark::kMillisecond)  \
-        ->UseManualTime()                \
-        ->Iterations(10)                 \
-        ->Repetitions(5)                 \
+#define BCHT_BENCHMARK_CONFIG           \
+    ->RangeMultiplier(2)                \
+        ->Range(1 << 16, 1ULL << 26)    \
+        ->Unit(benchmark::kMillisecond) \
+        ->UseManualTime()               \
+        ->Iterations(10)                \
+        ->Repetitions(5)                \
         ->ReportAggregatesOnly(true)
 
 BENCHMARK_REGISTER_F(GCFFixture, Insert) BCHT_BENCHMARK_CONFIG;
