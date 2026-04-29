@@ -37,7 +37,9 @@ let
     graphviz
 
     cudaPkgs.nsight_systems
-    cudaPkgs.nsight_compute    
+    cudaPkgs.nsight_compute
+    
+    cmake    
   ];
 in
 
