@@ -25,6 +25,8 @@ cuckoogpu_dep = declare_dependency(
     include_directories: include_directories('include'),
 )
 
+gossip_dep = subproject('gossip').get_variable('gossip_dep')
+
 build_examples = (
     get_option('examples').enabled()
     or (get_option('examples').auto() and not meson.is_subproject())
@@ -41,7 +43,6 @@ build_tests = (
 
 if build_benchmarks or build_examples
     cli11_dep = subproject('cli11').get_variable('CLI11_dep')
-    gossip_dep = subproject('gossip').get_variable('gossip_dep')
 endif
 
 if build_examples
