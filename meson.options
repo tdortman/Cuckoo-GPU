@@ -11,3 +11,10 @@ option(
     value: 'auto',
     description: 'Build tests for the library',
 )
+
+option(
+    'examples',
+    type: 'feature',
+    value: 'auto',
+    description: 'Build examples for the library',
+)
