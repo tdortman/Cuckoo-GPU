@@ -41,6 +41,10 @@ benchmarks = {
         'src': 'cuckoo_vs_bloom.cu',
         'deps': [cuco_dep],
     },
+    'compare-cuco': {
+        'src': 'compare_cuco.cu',
+        'deps': [cuco_dep],
+    },
     'cuckoo-cpu-vs-gpu': {
         'src': 'cuckoo_cpu_vs_gpu.cu',
     },

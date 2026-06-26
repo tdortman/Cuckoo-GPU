@@ -22,7 +22,7 @@ KERNEL_PATTERNS = {
     },
     "bloom": {
         "insert": ["add"],
-        "query": ["contains_if_n"],
+        "query": ["contains"],
     },
     "tcf": {
         "insert": ["sorted_bulk_insert_kernel"],

@@ -24,6 +24,8 @@ FILTER_STYLES = {
     "pcf": {"color": "#6A994E", "marker": "D"},
     "dm": {"color": "#9932CC", "marker": "*"},
     "bcht": {"color": "#264653", "marker": "X"},
+    "cucodefault": {"color": "#118AB2", "marker": "o"},
+    "cucoparametric": {"color": "#EF476F", "marker": "s"},
 }
 
 FILTER_COLORS = {
@@ -35,6 +37,8 @@ FILTER_COLORS = {
     "PCF": FILTER_STYLES["pcf"]["color"],
     "Dynamic Map": FILTER_STYLES["dm"]["color"],
     "BCHT": FILTER_STYLES["bcht"]["color"],
+    "cuCo Default": FILTER_STYLES["cucodefault"]["color"],
+    "cuCo Parametric": FILTER_STYLES["cucoparametric"]["color"],
 }
 
 FILTER_DISPLAY_NAMES = {
@@ -46,6 +50,8 @@ FILTER_DISPLAY_NAMES = {
     "bbf": "GBBF",
     "dm": "Dynamic Map",
     "bcht": "BCHT",
+    "cucodefault": "cuCo Default",
+    "cucoparametric": "cuCo Parametric",
 }
 
 OPERATION_COLORS = {

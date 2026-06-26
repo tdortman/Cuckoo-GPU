@@ -42,6 +42,7 @@ let
   };
 
   buildInputs = [
+    cudaToolkit
     pkgs.stdenv.cc.cc.lib
   ];
 
