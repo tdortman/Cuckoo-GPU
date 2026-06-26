@@ -2,4 +2,4 @@
 url = https://github.com/tum-db/partitioned-filters.git
 revision = b868d10ab1f4b7771b84126cdd85cab4ab098f56
 depth = 1
-diff_files = partitioned-filters/remove-benchmarks.patch,partitioned-filters/redefined-max.patch
+diff_files = partitioned-filters/remove-benchmarks.patch,partitioned-filters/redefined-max.patch,partitioned-filters/fix-libdivide-divider-equality.patch,partitioned-filters/fix-xor-container-move-constructor.patch

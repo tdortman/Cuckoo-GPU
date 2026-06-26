@@ -6,13 +6,34 @@
 }:
 
 let
-  cudaPkgs = pkgs.cudaPackages_12_9;
-  llvm = pkgs.llvmPackages_21;
+  cudaPkgs = pkgs.cudaPackages_13_2;
+  llvm = pkgs.llvmPackages_22;
+
+  cudaToolkit = pkgs.symlinkJoin {
+    name = "cuda-toolkit";
+    paths = with cudaPkgs; [
+      cuda_nvcc
+      cuda_crt
+      cuda_cudart
+      cuda_cccl
+      cuda_profiler_api.include
+      cuda_cuobjdump
+
+      cuda_gdb.bin
+      nsight_systems
+      nsight_compute
+
+      # I do not know why cuRAND headers are necessary
+      # for clangd to not freak out about STL headers when cuda_crt is
+      # also present but at least it's a somewhat cheap dependency...
+      libcurand.include
+    ];
+  };
 
   cuda = {
     arch = "1200";
     smTarget = "sm_120";
-    path = cudaPkgs.cudatoolkit;
+    path = cudaToolkit;
     version = {
       complete = cudaPkgs.cudaMajorMinorVersion;
       major = cudaPkgs.cudaMajorVersion;
@@ -21,8 +42,6 @@ let
   };
 
   buildInputs = [
-    cudaPkgs.cudatoolkit
-    cudaPkgs.cuda_cudart
     pkgs.stdenv.cc.cc.lib
   ];
 
@@ -36,10 +55,7 @@ let
     doxygen
     graphviz
 
-    cudaPkgs.nsight_systems
-    cudaPkgs.nsight_compute
-    
-    cmake    
+    cmake
   ];
 in
 

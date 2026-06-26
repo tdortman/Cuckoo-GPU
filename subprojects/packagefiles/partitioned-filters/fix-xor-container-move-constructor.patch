@@ -1,0 +1,12 @@
+diff --git a/src/xor/container/xor_container.hpp b/src/xor/container/xor_container.hpp
+--- a/src/xor/container/xor_container.hpp
++++ b/src/xor/container/xor_container.hpp
+@@ -34,7 +34,7 @@
+                                                      seeds(other.seeds), base(other.base) {
+             other.fingerprints = nullptr;
+             for (size_t i = 0; i < offsets.size(); i++) {
+-                this->offsets[i] = other.sets[i];
++                this->offsets[i] = other.offsets[i];
+                 other.offsets[i] = 0;
+             }
+         }

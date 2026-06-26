@@ -1,0 +1,12 @@
+diff --git a/gqf/src/gqf.cu b/gqf/src/gqf.cu
+index 0000000..1111111 100644
+--- a/gqf/src/gqf.cu
++++ b/gqf/src/gqf.cu
+@@ -34,6 +34,7 @@
+ #include <thrust/device_vector.h>
+ #include <thrust/reduce.h>
+ #include <thrust/fill.h>
++#include <thrust/pair.h>
+ #include <thrust/memory.h>
+ #include <thrust/device_malloc.h>
+ #include <thrust/device_free.h>

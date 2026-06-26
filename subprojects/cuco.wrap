@@ -2,3 +2,4 @@
 url = https://github.com/NVIDIA/cuCollections.git
 revision = 8333a0beb551bc1a46314840de3c28b855564ccb
 depth = 1
+patch_directory = cuco

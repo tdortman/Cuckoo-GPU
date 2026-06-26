@@ -3,33 +3,29 @@ cpu_cuckoo_dep = subproject('cpu-cuckoo').get_variable('cpu_cuckoo_dep')
 
 cmake = import('cmake')
 
-cuco_opts = cmake.subproject_options()
-cuco_opts.add_cmake_defines({
-    'CMAKE_BUILD_TYPE': 'Release',
-    'BUILD_TESTS': 'OFF',
-    'BUILD_BENCHMARKS': 'OFF',
-    'BUILD_EXAMPLES': 'OFF',
-    'INSTALL_CUCO': 'OFF',
-})
-cuco_dep = cmake.subproject('cuco', options: cuco_opts).dependency('cuco')
+cuco_dep = subproject('cuco').get_variable('cuco_dep')
 
 bght_opts = cmake.subproject_options()
-bght_opts.add_cmake_defines({
-    'CMAKE_BUILD_TYPE': 'Release',
-    'build_tests': 'OFF',
-    'build_benchmarks': 'OFF',
-    'build_examples': 'OFF',
-})
+bght_opts.add_cmake_defines(
+    {
+        'CMAKE_BUILD_TYPE': 'Release',
+        'build_tests': 'OFF',
+        'build_benchmarks': 'OFF',
+        'build_examples': 'OFF',
+    },
+)
 bght_dep = cmake.subproject('BGHT', options: bght_opts).dependency('bght')
 
 is_x86_64 = host_machine.cpu_family() == 'x86_64'
 
 if is_x86_64
     partitioned_opts = cmake.subproject_options()
-    partitioned_opts.add_cmake_defines({
-        'CMAKE_BUILD_TYPE': 'Release',
-        'BUILD_TESTING': 'OFF',
-    })
+    partitioned_opts.add_cmake_defines(
+        {
+            'CMAKE_BUILD_TYPE': 'Release',
+            'BUILD_TESTING': 'OFF',
+        },
+    )
     partitioned_dep = cmake.subproject('partitioned-filters', options: partitioned_opts).dependency('filters')
 endif
 
@@ -86,7 +82,8 @@ benchmarks = {
     },
     'load-factor': {
         'src': 'load_factor_benchmark.cu',
-        'deps': [cuco_dep, tcf_dep, gqf_dep, bght_dep] + (is_x86_64 ? [partitioned_dep] : []),
+        'deps': [cuco_dep, tcf_dep, gqf_dep, bght_dep]
+        + (is_x86_64 ? [partitioned_dep] : []),
         'extra_args': ['-w'],
     },
     'fpr': {

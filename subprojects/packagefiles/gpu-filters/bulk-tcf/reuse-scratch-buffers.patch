@@ -1,0 +1,170 @@
+--- a/bulk-tcf/include/bulk_tcf_host.cuh	2026-05-25 18:06:55.078742452 +0200
++++ b/bulk-tcf/include/bulk_tcf_host.cuh	2026-05-25 18:09:48.072045072 +0200
+@@ -48,6 +48,71 @@
+ 	uint64_t num_teams;
+ 	uint64_t num_blocks;
+ 
++	// Reused across bulk_insert/bulk_query; freed in host_free_tcf.
++	internal_key_type * cached_small_keys = nullptr;
++	uint64_t cached_small_keys_n = 0;
++	bool * cached_scrambled_hits = nullptr;
++	uint64_t cached_scrambled_hits_n = 0;
++	uint64_t * cached_indices = nullptr;
++	uint64_t cached_indices_n = 0;
++
++	__host__ void free_scratch_buffers() {
++		if (cached_small_keys != nullptr) {
++			cudaFree(cached_small_keys);
++			cached_small_keys = nullptr;
++		}
++		cached_small_keys_n = 0;
++
++		if (cached_scrambled_hits != nullptr) {
++			cudaFree(cached_scrambled_hits);
++			cached_scrambled_hits = nullptr;
++		}
++		cached_scrambled_hits_n = 0;
++
++		if (cached_indices != nullptr) {
++			cudaFree(cached_indices);
++			cached_indices = nullptr;
++		}
++		cached_indices_n = 0;
++	}
++
++	__host__ void ensure_small_keys(uint64_t nitems) {
++		if (cached_small_keys_n < nitems) {
++			if (cached_small_keys != nullptr) {
++				cudaFree(cached_small_keys);
++			}
++			cudaMalloc((void**)&cached_small_keys, sizeof(internal_key_type) * nitems);
++			cached_small_keys_n = nitems;
++		}
++	}
++
++	__host__ void ensure_scrambled_hits(uint64_t nitems) {
++		if (cached_scrambled_hits_n < nitems) {
++			if (cached_scrambled_hits != nullptr) {
++				cudaFree(cached_scrambled_hits);
++			}
++			cudaMalloc((void**)&cached_scrambled_hits, sizeof(bool) * nitems);
++			cached_scrambled_hits_n = nitems;
++		}
++	}
++
++	__host__ void ensure_indices(uint64_t nitems) {
++		if (cached_indices_n < nitems) {
++			if (cached_indices != nullptr) {
++				cudaFree(cached_indices);
++			}
++			cudaMalloc((void**)&cached_indices, sizeof(uint64_t) * nitems);
++			cached_indices_n = nitems;
++		}
++	}
++
++	// Pre-size insert/query scratch so bulk_query_into does not grow mid-benchmark.
++	__host__ void reserve_bulk_scratch(uint64_t nitems) {
++		ensure_small_keys(nitems);
++		ensure_scrambled_hits(nitems);
++		ensure_indices(nitems);
++	}
++
+ 
+ 	__host__ static my_type * host_build_tcf(uint64_t nslots){
+ 
+@@ -63,6 +128,12 @@
+ 
+ 		host_version->num_teams = host_version->dev_tcf->get_num_teams();
+ 
++		host_version->cached_small_keys = nullptr;
++		host_version->cached_small_keys_n = 0;
++		host_version->cached_scrambled_hits = nullptr;
++		host_version->cached_scrambled_hits_n = 0;
++		host_version->cached_indices = nullptr;
++		host_version->cached_indices_n = 0;
+ 
+ 		return host_version;
+ 
+@@ -72,6 +143,7 @@
+ 	__host__ static void host_free_tcf(my_type * host_version){
+ 
+ 
++		host_version->free_scratch_buffers();
+ 		free_tcf<Key, Val, Wrapper>(host_version->dev_tcf);
+ 
+ 
+@@ -82,19 +154,12 @@
+ 
+ 	__host__ void bulk_insert(Large_Keys * large_keys, uint64_t nitems, uint64_t * misses){
+ 
+-		
+-
+-		internal_key_type * dev_small_keys;
+-
+-		//this may be very expensive... check cost.
+-		cudaMalloc((void **)&dev_small_keys, sizeof(internal_key_type)*nitems);
++		ensure_small_keys(nitems);
+ 
+-		dev_tcf->attach_lossy_buffers(large_keys, dev_small_keys, nitems, num_blocks);
++		dev_tcf->attach_lossy_buffers(large_keys, cached_small_keys, nitems, num_blocks);
+ 
+ 		dev_tcf->bulk_insert(misses, num_teams);
+ 
+-		cudaFree(dev_small_keys);
+-
+ 		return;
+ 
+ 
+@@ -122,37 +187,31 @@
+ 	}
+ 
+ 
+-	__host__ bool * bulk_query(Large_Keys * host_query_keys, uint64_t nitems){
+-		internal_key_type * dev_small_keys;
+-
+-		bool * scrambled_hits;
+-
+-		cudaMalloc((void **)&scrambled_hits, sizeof(bool)*nitems);
++	// Writes query results into caller-owned device memory (length nitems).
++	__host__ void bulk_query_into(Large_Keys * host_query_keys, uint64_t nitems, bool * out_hits) {
++		ensure_small_keys(nitems);
++		ensure_scrambled_hits(nitems);
++		ensure_indices(nitems);
+ 
+-		cudaMemset(scrambled_hits, 0, sizeof(bool)*nitems);
++		cudaMemset(cached_scrambled_hits, 0, sizeof(bool) * nitems);
+ 
++		dev_tcf->attach_lossy_buffers_recovery(
++			host_query_keys, cached_indices, cached_small_keys, nitems, num_blocks
++		);
+ 
+-		uint64_t * indices;
+-
+-		cudaMalloc((void **)&dev_small_keys, sizeof(internal_key_type)*nitems);
+-		cudaMalloc((void **)&indices, sizeof(uint64_t)*nitems);
++		dev_tcf->bulk_query(cached_scrambled_hits, num_teams);
+ 
+-		dev_tcf->attach_lossy_buffers_recovery(host_query_keys, indices, dev_small_keys, nitems, num_blocks);
++		cast_hits<<<(nitems - 1) / 512 + 1, 512>>>(out_hits, cached_scrambled_hits, cached_indices, nitems);
+ 
+-		dev_tcf->bulk_query(scrambled_hits, num_teams);
++		cudaDeviceSynchronize();
++	}
+ 
++	__host__ bool * bulk_query(Large_Keys * host_query_keys, uint64_t nitems){
+ 		bool * return_hits;
+ 
+ 		cudaMalloc((void **)&return_hits, sizeof(bool)*nitems);
+ 
+-		cast_hits<<<(nitems-1)/512+1,512>>>(return_hits, scrambled_hits, indices, nitems);
+-
+-		cudaDeviceSynchronize();
+-
+-		cudaFree(dev_small_keys);
+-
+-		cudaFree(scrambled_hits);
+-		cudaFree(indices);
++		bulk_query_into(host_query_keys, nitems, return_hits);
+ 
+ 		return return_hits;
+ 
