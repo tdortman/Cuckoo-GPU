@@ -1,5 +1,5 @@
 [wrap-git]
-url = https://github.com/sleeepyjack/cuCollections.git
-revision = bloom-filter-release
+url = https://github.com/NVIDIA/cuCollections.git
+revision = 9715bc5f38a6e0b41cce456a86b4c6d12fb3f2a1
 depth = 1
 patch_directory = cuco
