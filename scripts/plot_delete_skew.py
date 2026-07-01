@@ -193,7 +193,7 @@ def _plot_paper_metric(
     y_label: str,
     output_file: Path,
 ) -> tuple[list, list]:
-    fig, ax = plt.subplots(figsize=(3.35, 1.55))
+    fig, ax = plt.subplots(figsize=(4.5, 1.55))
     _plot_metric_by_group(
         ax,
         df,
@@ -204,13 +204,12 @@ def _plot_paper_metric(
         _stddev_label,
     )
     handles, labels = ax.get_legend_handles_labels()
-    fig.subplots_adjust(left=0.29, bottom=0.22, right=0.98, top=0.96)
     pu.save_figure(fig, output_file, f"Saved {output_file}")
     return handles, labels
 
 
 def _save_stdev_legend(handles: list, labels: list, output_file: Path) -> None:
-    fig = plt.figure(figsize=(3.35, 0.30))
+    fig = plt.figure(figsize=(4.5, 0.30))
     fig.legend(
         handles,
         labels,
