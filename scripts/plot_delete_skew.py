@@ -126,8 +126,6 @@ def _format_capacity_axis(ax: plt.Axes, exponents: list[int]) -> None:
 def _stddev_label(stddev: float) -> str:
     if math.isinf(stddev):
         return "uniform"
-    if stddev == 0.0:
-        return "single key"
     return rf"$\sigma$={stddev:g}%"
 
 def _plot_metric_by_group(
@@ -139,7 +137,7 @@ def _plot_metric_by_group(
     title: str,
     label_fn,
 ) -> None:
-    markers = ["o", "s", "^", "D", "v", "P", "X", "*"]
+    markers = ["o", "s", "^", "D", "v", "P", "X", "*", "h"]
     for idx, (value, group) in enumerate(df.groupby(group_column)):
         group = group.sort_values("capacity").copy()
         x = group["capacity"].map(lambda c: int(math.log2(c)))
@@ -162,42 +160,14 @@ def _save_two_panel(fig: plt.Figure, axes, output_file: Path, legend_columns: in
     fig.legend(
         handles,
         labels,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.02),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.06),
         ncol=legend_columns,
         fontsize=7,
         framealpha=pu.LEGEND_FRAME_ALPHA_SOLID,
     )
-    fig.tight_layout(rect=(0, 0.10, 1, 1), w_pad=1.0)
+    fig.tight_layout(rect=(0, 0, 1, 0.90), w_pad=1.0)
     pu.save_figure(fig, output_file, f"Saved {output_file}")
-
-
-def _plot_valid_delete_trends(df: pd.DataFrame, output_file: Path) -> None:
-    valid = df[df["stddev_fraction"] < 0.0]
-    if valid.empty:
-        typer.secho("No valid-delete baseline rows found", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.6), sharex=True)
-    _plot_metric_by_group(
-        axes[0],
-        valid,
-        "delete_fraction",
-        "throughput_beps",
-        "B elem/s",
-        "(a) Valid-delete throughput",
-        lambda fraction: f"{fraction:g}%",
-    )
-    _plot_metric_by_group(
-        axes[1],
-        valid,
-        "delete_fraction",
-        "delete_cas_attempts_per_key",
-        "CAS / request",
-        "(b) CAS attempts",
-        lambda fraction: f"{fraction:g}%",
-    )
-    _save_two_panel(fig, axes, output_file, legend_columns=5)
 
 
 def _plot_hotspot_trends(df: pd.DataFrame, output_file: Path) -> None:
@@ -240,7 +210,6 @@ def main(
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
     df = _median_rows(csv_file)
 
-    _plot_valid_delete_trends(df, output_dir / "delete_skew_valid_delete.pdf")
     _plot_hotspot_trends(df, output_dir / "delete_skew_stdev_stress.pdf")
 
     _plot_lines(
