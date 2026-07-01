@@ -35,6 +35,7 @@ gqf_deps = gpu_filters.get_variable('gqf_deps')
 tcf_dep = gpu_filters.get_variable('tcf_dep')
 
 bench_deps = [cuckoogpu_dep, benchmark_dep, cpu_cuckoo_dep]
+light_bench_deps = [cuckoogpu_dep, benchmark_dep]
 
 benchmarks = {
     'cuckoo-vs-bloom': {
@@ -112,13 +113,17 @@ benchmarks = {
     'bucket-policy': {
         'src': 'bucket_policy_benchmark.cu',
     },
+    'delete-skew': {
+        'src': 'delete_skew_benchmark.cu',
+        'base_deps': light_bench_deps,
+    },
 }
 
 foreach name, config : benchmarks
     executable(
         name,
         config['src'],
-        dependencies: bench_deps + config.get('deps', []),
+        dependencies: config.get('base_deps', bench_deps) + config.get('deps', []),
         cuda_args: cuda_args + config.get('extra_args', []),
         install: false,
     )

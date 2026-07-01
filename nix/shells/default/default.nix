@@ -43,6 +43,7 @@ let
 
   buildInputs = [
     pkgs.stdenv.cc.cc.lib
+    cudaToolkit
   ];
 
   nativeBuildInputs = with pkgs; [
