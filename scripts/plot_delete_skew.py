@@ -18,6 +18,12 @@ import pandas as pd
 import plot_utils as pu
 import typer
 
+PAPER_AXIS_LABEL_FONT_SIZE = 7
+PAPER_TICK_LABEL_FONT_SIZE = 5.5
+PAPER_LEGEND_FONT_SIZE = 6
+PAPER_LINE_WIDTH = 0.9
+PAPER_MARKER_SIZE = 2.0
+
 app = typer.Typer(help="Plot delete-skew benchmark CSV results")
 
 
@@ -129,9 +135,11 @@ def _format_capacity_axis(ax: plt.Axes, exponents: list[int]) -> None:
     ax.set_xticks(even_exponents)
     ax.set_xticklabels([rf"$2^{{{exp}}}$" for exp in even_exponents])
     ax.set_xlim(min(exponents) - 0.3, max(exponents) + 0.3)
-    ax.set_xlabel("Capacity", fontsize=10, labelpad=2)
+    ax.set_xlabel(
+        "Capacity", fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", labelpad=1
+    )
     ax.grid(True, which="both", ls="--", alpha=pu.GRID_ALPHA)
-    ax.tick_params(axis="both", labelsize=8, pad=1)
+    ax.tick_params(axis="both", labelsize=PAPER_TICK_LABEL_FONT_SIZE, pad=1)
 
 
 
@@ -146,7 +154,7 @@ def _plot_metric_by_group(
     group_column: str,
     y_column: str,
     y_label: str,
-    title: str,
+    title: Optional[str],
     label_fn,
 ) -> None:
     markers = ["o", "s", "^", "D", "v", "P", "X", "*", "h"]
