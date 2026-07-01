@@ -211,7 +211,7 @@ BENCHMARK(DeleteSkew)
     ->Unit(bm::kMillisecond)
     ->UseManualTime()
     ->Iterations(10)
-    ->Repetitions(3)
+    ->Repetitions(5)
     ->ReportAggregatesOnly(true);
 
 STANDARD_BENCHMARK_MAIN();
