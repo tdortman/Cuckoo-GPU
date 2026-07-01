@@ -2,7 +2,6 @@
 #define CUCKOO_FILTER_COUNT_DELETE_CAS
 
 #include <benchmark/benchmark.h>
-#include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
@@ -35,12 +34,11 @@ using KeyType = Config::KeyType;
 // ponytail: explicit array, no config parsing needed.
 static constexpr double DELETE_FRACTIONS[] = {0.25, 0.50, 0.75, 0.90, 1.0};
 
-// Values are percentages in CSV output. -1 is the distinct valid-delete baseline;
-// finite non-negative values use N(N/2, sigma*N); infinity samples uniformly with replacement.
-static constexpr double VALID_DELETE_SENTINEL = -1.0;
+// Values are percentages in CSV output. Finite values use N(N/2, sigma*N);
+// infinity samples uniformly with replacement.
 static constexpr double UNIFORM_SENTINEL = std::numeric_limits<double>::infinity();
 static constexpr double STDDEV_FRACTIONS[] =
-    {VALID_DELETE_SENTINEL, 0.0, 0.01, 0.02, 0.05, 0.10, 0.20, 0.50, 1.0, UNIFORM_SENTINEL};
+    {0.01, 0.02, 0.05, 0.10, 0.20, 0.50, 1.0, UNIFORM_SENTINEL};
 
 // Prefill the filter to this load factor before each timed delete phase.
 static constexpr double PREFILL_LOAD_FACTOR = 0.95;
@@ -66,10 +64,8 @@ static std::vector<int64_t> indexRange(const double (&)[N]) {
 /**
  * Generate a delete request set with controllable request distribution.
  *
- * stdevFraction<0.0: distinct inserted keys, so the delete-heavy sweep measures valid deletes.
- * stdevFraction==0.0: all requests target the middle inserted key.
- * finite stdevFraction>0.0: samples indices with replacement from
- * N(mean=N/2, stdev=stdevFraction*N), clamped to the inserted-key range.
+ * finite stdevFraction: samples indices with replacement from N(mean=N/2,
+ * stdev=stdevFraction*N), clamped to the inserted-key range.
  * infinite stdevFraction: samples uniformly with replacement.
  *
  * CAS counters and successful-delete counters separate atomic retry cost from misses.
@@ -86,13 +82,7 @@ static void generateDeleteKeys(
 
     d_deleteKeys.resize(numDeletes);
 
-    if (stdevFraction < 0.0) {
-        thrust::copy_n(d_insertedKeys.begin(), numDeletes, d_deleteKeys.begin());
-        return;
-    }
-
     bool useUniform = std::isinf(stdevFraction);
-    bool useSingleKey = stdevFraction == 0.0;
     size_t centerIndex = totalInserted / 2;
 
     const KeyType* inserted = thrust::raw_pointer_cast(d_insertedKeys.data());
@@ -106,7 +96,7 @@ static void generateDeleteKeys(
             size_t selected = centerIndex;
             if (useUniform) {
                 selected = thrust::uniform_int_distribution<size_t>(0, totalInserted - 1)(rng);
-            } else if (!useSingleKey) {
+            } else {
                 double sample =
                     thrust::normal_distribution<double>(mean, stdevFraction * totalInserted)(rng);
                 auto clamped = lround(sample + 0.5);
@@ -192,8 +182,7 @@ static void DeleteSkew(bm::State& state) {
     state.counters["inserted"] = bm::Counter(static_cast<double>(numInserted));
     state.counters["deletes"] = bm::Counter(static_cast<double>(numDeletes));
     state.counters["delete_fraction"] = bm::Counter(deleteFraction * 100);
-    state.counters["stddev_fraction"] =
-        bm::Counter(stdevFraction < 0.0 ? stdevFraction : stdevFraction * 100);
+    state.counters["stddev_fraction"] = bm::Counter(stdevFraction * 100);
     state.counters["prefill_load_factor"] = bm::Counter(PREFILL_LOAD_FACTOR * 100);
     state.counters["occupied_after_prefill"] =
         bm::Counter(static_cast<double>(occupiedAfterPrefill));
