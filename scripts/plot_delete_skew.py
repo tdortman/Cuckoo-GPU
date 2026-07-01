@@ -169,54 +169,69 @@ def _plot_metric_by_group(
             markersize=PAPER_MARKER_SIZE,
             label=label_fn(value),
         )
-
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=3)
-    ax.set_ylabel(y_label, fontsize=10, labelpad=2)
+    ax.margins(y=0.08)
+    if title:
+        ax.set_title(title, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", pad=2)
+    ax.set_ylabel(
+        y_label, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", labelpad=3
+    )
     _format_capacity_axis(ax, _capacity_exponents(df))
 
+def _plot_paper_metric(
+    df: pd.DataFrame,
+    y_column: str,
+    y_label: str,
+    output_file: Path,
+) -> tuple[list, list]:
+    fig, ax = plt.subplots(figsize=(3.35, 1.55))
+    _plot_metric_by_group(
+        ax,
+        df,
+        "stddev_fraction",
+        y_column,
+        y_label,
+        None,
+        _stddev_label,
+    )
+    handles, labels = ax.get_legend_handles_labels()
+    fig.subplots_adjust(left=0.29, bottom=0.22, right=0.98, top=0.96)
+    pu.save_figure(fig, output_file, f"Saved {output_file}")
+    return handles, labels
 
-def _save_two_panel(fig: plt.Figure, axes, output_file: Path, legend_columns: int) -> None:
-    handles, labels = axes[0].get_legend_handles_labels()
+
+def _save_stdev_legend(handles: list, labels: list, output_file: Path) -> None:
+    fig = plt.figure(figsize=(3.35, 0.30))
     fig.legend(
         handles,
         labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.06),
-        ncol=legend_columns,
-        fontsize=7,
+        loc="center",
+        ncol=4,
+        fontsize=PAPER_LEGEND_FONT_SIZE,
         framealpha=pu.LEGEND_FRAME_ALPHA_SOLID,
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.90), w_pad=1.0)
     pu.save_figure(fig, output_file, f"Saved {output_file}")
 
 
-def _plot_hotspot_trends(df: pd.DataFrame, output_file: Path) -> None:
+def _plot_hotspot_trends(df: pd.DataFrame, output_dir: Path) -> None:
     delete_fraction = df["delete_fraction"].max()
     stress = df[(df["delete_fraction"] == delete_fraction) & (df["stddev_fraction"] >= 0)]
     if stress.empty:
         typer.secho("No hotspot-stress rows found", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.6), sharex=True)
-    _plot_metric_by_group(
-        axes[0],
+    handles, labels = _plot_paper_metric(
         stress,
-        "stddev_fraction",
-        "successful_delete_fraction",
-        "successful deletes [%]",
-        f"(a) Hit rate, delete={delete_fraction:g}%",
-        _stddev_label,
+        "successful_throughput_beps",
+        "Successful Deletes [B/s]",
+        output_dir / "delete_skew_effective_throughput.pdf",
     )
-    _plot_metric_by_group(
-        axes[1],
+    _plot_paper_metric(
         stress,
-        "stddev_fraction",
-        "delete_cas_failure_rate",
-        "CAS failure rate",
-        f"(b) CAS failures, delete={delete_fraction:g}%",
-        _stddev_label,
+        "cas_failures_per_successful_delete",
+        "CAS Retries / Delete",
+        output_dir / "delete_skew_cas_retry_cost.pdf",
     )
-    _save_two_panel(fig, axes, output_file, legend_columns=min(4, stress["stddev_fraction"].nunique()))
+    _save_stdev_legend(handles, labels, output_dir / "delete_skew_legend.pdf")
 
 
 @app.command()
@@ -230,14 +245,14 @@ def main(
     output_dir = pu.resolve_output_dir(output_dir, Path(__file__))
     df = _median_rows(csv_file)
 
-    _plot_hotspot_trends(df, output_dir / "delete_skew_stdev_stress.pdf")
+    _plot_hotspot_trends(df, output_dir)
 
     _plot_lines(
         df,
         "throughput_beps",
         pu.THROUGHPUT_LABEL,
         output_dir / "delete_skew_throughput.pdf",
-        "Delete-heavy throughput",
+        "Delete-heavy request throughput",
     )
     _plot_lines(
         df,
