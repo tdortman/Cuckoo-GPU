@@ -349,9 +349,15 @@ struct Filter {
     cuda::std::atomic<size_t>*
         d_numOccupied{};  ///< Pointer to the device memory for the occupancy counter
 
-#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
     cuda::std::atomic<size_t>*
-        d_numEvictions{};  ///< Pointer to the device memory for the eviction counter
+        d_deleteCasAttempts{};  ///< Pointer to device memory for the delete CAS attempt counter
+    cuda::std::atomic<size_t>*
+        d_deleteCasFailures{};  ///< Pointer to device memory for the failed delete CAS counter
+#endif
+
+#ifdef CUCKOO_FILTER_COUNT_EVICTIONS
+    cuda::std::atomic<size_t>* d_numEvictions{};  ///< Pointer to device memory for eviction counter
 #endif
 
     size_t h_numOccupied = 0;  ///< Number of occupied buckets in the filter
@@ -408,6 +414,10 @@ struct Filter {
     explicit Filter(size_t capacity) : numBuckets(calculateNumBuckets(capacity)) {
         CUCKOO_CUDA_CALL(cudaMalloc(&d_buckets, numBuckets * sizeof(Bucket)));
         CUCKOO_CUDA_CALL(cudaMalloc(&d_numOccupied, sizeof(cuda::std::atomic<size_t>)));
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+        CUCKOO_CUDA_CALL(cudaMalloc(&d_deleteCasAttempts, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMalloc(&d_deleteCasFailures, sizeof(cuda::std::atomic<size_t>)));
+#endif
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
         CUCKOO_CUDA_CALL(cudaMalloc(&d_numEvictions, sizeof(cuda::std::atomic<size_t>)));
 #endif
@@ -427,6 +437,14 @@ struct Filter {
         if (d_numOccupied) {
             CUCKOO_CUDA_CALL(cudaFree(d_numOccupied));
         }
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+        if (d_deleteCasAttempts) {
+            CUCKOO_CUDA_CALL(cudaFree(d_deleteCasAttempts));
+        }
+        if (d_deleteCasFailures) {
+            CUCKOO_CUDA_CALL(cudaFree(d_deleteCasFailures));
+        }
+#endif
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
         if (d_numEvictions) {
             CUCKOO_CUDA_CALL(cudaFree(d_numEvictions));
@@ -958,6 +976,10 @@ struct Filter {
     void clear() {
         CUCKOO_CUDA_CALL(cudaMemset(d_buckets, 0, numBuckets * sizeof(Bucket)));
         CUCKOO_CUDA_CALL(cudaMemset(d_numOccupied, 0, sizeof(cuda::std::atomic<size_t>)));
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+        CUCKOO_CUDA_CALL(cudaMemset(d_deleteCasAttempts, 0, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_deleteCasFailures, 0, sizeof(cuda::std::atomic<size_t>)));
+#endif
 #ifdef CUCKOO_FILTER_COUNT_EVICTIONS
         CUCKOO_CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
 #endif
@@ -1007,6 +1029,46 @@ struct Filter {
      */
     void resetEvictionCount() {
         CUCKOO_CUDA_CALL(cudaMemset(d_numEvictions, 0, sizeof(cuda::std::atomic<size_t>)));
+    }
+#endif
+
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+    /**
+     * @brief Returns the total number of delete CAS attempts (compare_exchange calls).
+     *
+     * Only available when CUCKOO_FILTER_COUNT_DELETE_CAS is defined.
+     *
+     * @return size_t Number of delete CAS attempts.
+     */
+    size_t deleteCasAttempts() {
+        size_t count;
+        CUCKOO_CUDA_CALL(
+            cudaMemcpy(&count, d_deleteCasAttempts, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
+        return count;
+    }
+
+    /**
+     * @brief Returns the total number of failed delete CAS attempts.
+     *
+     * Only available when CUCKOO_FILTER_COUNT_DELETE_CAS is defined.
+     *
+     * @return size_t Number of failed delete CAS attempts.
+     */
+    size_t deleteCasFailures() {
+        size_t count;
+        CUCKOO_CUDA_CALL(
+            cudaMemcpy(&count, d_deleteCasFailures, sizeof(size_t), cudaMemcpyDeviceToHost)
+        );
+        return count;
+    }
+
+    /**
+     * @brief Resets the delete CAS counters to zero.
+     */
+    void resetDeleteCasCounters() {
+        CUCKOO_CUDA_CALL(cudaMemset(d_deleteCasAttempts, 0, sizeof(cuda::std::atomic<size_t>)));
+        CUCKOO_CUDA_CALL(cudaMemset(d_deleteCasFailures, 0, sizeof(cuda::std::atomic<size_t>)));
     }
 #endif
 
@@ -1121,9 +1183,18 @@ struct Filter {
 
                 auto desired = bucket.replaceTag(expected, tagIdx, EMPTY);
 
-                if (bucket.packedTags[currIdx].compare_exchange_weak(
-                        expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
-                    )) {
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+                d_deleteCasAttempts->fetch_add(1, cuda::memory_order_relaxed);
+#endif
+                bool casSuccess = bucket.packedTags[currIdx].compare_exchange_weak(
+                    expected, desired, cuda::memory_order_relaxed, cuda::memory_order_relaxed
+                );
+#ifdef CUCKOO_FILTER_COUNT_DELETE_CAS
+                if (!casSuccess) {
+                    d_deleteCasFailures->fetch_add(1, cuda::memory_order_relaxed);
+                }
+#endif
+                if (casSuccess) {
                     return true;
                 }
                 // CAS failed, retry with updated expected value
