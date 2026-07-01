@@ -10,6 +10,7 @@
 """Plot delete-skew benchmark throughput and CAS counters."""
 
 import math
+from matplotlib.ticker import FuncFormatter
 from pathlib import Path
 from typing import Optional
 
@@ -142,6 +143,15 @@ def _format_capacity_axis(ax: plt.Axes, exponents: list[int]) -> None:
 
 
 
+def _count_tick_label(value: float, _: int) -> str:
+    rounded = int(round(value))
+    if abs(value - rounded) > 1e-6:
+        return ""
+    if rounded < 0:
+        return str(rounded)
+    return rf"$\phantom{{0}}{rounded}$" if rounded < 10 else rf"${rounded}$"
+
+
 def _stddev_label(stddev: float) -> str:
     if math.isinf(stddev):
         return "uniform"
@@ -168,7 +178,8 @@ def _plot_metric_by_group(
             markersize=PAPER_MARKER_SIZE,
             label=label_fn(value),
         )
-    ax.margins(y=0.08)
+    ax.margins(y=0.15)
+    ax.yaxis.set_major_formatter(FuncFormatter(_count_tick_label))
     if title:
         ax.set_title(title, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", pad=2)
     ax.set_ylabel(
