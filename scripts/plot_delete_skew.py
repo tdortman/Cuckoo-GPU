@@ -165,8 +165,8 @@ def _plot_metric_by_group(
             x,
             group[y_column],
             marker=markers[idx % len(markers)],
-            linewidth=1.3,
-            markersize=3.2,
+            linewidth=PAPER_LINE_WIDTH,
+            markersize=PAPER_MARKER_SIZE,
             label=label_fn(value),
         )
 
