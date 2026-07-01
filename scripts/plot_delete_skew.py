@@ -131,9 +131,8 @@ def _capacity_exponents(df: pd.DataFrame) -> list[int]:
 
 
 def _format_capacity_axis(ax: plt.Axes, exponents: list[int]) -> None:
-    even_exponents = [exp for exp in exponents if exp % 2 == 0]
-    ax.set_xticks(even_exponents)
-    ax.set_xticklabels([rf"$2^{{{exp}}}$" for exp in even_exponents])
+    ax.set_xticks(exponents)
+    ax.set_xticklabels([rf"$2^{{{exp}}}$" for exp in exponents])
     ax.set_xlim(min(exponents) - 0.3, max(exponents) + 0.3)
     ax.set_xlabel(
         "Capacity", fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", labelpad=1
