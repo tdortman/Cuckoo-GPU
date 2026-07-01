@@ -31,6 +31,8 @@ def _median_rows(csv_file: Path) -> pd.DataFrame:
         "delete_cas_attempts_per_key",
         "delete_cas_failure_rate",
         "successful_delete_fraction",
+        "delete_cas_failures",
+        "successful_deletes",
     }
     missing = required - set(df.columns)
     if missing:
@@ -52,6 +54,16 @@ def _median_rows(csv_file: Path) -> pd.DataFrame:
     df["stddev_fraction"] = df["stddev_fraction"].astype(float)
     df["throughput_beps"] = (
         df["items_per_second"].astype(float).map(pu.to_billion_elems_per_sec)
+    )
+    df["successful_throughput_beps"] = (
+        df["items_per_second"].astype(float)
+        * (df["successful_delete_fraction"].astype(float) / 100.0)
+    ).map(pu.to_billion_elems_per_sec)
+    df["cas_failures_per_successful_delete"] = (
+        df["delete_cas_failures"].astype(float)
+        / df["successful_deletes"].astype(float).where(
+            df["successful_deletes"].astype(float) > 0
+        )
     )
     return df.sort_values(["capacity", "stddev_fraction", "delete_fraction"])
 
