@@ -9,7 +9,6 @@
 # ///
 """Plot bucket policy benchmark results as clustered bar charts."""
 
-import math
 from pathlib import Path
 from typing import Optional
 
@@ -36,17 +35,6 @@ _SIZE_OFFSET = (_BAR_WIDTH + _PAIR_GAP) / 2
 _POLICY_STRIDE = (2 * _SIZE_OFFSET) + _BAR_WIDTH + _GROUP_GAP
 _SMALL_ALPHA = 0.35
 _X_MARGIN = 0.06
-
-
-def format_capacity_label(kind: str, capacity: Optional[int]) -> str:
-    """Create a short legend label for dataset size."""
-    if capacity is None or capacity <= 0:
-        return kind
-
-    if capacity & (capacity - 1) == 0:
-        power = int(math.log2(capacity))
-        return f"{kind} ($n=2^{{{power}}}$)"
-    return f"{kind} (n={capacity})"
 
 
 def load_policy_data(csv_path: Path) -> tuple[dict[str, dict[str, float]], int | None]:

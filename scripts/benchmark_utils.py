@@ -15,18 +15,15 @@ from typing import Optional, Callable
 import typer
 
 
-def get_build_dir(script_path: Optional[Path] = None) -> Path:
+def get_build_dir(script_path: Path) -> Path:
     """Get the build directory relative to script location.
 
     Args:
         script_path: Path to the calling script (typically __file__)
-                    If None, assumes current directory's parent has build/
 
     Returns:
         Path to the build directory
     """
-    if script_path is None:
-        return Path.cwd().parent / "build"
     return Path(script_path).parent.parent / "build"
 
 
@@ -41,24 +38,6 @@ def get_benchmark_dir(script_path: Optional[Path] = None) -> Path:
         Path to the build/benchmark directory
     """
     return get_build_dir(script_path) / "benchmarks"
-
-
-def get_examples_dir(script_path: Optional[Path] = None) -> Path:
-    """Get the examples build directory relative to script location.
-
-    Returns:
-        Path to the build/examples directory
-    """
-    return get_build_dir(script_path) / "examples"
-
-
-def get_tests_dir(script_path: Optional[Path] = None) -> Path:
-    """Get the tests build directory relative to script location.
-
-    Returns:
-        Path to the build/tests directory
-    """
-    return get_build_dir(script_path) / "tests"
 
 
 def validate_executable(executable: Path) -> None:
@@ -82,7 +61,6 @@ def validate_executable(executable: Path) -> None:
 def run_benchmark_to_csv(
     executable: Path,
     csv_output: Path,
-    extra_args: Optional[list[str]] = None,
     env: Optional[dict] = None,
 ) -> None:
     """Run a Google Benchmark executable with CSV output.
@@ -90,7 +68,6 @@ def run_benchmark_to_csv(
     Args:
         executable: Path to the benchmark executable
         csv_output: Path where CSV output should be written
-        extra_args: Additional command-line arguments to pass
         env: Optional environment variables (merged with os.environ)
 
     Raises:
@@ -102,9 +79,6 @@ def run_benchmark_to_csv(
         "--benchmark_out_format=csv",
         "--benchmark_format=csv",
     ]
-
-    if extra_args:
-        cmd.extend(extra_args)
 
     result = subprocess.run(cmd, env=env)
 

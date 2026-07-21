@@ -120,9 +120,7 @@ def main(
             plt.tight_layout(rect=(0, 0, 1, 0.92))
 
             output_file = output_dir / f"sol_{filter_type}_{operation}.pdf"
-            plt.savefig(output_file, bbox_inches="tight")
-            typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
-            plt.close()
+            pu.save_figure(fig, output_file, f"Saved {output_file}")
 
     # 2. Per-Metric Comparison (Comparing filters for a specific metric)
     for metric_col, metric_name in METRICS:
@@ -180,15 +178,7 @@ def main(
             plt.tight_layout(rect=(0, 0, 1, 0.92))
 
             output_file = output_dir / f"sol_compare_{metric_col}_{operation}.pdf"
-            plt.savefig(
-                output_file,
-                bbox_inches="tight",
-                transparent=True,
-                format="pdf",
-                dpi=600,
-            )
-            typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
-            plt.close()
+            pu.save_figure(fig, output_file, f"Saved {output_file}")
 
     # 3. Small Multiples: 2x2 grid with one subplot per filter
     # Each subplot shows all metrics, with operations as line styles
@@ -260,15 +250,7 @@ def main(
         plt.tight_layout()
 
         output_file = output_dir / f"sol_grid_{metric_col}.pdf"
-        plt.savefig(
-            output_file,
-            bbox_inches="tight",
-            transparent=True,
-            format="pdf",
-            dpi=600,
-        )
-        typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
-        plt.close()
+        pu.save_figure(fig, output_file, f"Saved {output_file}")
 
 
 if __name__ == "__main__":

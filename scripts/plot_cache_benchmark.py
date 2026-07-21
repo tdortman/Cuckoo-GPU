@@ -127,15 +127,7 @@ def main(
         plt.tight_layout()
 
         output_file = output_dir / f"cache_grid_{cache_level.lower()}.pdf"
-        plt.savefig(
-            output_file,
-            bbox_inches="tight",
-            transparent=True,
-            format="pdf",
-            dpi=600,
-        )
-        typer.secho(f"Saved {output_file}", fg=typer.colors.GREEN)
-        plt.close()
+        pu.save_figure(fig, output_file, f"Saved {output_file}")
 
 
 if __name__ == "__main__":

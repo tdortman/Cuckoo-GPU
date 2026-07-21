@@ -55,7 +55,9 @@ def extract_benchmark_data(df: pd.DataFrame) -> dict[str, dict[int, float]]:
     return benchmark_data
 
 
-def load_benchmark_data(csv_file: Path, hardware_label: str) -> dict[str, dict[int, float]]:
+def load_benchmark_data(
+    csv_file: Path, hardware_label: str
+) -> dict[str, dict[int, float]]:
     """Load and extract benchmark data from one hardware CSV."""
     df = pu.load_csv(csv_file)
 

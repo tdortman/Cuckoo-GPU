@@ -79,18 +79,14 @@ def normalize_by_baseline(df: pd.DataFrame, baseline_gpus: int = 2) -> pd.DataFr
                     df.loc[mask, "real_time"] / baseline_time
                 )
                 # Normalize throughput
-                baseline_throughput = df.loc[
-                    baseline_mask, "throughput_beps"
-                ].values[0]
+                baseline_throughput = df.loc[baseline_mask, "throughput_beps"].values[0]
                 df.loc[mask, "normalized_throughput"] = (
                     df.loc[mask, "throughput_beps"] / baseline_throughput
                 )
             else:
                 # No baseline found, use raw values
                 df.loc[mask, "normalized_time"] = df.loc[mask, "real_time"]
-                df.loc[mask, "normalized_throughput"] = df.loc[
-                    mask, "throughput_beps"
-                ]
+                df.loc[mask, "normalized_throughput"] = df.loc[mask, "throughput_beps"]
 
     return df
 

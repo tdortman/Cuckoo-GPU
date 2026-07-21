@@ -111,7 +111,9 @@ def main(
     pcf_csv_file: Path = typer.Argument(
         None, help="Optional path to a second CSV file containing PCF results"
     ),
-    baseline: str = typer.Option("GCF", "--baseline", "-b", help="Baseline filter name"),
+    baseline: str = typer.Option(
+        "GCF", "--baseline", "-b", help="Baseline filter name"
+    ),
     load_factor: int = typer.Option(
         None,
         "--load-factor",

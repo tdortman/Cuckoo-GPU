@@ -66,11 +66,10 @@ def _median_rows(csv_file: Path) -> pd.DataFrame:
         df["items_per_second"].astype(float)
         * (df["successful_delete_fraction"].astype(float) / 100.0)
     ).map(pu.to_billion_elems_per_sec)
-    df["cas_failures_per_successful_delete"] = (
-        df["delete_cas_failures"].astype(float)
-        / df["successful_deletes"].astype(float).where(
-            df["successful_deletes"].astype(float) > 0
-        )
+    df["cas_failures_per_successful_delete"] = df["delete_cas_failures"].astype(
+        float
+    ) / df["successful_deletes"].astype(float).where(
+        df["successful_deletes"].astype(float) > 0
     )
     return df.sort_values(["capacity", "stddev_fraction", "delete_fraction"])
 
@@ -142,7 +141,6 @@ def _format_capacity_axis(ax: plt.Axes, exponents: list[int]) -> None:
     ax.tick_params(axis="both", labelsize=PAPER_TICK_LABEL_FONT_SIZE, pad=1)
 
 
-
 def _count_tick_label(value: float, _: int) -> str:
     rounded = int(round(value))
     if abs(value - rounded) > 1e-6:
@@ -156,6 +154,7 @@ def _stddev_label(stddev: float) -> str:
     if math.isinf(stddev):
         return "uniform"
     return rf"$\sigma$={stddev:g}%"
+
 
 def _plot_metric_by_group(
     ax: plt.Axes,
@@ -181,11 +180,14 @@ def _plot_metric_by_group(
     ax.margins(y=0.15)
     ax.yaxis.set_major_formatter(FuncFormatter(_count_tick_label))
     if title:
-        ax.set_title(title, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", pad=2)
+        ax.set_title(
+            title, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", pad=2
+        )
     ax.set_ylabel(
         y_label, fontsize=PAPER_AXIS_LABEL_FONT_SIZE, fontweight="bold", labelpad=3
     )
     _format_capacity_axis(ax, _capacity_exponents(df))
+
 
 def _plot_paper_metric(
     df: pd.DataFrame,
@@ -223,7 +225,9 @@ def _save_stdev_legend(handles: list, labels: list, output_file: Path) -> None:
 
 def _plot_hotspot_trends(df: pd.DataFrame, output_dir: Path) -> None:
     delete_fraction = df["delete_fraction"].max()
-    stress = df[(df["delete_fraction"] == delete_fraction) & (df["stddev_fraction"] >= 0)]
+    stress = df[
+        (df["delete_fraction"] == delete_fraction) & (df["stddev_fraction"] >= 0)
+    ]
     if stress.empty:
         typer.secho("No hotspot-stress rows found", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)

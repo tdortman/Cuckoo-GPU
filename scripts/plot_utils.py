@@ -102,21 +102,6 @@ def format_power_of_two(n: int) -> str:
     return rf"$\left(n=2^{{{power}}}\right)$"
 
 
-def format_capacity_title(base_title: str, capacity: Optional[int]) -> str:
-    """Format a title with capacity as power of 2.
-
-    Args:
-        base_title: Base title string
-        capacity: Capacity value (power of 2)
-
-    Returns:
-        Title with capacity appended, e.g., 'Insert Throughput (n=2^20)'
-    """
-    if capacity is not None and capacity > 0:
-        return f"{base_title} {format_power_of_two(capacity)}"
-    return base_title
-
-
 def to_billion_elems_per_sec(items_per_second: float) -> float:
     """Convert items-per-second throughput into billions of elements per second."""
     return float(items_per_second) / THROUGHPUT_SCALE
@@ -300,28 +285,6 @@ def setup_figure(
     if title:
         fig.suptitle(title, fontsize=TITLE_FONT_SIZE, fontweight="bold")
     return fig, axes
-
-
-def create_legend(ax: plt.Axes, **kwargs):
-    """Create a legend with consistent default styling.
-
-    Args:
-        ax: Matplotlib axis to add legend to
-        **kwargs: Override default legend parameters
-
-    Returns:
-        The created Legend object
-
-    Example:
-        create_legend(ax, loc="upper right", ncol=2)
-    """
-    defaults = {
-        "fontsize": LEGEND_FONT_SIZE,
-        "loc": "best",
-        "framealpha": 0,
-    }
-    defaults.update(kwargs)
-    return ax.legend(**defaults)
 
 
 def normalize_benchmark_name(name: str) -> str:
