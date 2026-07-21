@@ -120,7 +120,6 @@ int main(int argc, char** argv) {
 
     auto* clientCmd = app.add_subcommand("client", "Run IPC client(s)");
 
-    std::string clientType = "normal";
     int numClients = 1;
     int clientCapacityExp = 25;
     double targetLoadFactor = 0.95;

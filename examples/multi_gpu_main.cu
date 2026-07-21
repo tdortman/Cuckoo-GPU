@@ -3,13 +3,13 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
+#include <algorithm>
 #include <chrono>
 #include <CLI/CLI.hpp>
 #include <cstdint>
 #include <ctime>
 #include <cuckoogpu/bucket_policies.cuh>
 #include <cuckoogpu/CuckooFilterMultiGPU.cuh>
-#include <cuckoogpu/helpers.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
 #include <format>
@@ -99,7 +99,8 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t found = cuckoogpu::detail::countOnes(h_output.data(), n);
+    size_t found =
+        std::count_if(h_output.begin(), h_output.end(), [](uint8_t value) { return value != 0; });
     std::cout << std::format("Found {} / {} items in {} ms\n", found, n, duration);
 
     size_t fprTestSize = std::min(n, size_t(1000000));
@@ -126,7 +127,9 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t falsePositives = cuckoogpu::detail::countOnes(h_fprOutput.data(), fprTestSize);
+    size_t falsePositives = std::count_if(
+        h_fprOutput.begin(), h_fprOutput.end(), [](uint8_t value) { return value != 0; }
+    );
 
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
     double theoreticalFPR =
@@ -156,7 +159,9 @@ int main(int argc, char** argv) {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    size_t deleted = cuckoogpu::detail::countOnes(h_deleteOutput.data(), deleteCount);
+    size_t deleted = std::count_if(h_deleteOutput.begin(), h_deleteOutput.end(), [](uint8_t value) {
+        return value != 0;
+    });
 
     std::cout << std::format(
         "Deleted {} / {} items in {} ms (load factor = {})\n",
@@ -167,7 +172,9 @@ int main(int argc, char** argv) {
     );
 
     filter.containsMany(h_deleteKeys, h_deleteOutput);
-    size_t stillFound = cuckoogpu::detail::countOnes(h_deleteOutput.data(), deleteCount);
+    size_t stillFound = std::count_if(
+        h_deleteOutput.begin(), h_deleteOutput.end(), [](uint8_t value) { return value != 0; }
+    );
     std::cout << std::format(
         "After deletion, {} / {} deleted items still found\n", stillFound, deleteCount
     );
@@ -182,7 +189,9 @@ int main(int argc, char** argv) {
 
     filter.containsMany(h_nonDeletedKeys, h_nonDeletedOutput);
     size_t nonDeletedFound =
-        cuckoogpu::detail::countOnes(h_nonDeletedOutput.data(), nonDeletedCount);
+        std::count_if(h_nonDeletedOutput.begin(), h_nonDeletedOutput.end(), [](uint8_t value) {
+            return value != 0;
+        });
     std::cout << std::format(
         "Non-deleted keys still found: {} / {}\n\n", nonDeletedFound, nonDeletedCount
     );

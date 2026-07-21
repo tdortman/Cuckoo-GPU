@@ -3,13 +3,13 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
+#include <algorithm>
 #include <chrono>
 #include <CLI/CLI.hpp>
 #include <cstdint>
 #include <ctime>
 #include <cuckoogpu/bucket_policies.cuh>
 #include <cuckoogpu/CuckooFilter.cuh>
-#include <cuckoogpu/helpers.cuh>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
 #include <iostream>
@@ -76,9 +76,8 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> output = d_output;
 
-    size_t found = cuckoogpu::detail::countOnes(
-        reinterpret_cast<bool*>(thrust::raw_pointer_cast(output.data())), n
-    );
+    size_t found =
+        std::count_if(output.begin(), output.end(), [](uint8_t value) { return value != 0; });
     std::cout << std::format("Found {} / {} items in {} ms\n", found, n, duration);
 
     // size_t occupiedSlots = filter.countOccupiedSlots();
@@ -109,9 +108,8 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> fprOutput = d_fprOutput;
 
-    size_t falsePositives = cuckoogpu::detail::countOnes(
-        reinterpret_cast<bool*>(thrust::raw_pointer_cast(fprOutput.data())), fprTestSize
-    );
+    size_t falsePositives =
+        std::count_if(fprOutput.begin(), fprOutput.end(), [](uint8_t value) { return value != 0; });
 
     double fpr = static_cast<double>(falsePositives) / static_cast<double>(fprTestSize) * 100.0;
     double theoreticalFPR =
@@ -141,9 +139,9 @@ int main(int argc, char** argv) {
 
     thrust::host_vector<uint8_t> deleteOutput = d_deleteOutput;
 
-    size_t deleted = cuckoogpu::detail::countOnes(
-        reinterpret_cast<bool*>(thrust::raw_pointer_cast(deleteOutput.data())), deleteCount
-    );
+    size_t deleted = std::count_if(deleteOutput.begin(), deleteOutput.end(), [](uint8_t value) {
+        return value != 0;
+    });
 
     std::cout << std::format(
         "Deleted {} / {} items in {} ms (load factor = {})\n",
@@ -155,9 +153,9 @@ int main(int argc, char** argv) {
 
     filter.containsMany(d_deleteKeys, d_deleteOutput);
     deleteOutput = d_deleteOutput;
-    size_t stillFound = cuckoogpu::detail::countOnes(
-        reinterpret_cast<bool*>(thrust::raw_pointer_cast(deleteOutput.data())), deleteCount
-    );
+    size_t stillFound = std::count_if(deleteOutput.begin(), deleteOutput.end(), [](uint8_t value) {
+        return value != 0;
+    });
     std::cout << std::format(
         "After deletion, {} / {} deleted items still found\n", stillFound, deleteCount
     );
@@ -170,8 +168,8 @@ int main(int argc, char** argv) {
 
     filter.containsMany(d_nonDeletedKeys, d_nonDeletedOutput);
     thrust::host_vector<uint8_t> nonDeletedOutput = d_nonDeletedOutput;
-    size_t nonDeletedFound = cuckoogpu::detail::countOnes(
-        reinterpret_cast<bool*>(thrust::raw_pointer_cast(nonDeletedOutput.data())), nonDeletedCount
+    size_t nonDeletedFound = std::count_if(
+        nonDeletedOutput.begin(), nonDeletedOutput.end(), [](uint8_t value) { return value != 0; }
     );
     std::cout << std::format(
         "Non-deleted keys still found: {} / {}\n", nonDeletedFound, nonDeletedCount

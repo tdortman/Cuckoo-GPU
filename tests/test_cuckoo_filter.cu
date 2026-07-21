@@ -4,7 +4,6 @@
 #include <cuckoogpu/CuckooFilter.cuh>
 #include <cuckoogpu/helpers.cuh>
 #include <random>
-#include <unordered_set>
 #include <vector>
 
 class CuckooFilterTest : public ::testing::Test {

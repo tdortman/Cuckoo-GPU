@@ -3,8 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
-#include <iostream>
 
 namespace cuckoogpu::detail {
 
@@ -44,24 +42,6 @@ constexpr size_t nextPowerOfTwo(size_t n) {
     n++;
 
     return n;
-}
-
-/**
- * @brief Counts the number of non-zero elements in an array.
- * @tparam T Type of elements.
- * @param data Pointer to the array.
- * @param n Number of elements.
- * @return size_t Number of non-zero elements.
- */
-template <typename T>
-size_t countOnes(T* data, size_t n) {
-    size_t count = 0;
-    for (size_t i = 0; i < n; ++i) {
-        if (data[i]) {
-            count++;
-        }
-    }
-    return count;
 }
 
 /**

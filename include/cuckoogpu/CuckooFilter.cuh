@@ -1,14 +1,11 @@
 #pragma once
 
 #include <thrust/device_vector.h>
-#include <cmath>
 #include <cstdint>
-#include <ctime>
 #include <cub/cub.cuh>
 #include <cuda/std/atomic>
 #include <cuda/std/cstddef>
 #include <cuda/std/cstdint>
-#include <iostream>
 #include <vector>
 #include "bucket_policies.cuh"
 #include "hashutil.cuh"
