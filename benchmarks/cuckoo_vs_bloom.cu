@@ -18,12 +18,6 @@ namespace bm = benchmark;
 
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
-template <typename Filter>
-size_t cucoNumBlocks(size_t n) {
-    constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
-    return SDIV(n * Config::bitsPerTag, Filter::words_per_block * bitsPerWord);
-}
-
 template <double loadFactor = 0.95>
 class BloomFilterFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
@@ -37,7 +31,7 @@ class BloomFilterFixture : public benchmark::Fixture {
         capacity = cap;
         n = num;
 
-        const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+        const size_t numBlocks = cucoNumBlocks<BloomFilter, Config::bitsPerTag>(capacity);
         d_keys.resize(n);
         d_output.resize(n);
         generateKeysGPU(d_keys);
@@ -136,7 +130,7 @@ static void GCF_FPR(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);
@@ -177,7 +171,7 @@ static void BBF_FPR(bm::State& state) {
     using BloomFilter = cuco::bloom_filter<uint64_t>;
     auto [capacity, n] = calculateCapacityAndSize(state.range(0), 0.95);
 
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+    const size_t numBlocks = cucoNumBlocks<BloomFilter, Config::bitsPerTag>(capacity);
     size_t filterMemory =
         numBlocks * BloomFilter::words_per_block * sizeof(typename BloomFilter::word_type);
 

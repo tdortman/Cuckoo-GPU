@@ -163,7 +163,7 @@ static void GCF_FPR(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);

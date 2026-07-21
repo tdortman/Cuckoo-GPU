@@ -18,6 +18,7 @@
 #include <random>
 #include <thread>
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 #ifdef __x86_64__
     #include <cuckoo/cuckoo_parameter.hpp>
@@ -30,28 +31,6 @@ namespace bm = benchmark;
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 using BloomFilter = cuco::bloom_filter<uint64_t>;
-
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
-
-/**
- * GQF doesn't return a bit vector, but rather a count for each key
- */
-void convertGQFResults(thrust::device_vector<uint64_t>& d_results) {
-    thrust::device_ptr<uint64_t> d_resultsPtr(d_results.data().get());
-    thrust::transform(
-        d_resultsPtr, d_resultsPtr + d_results.size(), d_resultsPtr, [] __device__(uint64_t val) {
-            return val > 0;
-        }
-    );
-}
 
 #ifdef __x86_64__
 using CPUFilterParam = filters::cuckoo::Standard4<Config::bitsPerTag>;
@@ -76,7 +55,7 @@ static void GCF_FPR(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     thrust::device_vector<uint64_t> d_neverInserted(FPR_TEST_SIZE);
     thrust::device_vector<uint8_t> d_output(FPR_TEST_SIZE);

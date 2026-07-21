@@ -82,7 +82,7 @@ BENCHMARK_DEFINE_F(XorFixture, Insert)(bm::State& state) {
         filter->clear();
         cudaDeviceSynchronize();
         timer.start();
-        size_t inserted = adaptiveInsert(*filter, d_keys);
+        size_t inserted = filter->insertMany(d_keys);
         state.SetIterationTime(timer.elapsed());
         bm::DoNotOptimize(inserted);
     }
@@ -90,7 +90,7 @@ BENCHMARK_DEFINE_F(XorFixture, Insert)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(XorFixture, Query)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -102,7 +102,7 @@ BENCHMARK_DEFINE_F(XorFixture, Query)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(XorFixture, QueryNegative)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -116,7 +116,7 @@ BENCHMARK_DEFINE_F(XorFixture, QueryNegative)(bm::State& state) {
 BENCHMARK_DEFINE_F(XorFixture, Delete)(bm::State& state) {
     for (auto _ : state) {
         filter->clear();
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
         cudaDeviceSynchronize();
         timer.start();
         size_t remaining = filter->deleteMany(d_keys, d_output);
@@ -138,7 +138,7 @@ BENCHMARK_DEFINE_F(AddSubFixture, Insert)(bm::State& state) {
         filter->clear();
         cudaDeviceSynchronize();
         timer.start();
-        size_t inserted = adaptiveInsert(*filter, d_keys);
+        size_t inserted = filter->insertMany(d_keys);
         state.SetIterationTime(timer.elapsed());
         bm::DoNotOptimize(inserted);
     }
@@ -146,7 +146,7 @@ BENCHMARK_DEFINE_F(AddSubFixture, Insert)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(AddSubFixture, Query)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -158,7 +158,7 @@ BENCHMARK_DEFINE_F(AddSubFixture, Query)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(AddSubFixture, QueryNegative)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -172,7 +172,7 @@ BENCHMARK_DEFINE_F(AddSubFixture, QueryNegative)(bm::State& state) {
 BENCHMARK_DEFINE_F(AddSubFixture, Delete)(bm::State& state) {
     for (auto _ : state) {
         filter->clear();
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
         cudaDeviceSynchronize();
         timer.start();
         size_t remaining = filter->deleteMany(d_keys, d_output);
@@ -194,7 +194,7 @@ BENCHMARK_DEFINE_F(OffsetFixture, Insert)(bm::State& state) {
         filter->clear();
         cudaDeviceSynchronize();
         timer.start();
-        size_t inserted = adaptiveInsert(*filter, d_keys);
+        size_t inserted = filter->insertMany(d_keys);
         state.SetIterationTime(timer.elapsed());
         bm::DoNotOptimize(inserted);
     }
@@ -202,7 +202,7 @@ BENCHMARK_DEFINE_F(OffsetFixture, Insert)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(OffsetFixture, Query)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -214,7 +214,7 @@ BENCHMARK_DEFINE_F(OffsetFixture, Query)(bm::State& state) {
 }
 
 BENCHMARK_DEFINE_F(OffsetFixture, QueryNegative)(bm::State& state) {
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
     cudaDeviceSynchronize();
     for (auto _ : state) {
         timer.start();
@@ -228,7 +228,7 @@ BENCHMARK_DEFINE_F(OffsetFixture, QueryNegative)(bm::State& state) {
 BENCHMARK_DEFINE_F(OffsetFixture, Delete)(bm::State& state) {
     for (auto _ : state) {
         filter->clear();
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
         cudaDeviceSynchronize();
         timer.start();
         size_t remaining = filter->deleteMany(d_keys, d_output);

@@ -12,6 +12,7 @@
 #include <cuckoogpu/helpers.cuh>
 #include <random>
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 #include <gqf.cuh>
 #include <gqf_int.cuh>
@@ -20,26 +21,7 @@ namespace bm = benchmark;
 
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
-
 using GCFFixture = CuckooFilterFixture<Config>;
-
-void convertGQFResults(thrust::device_vector<uint64_t>& d_results) {
-    thrust::device_ptr<uint64_t> d_resultsPtr(d_results.data().get());
-    thrust::transform(
-        d_resultsPtr, d_resultsPtr + d_results.size(), d_resultsPtr, [] __device__(uint64_t val) {
-            return val > 0;
-        }
-    );
-}
 
 class GQFFixture : public benchmark::Fixture {
     using benchmark::Fixture::SetUp;
@@ -97,7 +79,7 @@ static void GCF_FPR(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<FPRConfig>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     size_t fprTestSize = std::min(n, size_t(1'000'000));
     thrust::device_vector<uint64_t> d_neverInserted(fprTestSize);

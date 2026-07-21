@@ -12,6 +12,7 @@
 #include <random>
 #include <thread>
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 namespace bm = benchmark;
 
@@ -23,25 +24,6 @@ const size_t L2_CACHE_SIZE = getL2CacheSize();
 template <size_t bitsPerTag>
 using GPUCuckooConfig =
     cuckoogpu::Config<uint64_t, bitsPerTag, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
-
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
-
-void convertGQFResults(thrust::device_vector<uint64_t>& d_results) {
-    thrust::device_ptr<uint64_t> d_resultsPtr(d_results.data().get());
-    thrust::transform(
-        d_resultsPtr, d_resultsPtr + d_results.size(), d_resultsPtr, [] __device__(uint64_t val) {
-            return val > 0;
-        }
-    );
-}
 
 void setFPRSweepCounters(
     benchmark::State& state,
@@ -97,7 +79,7 @@ static void GCF_FPR_Sweep(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     auto& testData = getFPRTestData();
     thrust::device_vector<uint8_t> d_output(FPR_TEST_SIZE);
@@ -153,7 +135,7 @@ static void GCF_Insert_Sweep(bm::State& state) {
         filterMemory = filter->sizeInBytes();
 
         timer.start();
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -186,7 +168,7 @@ static void GCF_PositiveQuery_Sweep(bm::State& state) {
 
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
     size_t filterMemory = filter->sizeInBytes();
-    adaptiveInsert(*filter, d_keys);
+    filter->insertMany(d_keys);
 
     // Use the inserted keys for positive lookups
     thrust::device_vector<uint8_t> d_output(n);
@@ -229,7 +211,7 @@ static void GCF_Delete_Sweep(bm::State& state) {
     for (auto _ : state) {
         auto filter = std::make_unique<cuckoogpu::Filter<Config>>(FIXED_CAPACITY);
         filterMemory = filter->sizeInBytes();
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
 
         timer.start();
         filter->deleteMany(d_keys);

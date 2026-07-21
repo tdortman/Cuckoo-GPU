@@ -14,6 +14,7 @@
 #include <fstream>
 
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 namespace bm = benchmark;
 
@@ -46,16 +47,6 @@ std::vector<uint64_t> loadKmerFile(const std::string& filename) {
     return kmers;
 }
 
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
-
 static std::vector<uint64_t> g_kmerData;
 static thrust::device_vector<uint64_t>* g_deviceKeys = nullptr;
 
@@ -81,7 +72,7 @@ static void GCF_Insert(bm::State& state) {
         cudaDeviceSynchronize();
 
         timer.start();
-        size_t inserted = adaptiveInsert(*filter, *g_deviceKeys);
+        size_t inserted = filter->insertMany(*g_deviceKeys);
         double elapsed = timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -101,7 +92,7 @@ static void GCF_Query(bm::State& state) {
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
 
-    adaptiveInsert(*filter, *g_deviceKeys);
+    filter->insertMany(*g_deviceKeys);
     cudaDeviceSynchronize();
 
     thrust::device_vector<uint8_t> d_output(n);
@@ -128,7 +119,7 @@ static void GCF_Delete(bm::State& state) {
     auto filter = std::make_unique<cuckoogpu::Filter<Config>>(capacity);
     size_t filterMemory = filter->sizeInBytes();
 
-    adaptiveInsert(*filter, *g_deviceKeys);
+    filter->insertMany(*g_deviceKeys);
     cudaDeviceSynchronize();
 
     thrust::device_vector<uint8_t> d_output(n);
@@ -136,7 +127,7 @@ static void GCF_Delete(bm::State& state) {
     for (auto _ : state) {
         // Re-insert before each delete iteration
         filter->clear();
-        adaptiveInsert(*filter, *g_deviceKeys);
+        filter->insertMany(*g_deviceKeys);
         cudaDeviceSynchronize();
 
         timer.start();

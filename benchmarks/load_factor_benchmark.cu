@@ -19,22 +19,13 @@
 #include <random>
 #include <thread>
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 #ifdef __x86_64__
     #include <cuckoo/cuckoo_parameter.hpp>
     #include <filter.hpp>
     #include "parameter/parameter.hpp"
 #endif
-
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
 
 namespace bm = benchmark;
 
@@ -100,12 +91,6 @@ class GCFFixtureLF : public benchmark::Fixture {
     GPUTimer timer;
 };
 
-template <typename Filter>
-size_t cucoNumBlocks(size_t n) {
-    constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
-    return SDIV(n * Config::bitsPerTag, Filter::words_per_block * bitsPerWord);
-}
-
 template <typename PairType, typename KeyType, typename ValueType>
 __global__ void makePairsKernel(const KeyType* keys, PairType* pairs, size_t n, ValueType value) {
     const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -127,7 +112,7 @@ class BloomFilterFixture : public benchmark::Fixture {
         capacity = cap;
         n = num;
 
-        const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+        const size_t numBlocks = cucoNumBlocks<BloomFilter, Config::bitsPerTag>(capacity);
         d_keys.resize(n);
         d_keysNegative.resize(n);
         d_output.resize(n);
@@ -496,14 +481,14 @@ class GQFFixtureLF : public benchmark::Fixture {
             filter->clear();                                                                  \
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
-            size_t inserted = adaptiveInsert(*filter, d_keys);                                \
+            size_t inserted = filter->insertMany(d_keys);                                     \
             state.SetIterationTime(timer.elapsed());                                          \
             bm::DoNotOptimize(inserted);                                                      \
         }                                                                                     \
         setCounters(state);                                                                   \
     }                                                                                         \
     BENCHMARK_DEFINE_F(GCF_##ID, Query)(bm::State & state) {                                  \
-        adaptiveInsert(*filter, d_keys);                                                      \
+        filter->insertMany(d_keys);                                                           \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
@@ -514,7 +499,7 @@ class GQFFixtureLF : public benchmark::Fixture {
         setCounters(state);                                                                   \
     }                                                                                         \
     BENCHMARK_DEFINE_F(GCF_##ID, QueryNegative)(bm::State & state) {                          \
-        adaptiveInsert(*filter, d_keys);                                                      \
+        filter->insertMany(d_keys);                                                           \
         cudaDeviceSynchronize();                                                              \
         for (auto _ : state) {                                                                \
             timer.start();                                                                    \
@@ -527,7 +512,7 @@ class GQFFixtureLF : public benchmark::Fixture {
     BENCHMARK_DEFINE_F(GCF_##ID, Delete)(bm::State & state) {                                 \
         for (auto _ : state) {                                                                \
             filter->clear();                                                                  \
-            adaptiveInsert(*filter, d_keys);                                                  \
+            filter->insertMany(d_keys);                                                       \
             cudaDeviceSynchronize();                                                          \
             timer.start();                                                                    \
             size_t remaining = filter->deleteMany(d_keys, d_output);                          \

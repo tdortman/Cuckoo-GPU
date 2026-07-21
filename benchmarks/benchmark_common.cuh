@@ -5,9 +5,9 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/random.h>
 #include <thrust/transform.h>
-#include <cuckoogpu/bucket_policies.cuh>
 #include <chrono>
 #include <cstdint>
+#include <cuckoogpu/bucket_policies.cuh>
 #include <cuckoogpu/CuckooFilter.cuh>
 #include <fstream>
 #include <limits>
@@ -115,14 +115,6 @@ inline size_t getGPUL2CacheSize() {
     }();
 
     return cachedSize;
-}
-
-template <typename FilterConfig>
-inline size_t adaptiveInsert(
-    cuckoogpu::Filter<FilterConfig>& filter,
-    thrust::device_vector<typename FilterConfig::KeyType>& d_keys
-) {
-    return filter.insertMany(d_keys);
 }
 
 template <typename T>
@@ -251,7 +243,7 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
         cudaDeviceSynchronize();
 
         fixture.timer.start();
-        size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
+        size_t inserted = fixture.filter->insertMany(fixture.d_keys);
         double elapsed = fixture.timer.elapsed();
 
         state.SetIterationTime(elapsed);
@@ -262,7 +254,7 @@ void benchmarkInsertBody(Fixture& fixture, benchmark::State& state) {
 
 template <typename Fixture>
 void benchmarkQueryBody(Fixture& fixture, benchmark::State& state) {
-    adaptiveInsert(*fixture.filter, fixture.d_keys);
+    fixture.filter->insertMany(fixture.d_keys);
     cudaDeviceSynchronize();
 
     for (auto _ : state) {
@@ -280,7 +272,7 @@ template <typename Fixture>
 void benchmarkDeleteBody(Fixture& fixture, benchmark::State& state) {
     for (auto _ : state) {
         fixture.filter->clear();
-        adaptiveInsert(*fixture.filter, fixture.d_keys);
+        fixture.filter->insertMany(fixture.d_keys);
         cudaDeviceSynchronize();
 
         fixture.timer.start();
@@ -301,7 +293,7 @@ void benchmarkInsertAndQueryBody(Fixture& fixture, benchmark::State& state) {
         cudaDeviceSynchronize();
 
         fixture.timer.start();
-        size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
+        size_t inserted = fixture.filter->insertMany(fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         double elapsed = fixture.timer.elapsed();
 
@@ -319,7 +311,7 @@ void benchmarkInsertQueryDeleteBody(Fixture& fixture, benchmark::State& state) {
         cudaDeviceSynchronize();
 
         fixture.timer.start();
-        size_t inserted = adaptiveInsert(*fixture.filter, fixture.d_keys);
+        size_t inserted = fixture.filter->insertMany(fixture.d_keys);
         fixture.filter->containsMany(fixture.d_keys, fixture.d_output);
         size_t remaining = fixture.filter->deleteMany(fixture.d_keys, fixture.d_output);
         double elapsed = fixture.timer.elapsed();

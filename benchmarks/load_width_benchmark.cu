@@ -30,7 +30,7 @@ class LoadWidthFixture : public benchmark::Fixture {
         filterMemory = filter->sizeInBytes();
 
         // Pre-insert keys to measure query performance
-        adaptiveInsert(*filter, d_keys);
+        filter->insertMany(d_keys);
         cudaDeviceSynchronize();
     }
 

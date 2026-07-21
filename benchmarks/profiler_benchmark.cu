@@ -14,26 +14,11 @@
 #include <iostream>
 #include <string>
 #include "benchmark_common.cuh"
+#include "benchmark_gqf_common.cuh"
 
 using Config = cuckoogpu::Config<uint64_t, 16, 500, 128, 16, cuckoogpu::XorAltBucketPolicy>;
 using TCFType = host_bulk_tcf<uint64_t, uint16_t>;
 using BloomFilter = cuco::bloom_filter<uint64_t>;
-
-size_t getQFSizeHost(QF* d_qf) {
-    QF h_qf;
-    cudaMemcpy(&h_qf, d_qf, sizeof(QF), cudaMemcpyDeviceToHost);
-
-    qfmetadata h_metadata;
-    cudaMemcpy(&h_metadata, h_qf.metadata, sizeof(qfmetadata), cudaMemcpyDeviceToHost);
-
-    return h_metadata.total_size_in_bytes;
-}
-
-template <typename Filter>
-size_t cucoNumBlocks(size_t n) {
-    constexpr auto bitsPerWord = sizeof(typename Filter::word_type) * 8;
-    return SDIV(n * Config::bitsPerTag, Filter::words_per_block * bitsPerWord);
-}
 
 void benchmarkCuckooInsert(size_t capacity, double loadFactor) {
     auto n = static_cast<size_t>(capacity * loadFactor);
@@ -42,14 +27,12 @@ void benchmarkCuckooInsert(size_t capacity, double loadFactor) {
     generateKeysGPU(d_keys);
 
     cuckoogpu::Filter<Config> filter(capacity);
-
     filter.insertMany(d_keys);
     cudaDeviceSynchronize();
 
     filter.clear();
     cudaDeviceSynchronize();
     filter.insertMany(d_keys);
-    cudaDeviceSynchronize();
 }
 
 void benchmarkCuckooQuery(size_t capacity, double loadFactor) {
@@ -88,7 +71,7 @@ void benchmarkBloomInsert(size_t capacity, double loadFactor) {
     thrust::device_vector<uint64_t> d_keys(n);
     generateKeysGPU(d_keys);
 
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+    const size_t numBlocks = cucoNumBlocks<BloomFilter, Config::bitsPerTag>(capacity);
     BloomFilter filter(numBlocks);
 
     filter.add(d_keys.begin(), d_keys.end());
@@ -102,12 +85,10 @@ void benchmarkBloomInsert(size_t capacity, double loadFactor) {
 
 void benchmarkBloomQuery(size_t capacity, double loadFactor) {
     auto n = static_cast<size_t>(capacity * loadFactor);
-
     thrust::device_vector<uint64_t> d_keys(n);
     thrust::device_vector<uint8_t> d_output(n);
     generateKeysGPU(d_keys);
-
-    const size_t numBlocks = cucoNumBlocks<BloomFilter>(capacity);
+    const size_t numBlocks = cucoNumBlocks<BloomFilter, Config::bitsPerTag>(capacity);
     BloomFilter filter(numBlocks);
     filter.add(d_keys.begin(), d_keys.end());
     cudaDeviceSynchronize();
