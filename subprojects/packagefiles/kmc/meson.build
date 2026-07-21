@@ -99,15 +99,3 @@ kmc_exe = executable('kmc',
     dependencies: [zlib_dep],
     install: true,
 )
-
-kmc_dump_sources = files(
-    'kmc_dump/nc_utils.cpp',
-    'kmc_dump/kmc_dump.cpp',
-)
-
-kmc_dump_exe = executable('kmc_dump',
-    kmc_dump_sources,
-    link_with: [kmc_api_lib],
-    include_directories: include_directories('.'),
-    install: true,
-)

@@ -34,16 +34,19 @@ gqf_dep = gpu_filters.get_variable('gqf_dep')
 gqf_deps = gpu_filters.get_variable('gqf_deps')
 tcf_dep = gpu_filters.get_variable('tcf_dep')
 
-bench_deps = [cuckoogpu_dep, benchmark_dep, cpu_cuckoo_dep]
+bench_deps = [cuckoogpu_dep, benchmark_dep]
+cpu_bench_deps = bench_deps + [cpu_cuckoo_dep]
 light_bench_deps = [cuckoogpu_dep, benchmark_dep]
 
 benchmarks = {
     'cuckoo-vs-bloom': {
         'src': 'cuckoo_vs_bloom.cu',
+        'base_deps': cpu_bench_deps,
         'deps': [cuco_dep],
     },
     'cuckoo-cpu-vs-gpu': {
         'src': 'cuckoo_cpu_vs_gpu.cu',
+        'base_deps': cpu_bench_deps,
     },
     'cuckoo-bucket-size': {
         'src': 'cuckoo_bucket_size.cu',
@@ -83,12 +86,14 @@ benchmarks = {
     },
     'load-factor': {
         'src': 'load_factor_benchmark.cu',
+        'base_deps': cpu_bench_deps,
         'deps': [cuco_dep, tcf_dep, gqf_dep, bght_dep]
         + (is_x86_64 ? [partitioned_dep] : []),
         'extra_args': ['-w'],
     },
     'fpr': {
         'src': 'fpr_benchmark.cu',
+        'base_deps': cpu_bench_deps,
         'deps': [cuco_dep, tcf_dep, gqf_dep] + (is_x86_64 ? [partitioned_dep] : []),
         'extra_args': ['-w'],
     },

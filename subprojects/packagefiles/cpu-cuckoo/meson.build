@@ -26,5 +26,3 @@ cpu_cuckoo_dep = declare_dependency(
     include_directories: inc,
     dependencies: openssl_dep,
 )
-
-meson.override_dependency('cpu-cuckoo', cpu_cuckoo_dep)

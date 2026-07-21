@@ -28,7 +28,6 @@ gqf_configs = [
     [32, 32, '32'],
 ]
 
-gqf_libs = {}
 gqf_deps = {}
 
 foreach config : gqf_configs
@@ -44,16 +43,16 @@ foreach config : gqf_configs
     ]
 
     lib_name = 'gqf_@0@'.format(suffix)
-    gqf_libs += {suffix: static_library(
+    gqf_lib = static_library(
         lib_name,
         gqf_sources,
         include_directories: gqf_inc,
         cuda_args: config_cuda_args,
-    )}
+    )
 
     gqf_deps += {suffix: declare_dependency(
         include_directories: gqf_inc,
-        link_with: gqf_libs[suffix],
+        link_with: gqf_lib,
         compile_args: ['-D', 'QF_BITS_PER_SLOT=@0@'.format(bits_per_slot)],
         # Device-link libgqf at final executable link only. Repeat arch flags here so
         # nvcc does not fall back to its default single-arch device-link output.
